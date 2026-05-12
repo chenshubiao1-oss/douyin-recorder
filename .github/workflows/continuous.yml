@@ -1,12 +1,16 @@
 name: 24h连续监控
+
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 18 * * *'  # TH 01:00
-    - cron: '0 23 * * *'  # TH 06:00
-    - cron: '0 4 * * *'   # TH 11:00
-    - cron: '0 9 * * *'   # TH 16:00
-    - cron: '0 14 * * *'  # TH 21:00
+    # 每5小时启动一次，确保始终有实例运行
+    # 泰国时间 (UTC+7): 01:00 / 06:00 / 11:00 / 16:00 / 21:00
+    # 每个跑5.5小时, 间隔30分钟重叠, 24小时无缝覆盖
+    - cron: '0 18 * * *'  # UTC 18:00 (泰国01:00)
+    - cron: '0 23 * * *'  # UTC 23:00 (泰国06:00)
+    - cron: '0 4 * * *'   # UTC 04:00 (泰国11:00)
+    - cron: '0 9 * * *'   # UTC 09:00 (泰国16:00)
+    - cron: '0 14 * * *'  # UTC 14:00 (泰国21:00)
 
 env:
   PYTHON_VERSION: '3.11'
@@ -14,7 +18,7 @@ env:
 jobs:
   record:
     runs-on: ubuntu-latest
-    timeout-minutes: 330
+    timeout-minutes: 330  # 5.5小时，留30分钟缓冲
 
     steps:
       - uses: actions/checkout@v4
@@ -23,11 +27,25 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: 缓存 Playwright
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
 
       - name: 安装依赖
         run: |
-          pip install playwright requests
-          python -m playwright install chromium
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          if [ ! -d ~/.cache/ms-playwright ]; then
+            python -m playwright install chromium
+          fi
+          sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg
           mkdir -p /tmp/recordings
 
@@ -35,3 +53,12 @@ jobs:
         run: python recorder.py
         env:
           CHECK_INTERVAL: 15
+
+      - name: 上传录制文件 (GitHub Artifacts)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: douyin-${{ github.run_id }}-${{ github.run_attempt }}
+          path: /tmp/recordings/
+          retention-days: 90
+          if-no-files-found: ignore
