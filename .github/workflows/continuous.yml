@@ -1,0 +1,57 @@
+name: 24h连续监控
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * *'
+    - cron: '0 5 * * *'
+    - cron: '0 10 * * *'
+    - cron: '0 15 * * *'
+    - cron: '0 20 * * *'
+
+env:
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 设置Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install playwright
+          python -m playwright install chromium
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          mkdir -p /tmp/recordings
+
+      - name: 写入房间配置
+        run: |
+          if [ -f rooms.txt ]; then
+            echo "=== 房间列表 ==="
+            cat rooms.txt
+          else
+            echo "ERROR: rooms.txt 不存在"
+            exit 1
+          fi
+
+      - name: 启动监控录制 (最长5.5小时)
+        run: python recorder.py
+
+      - name: 上传录制文件
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: douyin-${{ github.run_id }}-${{ github.run_attempt }}
+          path: /tmp/recordings/
+          retention-days: 90
+          if-no-files-found: ignore
