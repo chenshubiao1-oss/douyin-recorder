@@ -35,22 +35,3 @@ jobs:
         run: python recorder.py
         env:
           CHECK_INTERVAL: 15
-
-      - name: 上传到百度网盘
-        if: always()
-        run: |
-          ls /tmp/recordings/*.mp4 2>/dev/null && python baidu_upload.py || echo '没有录制文件，跳过上传'
-        env:
-          BAIDU_APP_KEY: ${{ secrets.BAIDU_APP_KEY }}
-          BAIDU_SECRET_KEY: ${{ secrets.BAIDU_SECRET_KEY }}
-          BAIDU_REFRESH_TOKEN: ${{ secrets.BAIDU_REFRESH_TOKEN }}
-          BAIDU_REMOTE_DIR: /apps/自动上传/抖音录制
-
-      - name: 上传到GitHub Artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: douyin-${{ github.run_id }}-${{ github.run_attempt }}
-          path: /tmp/recordings/
-          retention-days: 90
-          if-no-files-found: ignore
