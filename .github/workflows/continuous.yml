@@ -42,11 +42,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          if [ ! -d ~/.cache/ms-playwright ]; then
-            python -m playwright install chromium
-          fi
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq ffmpeg
+          python -m playwright install chromium --with-deps
           mkdir -p /tmp/recordings
 
       - name: 启动监控录制 (最长5.5小时)
