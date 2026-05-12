@@ -1,11 +1,12 @@
+name: 24h连续监控
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 18 * * *'  # UTC 18:00
-    - cron: '0 23 * * *'  # UTC 23:00
-    - cron: '0 4 * * *'   # UTC 04:00
-    - cron: '0 9 * * *'   # UTC 09:00
-    - cron: '0 14 * * *'  # UTC 14:00
+    - cron: '0 18 * * *'  # TH 01:00
+    - cron: '0 23 * * *'  # TH 06:00
+    - cron: '0 4 * * *'   # TH 11:00
+    - cron: '0 9 * * *'   # TH 16:00
+    - cron: '0 14 * * *'  # TH 21:00
 
 env:
   PYTHON_VERSION: '3.11'
@@ -25,29 +26,27 @@ jobs:
 
       - name: 安装依赖
         run: |
-          python -m pip install --upgrade pip
-          pip install playwright
+          pip install playwright requests
           python -m playwright install chromium
-          sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg
           mkdir -p /tmp/recordings
 
-      - name: 写入房间配置
-        run: |
-          if [ -f rooms.txt ]; then
-            echo "=== 房间列表 ==="
-            cat rooms.txt
-          else
-            echo "ERROR: rooms.txt 不存在"
-            exit 1
-          fi
-
-      - name: 启动监控录制
+      - name: 启动监控录制 (最长5.5小时)
         run: python recorder.py
         env:
           CHECK_INTERVAL: 15
 
-      - name: 上传录制文件
+      - name: 上传到百度网盘
+        if: always()
+        run: |
+          ls /tmp/recordings/*.mp4 2>/dev/null && python baidu_upload.py || echo '没有录制文件，跳过上传'
+        env:
+          BAIDU_APP_KEY: ${{ secrets.BAIDU_APP_KEY }}
+          BAIDU_SECRET_KEY: ${{ secrets.BAIDU_SECRET_KEY }}
+          BAIDU_REFRESH_TOKEN: ${{ secrets.BAIDU_REFRESH_TOKEN }}
+          BAIDU_REMOTE_DIR: /apps/自动上传/抖音录制
+
+      - name: 上传到GitHub Artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -55,4 +54,3 @@ jobs:
           path: /tmp/recordings/
           retention-days: 90
           if-no-files-found: ignore
-          
