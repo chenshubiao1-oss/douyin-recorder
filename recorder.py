@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
 抖音直播监控录制器 - GitHub Actions 版本
-无需登录，无头 Chromium 直接访问公开直播间页面提取推流地址
+支持 rooms.txt 格式: room_id=主播名 或 room_id
 """
 import os, sys, json, time, subprocess, re, asyncio
 from datetime import datetime
 
 # ---------- 配置 ----------
 ROOMS_FILE = os.environ.get("ROOMS_FILE", "rooms.txt")
-CHECK_INTERVAL = int(os.environ.get("CHECK_INTERVAL", "15"))   # 检测间隔(秒)
+CHECK_INTERVAL = int(os.environ.get("CHECK_INTERVAL", "15"))
 MAX_DURATION = int(os.environ.get("MAX_DURATION", str(5 * 3600)))
 OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "/tmp/recordings")
 
@@ -22,21 +22,28 @@ def log(msg):
     print(f"[{t}] {msg}", flush=True)
 
 def load_rooms():
+    """返回 [{id, name}] 列表"""
     if not os.path.exists(ROOMS_FILE):
         log(f"文件不存在: {ROOMS_FILE}")
         return []
     rooms = []
-    with open(ROOMS_FILE) as f:
+    with open(ROOMS_FILE, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if not line or line.startswith("#"):
                 continue
-            rid = line.split("#")[0].strip().split()[0] if "#" in line else line.split()[0]
+            if "=" in line:
+                parts = line.split("=", 1)
+                rid = parts[0].strip()
+                name = parts[1].strip()
+            else:
+                rid = line.split("#")[0].strip().split()[0]
+                name = rid
             if rid.isdigit():
-                rooms.append(rid)
+                rooms.append({"id": rid, "name": name})
     return rooms
 
-# ---------- Playwright 页面操作 ----------
+# ---------- Playwright ----------
 from playwright.sync_api import sync_playwright
 
 def get_stream_url(page, room_id):
@@ -83,7 +90,6 @@ def get_stream_url(page, room_id):
     return (None, None)
 
 def is_live_page(page):
-    """检测页面是否显示直播中"""
     try:
         text = page.evaluate("document.body?.innerText?.slice(0,300) || ''")
         ended_words = ['直播已结束', '主播暂时离开', '下播了', '主播不在', '当前没有直播']
@@ -96,19 +102,22 @@ def is_live_page(page):
         return False
 
 def navigate_page(page, room_id):
-    """打开直播间页面"""
     url = f"https://live.douyin.com/{room_id}"
     log(f"打开: {url}")
     page.goto(url, wait_until="domcontentloaded", timeout=30000)
     time.sleep(5)
 
-def start_recording(url, quality, room_id):
-    """启动ffmpeg录制"""
+def start_recording(url, quality, room_id, room_name=""):
+    """启动ffmpeg录制 + 写入主播元数据"""
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     outfile = os.path.join(OUTPUT_DIR, f"{room_id}_{quality}_{ts}.mp4")
-    log(f"开始录制: {os.path.basename(outfile)} [{quality}]")
-    
+    # 写入元数据供baidu_upload.py读取
+    meta = {"room_id": room_id, "room_name": room_name, "filename": os.path.basename(outfile), "quality": quality}
+    with open(os.path.join(OUTPUT_DIR, f"{room_id}_meta.json"), "w", encoding="utf-8") as f:
+        json.dump(meta, f)
+    log(f"开始录制: {room_name}/{os.path.basename(outfile)} [{quality}]")
+
     proc = subprocess.Popen(
         [FFMPEG, "-y",
          "-loglevel", "warning",
@@ -135,40 +144,36 @@ def run():
     if not rooms:
         log("ERROR: 没有配置任何房间ID，请编辑 rooms.txt")
         sys.exit(1)
-    
-    log(f"加载 {len(rooms)} 个房间: {', '.join(rooms[:5])}{'...' if len(rooms) > 5 else ''}")
+
+    log(f"加载 {len(rooms)} 个房间:")
+    for r in rooms:
+        log(f"  {r['id']} = {r['name']}")
     log(f"检测间隔: {CHECK_INTERVAL}s | 最长录制: {MAX_DURATION//3600}h")
-    
+
     with sync_playwright() as p:
         browser = p.chromium.launch(
             headless=True,
-            args=[
-                "--no-sandbox",
-                "--disable-gpu",
-                "--disable-dev-shm-usage",
-                "--disable-setuid-sandbox",
-            ]
+            args=["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage", "--disable-setuid-sandbox"]
         )
         context = browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
             viewport={"width": 1280, "height": 720}
         )
-        
-        # 为每个房间创建一个页面
+
         pages = {}
+        room_names = {r["id"]: r["name"] for r in rooms}
         try:
-            for rid in rooms:
+            for r in rooms:
                 page = context.new_page()
-                navigate_page(page, rid)
-                pages[rid] = page
-            
+                navigate_page(page, r["id"])
+                pages[r["id"]] = page
+
             last_refresh = time.time()
-            
+
             while True:
                 now = time.time()
                 record_over = False
-                
-                # 定期刷新页面(每5分钟)
+
                 if now - last_refresh > 300:
                     log("周期性刷新页面...")
                     for rid, page in pages.items():
@@ -178,64 +183,54 @@ def run():
                         except:
                             pass
                     last_refresh = now
-                
-                # 检查每个房间
+
                 for rid, page in pages.items():
                     try:
                         live = is_live_page(page)
                     except:
                         live = False
-                    
+
                     if live and recording["proc"] is None:
-                        # 开播
-                        log(f"[{rid}] 检测到开播!")
-                        
-                        # 刷新获取最新推流地址
+                        log(f"[{room_names.get(rid, rid)}] 检测到开播!")
+
                         try:
                             page.reload(wait_until="domcontentloaded", timeout=30000)
                             time.sleep(5)
                         except:
                             pass
-                        
+
                         for attempt in range(8):
                             quality, url = get_stream_url(page, rid)
                             if url:
                                 break
                             log(f"[{rid}] 等待推流地址... ({attempt+1}/8)")
                             time.sleep(3)
-                        
+
                         if url:
-                            proc, outfile = start_recording(url, quality, rid)
-                            recording.update({
-                                "proc": proc, "outfile": outfile,
-                                "room": rid, "start": now
-                            })
+                            rname = room_names.get(rid, rid)
+                            proc, outfile = start_recording(url, quality, rid, rname)
+                            recording.update({"proc": proc, "outfile": outfile, "room": rid, "start": now})
                         else:
                             log(f"[{rid}] 无法获取推流地址")
-                        
+
                     elif recording["proc"] is not None:
-                        # 录制中：检查是否该停了
                         if recording["room"] == rid or recording["room"] is None:
                             dur = now - recording["start"]
-                            
-                            # 主播下播 或 超时
                             if not live or dur > MAX_DURATION:
                                 stop_recording(recording["proc"])
                                 f = recording["outfile"]
                                 if f and os.path.exists(f):
                                     sz = os.path.getsize(f)
                                     log(f"[{recording['room']}] 录制结束: {os.path.basename(f)} ({sz/1024/1024:.1f}MB, {dur/60:.0f}m)")
-                                
                                 recording["proc"] = None
                                 recording["outfile"] = None
                                 record_over = True
-                                break  # 重新循环
-                
+                                break
+
                 if record_over:
                     continue
-                
                 time.sleep(CHECK_INTERVAL)
-                
+
         except KeyboardInterrupt:
             log("用户中断")
         finally:
