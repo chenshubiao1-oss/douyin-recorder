@@ -1,0 +1,118 @@
+name: Test Bowen Upload
+on: [workflow_dispatch]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          pip install -r requirements.txt
+          sudo apt-get install -y ffmpeg
+          python -m playwright install chromium
+
+      - name: Record Bowen 60s + Upload
+        env:
+          BAIDU_APP_KEY: ${{ secrets.BAIDU_APP_KEY }}
+          BAIDU_SECRET_KEY: ${{ secrets.BAIDU_SECRET_KEY }}
+          BAIDU_REFRESH_TOKEN: ${{ secrets.BAIDU_REFRESH_TOKEN }}
+          BAIDU_REMOTE_DIR: "/apps/自动上传/抖音录制"
+        run: |
+          python3 << 'PYEOF'
+          import os, sys, json, subprocess, time
+          from datetime import datetime
+          from playwright.sync_api import sync_playwright
+
+          ROOM_ID = "868971306380"
+          ROOM_NAME = "Bowen\u5728\u7f8e\u56fd"
+          FFMPEG = "ffmpeg"
+          OUTPUT_DIR = "/tmp/recordings"
+
+          def log(msg):
+              t = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+              print(f"[{t}] {msg}", flush=True)
+
+          log(f"Testing {ROOM_ID} ({ROOM_NAME})")
+
+          with sync_playwright() as p:
+              b = p.chromium.launch(headless=True, args=["--no-sandbox","--disable-gpu","--disable-dev-shm-usage"])
+              ctx = b.new_context(user_agent="Mozilla/5.0", viewport={"width":1280,"height":720})
+              page = ctx.new_page()
+              page.goto(f"https://live.douyin.com/{ROOM_ID}", wait_until="domcontentloaded", timeout=30000)
+              time.sleep(5)
+
+              text = page.evaluate("document.body?.innerText?.slice(0,500) || ''")
+              video = page.evaluate("!!document.querySelector('video')")
+              ended_words = ["\u76f4\u64ad\u5df2\u7ed3\u675f","\u4e3b\u64ad\u6b63\u5728\u8d76\u6765\u7684\u8def\u4e0a","\u4e0b\u64ad\u4e86","\u4e3b\u64ad\u4e0d\u5728","\u5f53\u524d\u6682\u65e0\u76f4\u64ad"]
+              is_ended = any(w in text for w in ended_words)
+              log(f"Video: {video}  Ended: {is_ended}")
+
+              js = "() => { const s=document.querySelectorAll('script:not([src])'); for(const x of s){const t=x.textContent||'';if(!t.includes('flv_pull_url'))continue;let d=t.replace(/\\\\\"/g,'\"').replace(/\\\\n/g,'').replace(/\\\\t/g,'');const r=/\"(FULL_HD1|HD1|SD1|SD2)\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"/g;let res=[];let m;while((m=r.exec(d))!==null){let u=m[2].replace(/\\\\\\\\\\//g,'/');u=u.replace(/\\\\u0026/g,'&').replace(/\\\\u003d/g,'=');res.push({q:m[1],url:u})}if(res.length)return JSON.stringify(res)}return '' }"
+              raw = page.evaluate(js)
+              if not raw:
+                  log("NO STREAM URL - may not be live")
+                  b.close()
+                  sys.exit(1)
+              streams = json.loads(raw)
+              priority = {"FULL_HD1":4,"HD1":3,"SD1":2,"SD2":1}
+              flvs = [s for s in streams if "m3u8" not in s["url"]]
+              if not flvs: flvs = streams
+              best = max(flvs, key=lambda s: priority.get(s["q"],0))
+              q, stream_url = best["q"], best["url"]
+              log(f"Stream: {q}")
+
+              os.makedirs(OUTPUT_DIR, exist_ok=True)
+              ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+              outfile = os.path.join(OUTPUT_DIR, f"{ROOM_ID}_{q}_{ts}.mp4")
+              meta = {"room_id": ROOM_ID, "room_name": ROOM_NAME, "filename": os.path.basename(outfile), "quality": q}
+              with open(os.path.join(OUTPUT_DIR, f"{ROOM_ID}_meta.json"), "w", encoding="utf-8") as f:
+                  json.dump(meta, f)
+
+              log(f"Recording 60s...")
+              proc = subprocess.Popen([FFMPEG,"-y","-loglevel","warning","-i",stream_url,"-c","copy","-movflags","+faststart+frag_keyframe+empty_moov","-f","mp4","-t","60",outfile], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+              proc.wait()
+
+              sz = os.path.getsize(outfile) if os.path.exists(outfile) else 0
+              log(f"Recorded: {sz/1024/1024:.1f}MB")
+
+              # Upload via baidu_upload
+              log("Uploading to Baidu...")
+              sys.path.insert(0, ".")
+              from baidu_upload import get_access_token, upload_to_baidu
+              access_token = get_access_token()
+              log(f"Token OK")
+
+              meta_map = {}
+              for f in os.listdir(OUTPUT_DIR):
+                  if f.endswith("_meta.json"):
+                      with open(os.path.join(OUTPUT_DIR, f), encoding="utf-8") as fp:
+                          m = json.load(fp)
+                      meta_map[m["room_id"]] = m.get("room_name", m["room_id"])
+              log(f"Room names: {meta_map}")
+
+              for f in os.listdir(OUTPUT_DIR):
+                  if f.endswith(".mp4") and not f.startswith("."):
+                      fp = os.path.join(OUTPUT_DIR, f)
+                      rid = f.split("_")[0]
+                      rname = meta_map.get(rid, rid)
+                      remote_dir = "/apps/自动上传/抖音录制/" + rname
+                      log(f"Uploading {f} to {remote_dir}...")
+                      ok = upload_to_baidu(access_token, fp, remote_dir + "/" + f)
+                      log(f"  {'OK' if ok else 'FAIL'}")
+
+              b.close()
+              log("TEST COMPLETE")
+          PYEOF
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-recording
+          path: /tmp/recordings/
+          retention-days: 90
