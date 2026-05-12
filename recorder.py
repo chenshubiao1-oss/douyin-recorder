@@ -14,8 +14,14 @@ OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "/tmp/recordings")
 
 FFMPEG = os.environ.get("FFMPEG", "ffmpeg")
 
+GH_REPO = os.environ.get("GH_REPO", "")
+GH_TOKEN = os.environ.get("GH_TOKEN", "")
+GH_RUN_ID = os.environ.get("GH_RUN_ID", "")
+
 # ---------- 状态 ----------
 recording = {"proc": None, "outfile": None, "room": None, "start": None}
+# 记录是否已经触发过续命（避免重复触发）
+_renew_triggered = False
 
 def log(msg):
     t = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -162,6 +168,8 @@ def run():
     for r in rooms:
         log(f"  {r['id']} = {r['name']}")
     log(f"检测间隔: {CHECK_INTERVAL}s | 最长录制: {MAX_DURATION//3600}h")
+    if GH_REPO and GH_TOKEN:
+        log(f"续命模式: 开启 (3小时自动触发下一个任务)"
 
     with sync_playwright() as p:
         browser = p.chromium.launch(
@@ -183,9 +191,28 @@ def run():
 
             last_refresh = time.time()
 
+            start_time = time.time()
+
             while True:
                 now = time.time()
                 record_over = False
+
+                # 自续命: 运行3小时后触发下一个workflow（如果还没触发过）
+                if GH_REPO and GH_TOKEN and not _renew_triggered and (now - start_time) > 3 * 3600:
+                    try:
+                        import urllib.request
+                        data = json.dumps({"ref": "main", "inputs": {"reason": "auto-renew"}}).encode()
+                        req = urllib.request.Request(
+                            f"https://api.github.com/repos/{GH_REPO}/actions/workflows/continuous.yml/dispatches",
+                            data=data,
+                            headers={"Authorization": f"Bearer {GH_TOKEN}", "Content-Type": "application/json"},
+                            method="POST"
+                        )
+                        urllib.request.urlopen(req)
+                        log("续命成功: 已触发下一个workflow")
+                    except Exception as e:
+                        log(f"续命失败: {e}")
+                    _renew_triggered = True
 
                 if now - last_refresh > 300:
                     log("周期性刷新页面...")
@@ -246,6 +273,16 @@ def run():
 
         except KeyboardInterrupt:
             log("用户中断")
+        finally:
+            if recording["proc"]:
+                stop_recording(recording["proc"])
+            for p in pages.values():
+                try: p.close()
+                except: pass
+            browser.close()
+
+if __name__ == "__main__":
+    run()
         finally:
             if recording["proc"]:
                 stop_recording(recording["proc"])
