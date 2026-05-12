@@ -90,12 +90,25 @@ def get_stream_url(page, room_id):
     return (None, None)
 
 def is_live_page(page):
+    """更严格的检测: 有推流URL才算真开播"""
     try:
+        # 先看页面有没有flv_pull_url的script
+        has_flv_script = page.evaluate('''() => {
+            const scripts = document.querySelectorAll("script:not([src])");
+            for (const s of scripts) {
+                if ((s.textContent || "").includes("flv_pull_url")) return true;
+            }
+            return false;
+        }''')
+        if not has_flv_script:
+            return False
+        
         text = page.evaluate("document.body?.innerText?.slice(0,300) || ''")
-        ended_words = ['直播已结束', '主播暂时离开', '下播了', '主播不在', '当前没有直播']
+        ended_words = ['直播已结束', '主播暂时离开', '下播了', '主播不在', '当前没有直播', '主播正在赶来的路上']
         for w in ended_words:
             if w in text:
                 return False
+
         video = page.evaluate("!!document.querySelector('video')")
         return video
     except:
