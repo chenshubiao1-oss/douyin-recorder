@@ -151,17 +151,27 @@ def upload_now(filepath, room_name):
     # 用 Release 上传 (永久存储)
     try:
         release_tag = f"rec-{datetime.now().strftime('%Y%m%d')}"
-        # 先尝试创建 Release（如果已存在会失败，忽略即可）
-        subprocess.run(["gh","release","create",release_tag,"--repo",GH_REPO,
-                       "--title",f"录制 {datetime.now().strftime('%Y-%m-%d')}",
-                       "--notes","自动上传","--target","main"],
-                      capture_output=True, timeout=30, env={**os.environ, "GH_TOKEN": GH_TOKEN, "GITHUB_TOKEN": GH_TOKEN})
+        
+        # 先用API创建 Release（如果已存在忽略错误）
+        import urllib.request
+        d = json.dumps({"tag_name": release_tag, "name": f"录制 {datetime.now().strftime('%Y-%m-%d')}", 
+                        "body": "自动上传", "target_commitish": "main"}).encode()
+        req = urllib.request.Request(f"https://api.github.com/repos/{GH_REPO}/releases",
+            data=d, headers={"Authorization": f"Bearer {GH_TOKEN}", "Content-Type": "application/json"},
+            method="POST")
+        try:
+            urllib.request.urlopen(req)
+        except urllib.error.HTTPError as e2:
+            err_body = e2.read().decode('utf-8')[:200]
+            log(f"创建Release: {e2.code} {err_body}")
+        
+        # 用 gh upload（API上传大文件方式比较复杂）
         r = subprocess.run(["gh","release","upload",release_tag,filepath,"--repo",GH_REPO,"--clobber"],
                           capture_output=True, text=True, timeout=120, env={**os.environ, "GH_TOKEN": GH_TOKEN, "GITHUB_TOKEN": GH_TOKEN})
         if r.returncode == 0:
             log(f"实时上传成功: {room_name}/{fname} ({fsize/1024/1024:.1f}MB) -> Release")
         else:
-            log(f"实时上传失败: {r.stderr[:200]}")
+            log(f"实时上传失败: {r.stderr[:300]}")
     except Exception as e:
         log(f"上传异常: {e}")
 
