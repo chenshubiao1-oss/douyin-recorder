@@ -47,9 +47,8 @@ jobs:
             ~/.cache/modelscope
             ~/.cache/huggingface
             ~/.cache/ms-playwright
-          key: deps-fixed-v1-${{ runner.os }}
+          key: deps-v3-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
           restore-keys: |
-            deps-fixed-v1-
             deps-v3-${{ runner.os }}-
             deps-v3-
 
