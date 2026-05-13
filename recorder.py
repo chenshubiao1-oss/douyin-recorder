@@ -192,6 +192,7 @@ def run():
 
             start_time = time.time()
             last_refresh = time.time()
+            last_status_log = {}
 
             while True:
                 now = time.time()
@@ -207,7 +208,7 @@ def run():
                     log(f"任务超时 ({elapsed/3600:.1f}h)，退出")
                     break
 
-                # 周期性刷新
+                # 周期性刷新 或 当正在录制时短暂退出开始下次轮询
                 if now - last_refresh > 300:
                     log("周期性刷新页面...")
                     for rid, page in pages.items():
@@ -219,13 +220,20 @@ def run():
                     last_refresh = now
 
                 for rid, page in pages.items():
+                    live = False
                     try:
                         live = is_live_page(page)
-                    except:
-                        live = False
+                    except Exception as e:
+                        log(f"[{room_names.get(rid, rid)}] is_live_page() 异常: {e}")
 
                     if live and recording["proc"] is None:
                         log(f"[{room_names.get(rid, rid)}] 检测到开播!")
+
+                    if live:
+                        # 每3分钟打一次live状态，方便追踪
+                        if int(time.time() / 180) != int(last_status_log.get(rid, 0) / 180):
+                            log(f"[{room_names.get(rid, rid)}] is_live=True")
+                            last_status_log[rid] = time.time()
                         try:
                             page.reload(wait_until="domcontentloaded", timeout=30000)
                             time.sleep(5)
