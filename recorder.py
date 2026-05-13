@@ -265,6 +265,9 @@ def run_test():
                             for line in f:
                                 print(line, end="")
                         log(f"=== 字幕文件: {os.path.basename(srt)} ===")
+                        # 上传转写结果
+                        upload_now(txt, "test")
+                        upload_now(srt, "test")
                     except Exception as e:
                         log(f"转写出错: {e}")
                         import traceback; traceback.print_exc()
