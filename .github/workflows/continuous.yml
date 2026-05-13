@@ -60,8 +60,11 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y ffmpeg
           python -m pip install --upgrade pip
-          pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu --prefer-binary --timeout 60
-          pip install playwright funasr requests --prefer-binary --timeout 60
+          pip install --timeout 60 torch
+          pip install --timeout 60 torchaudio --index-url https://download.pytorch.org/whl/cpu
+          pip install --timeout 60 playwright
+          pip install --timeout 60 funasr
+          pip install --timeout 60 requests
           python -m playwright install chromium --with-deps
           mkdir -p /tmp/recordings /tmp/transcripts
 
