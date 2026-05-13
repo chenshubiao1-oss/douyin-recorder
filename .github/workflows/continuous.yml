@@ -69,6 +69,12 @@ jobs:
           python -m playwright install chromium --with-deps
           mkdir -p /tmp/recordings /tmp/transcripts
 
+      - name: 显示泰国时间
+        run: |
+          echo 'GitHub 时间(UTC):' $(date -u '+%Y-%m-%d %H:%M:%S')
+          echo '泰国时间(UTC+7):' $(TZ='Asia/Bangkok' date '+%Y-%m-%d %H:%M:%S')
+          echo '录制开始于泰国时间——日志里 Python 打的时间已经是泰国时间'
+
       - name: 启动监控录制
         run: python recorder.py
         env:
