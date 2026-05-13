@@ -113,20 +113,57 @@ def is_live_page(page):
         return page.evaluate("!!document.querySelector('video')")
     except: return False
 
+def get_anchor_name(page):
+    """从抖音直播间页面提取主播真实昵称"""
+    try:
+        # 尝试从 title 提取 (格式: "主播名 正在直播")
+        title = page.evaluate("document.title || ''")
+        if title:
+            name = title.replace(' 正在直播', '').replace(' 的直播间', '').replace(' - 抖音', '').strip()
+            if name:
+                return name
+        
+        # 尝试从页面脚本数据提取 user.nickname
+        js = """() => {
+            const scripts = document.querySelectorAll('script:not([src])');
+            for (const s of scripts) {
+                const t = s.textContent || '';
+                if (!t.includes('nickname')) continue;
+                const m = t.match(/"nickname"\s*:\s*"([^"]+)"/);
+                if (m) return m[1];
+            }
+            return '';
+        }"""
+        name = page.evaluate(js)
+        if name:
+            return name
+            
+        # 从页面可见文本找主播名
+        text = page.evaluate("document.body?.innerText?.slice(0,200) || ''")
+        for line in text.split('\n'):
+            line = line.strip()
+            if line and len(line) < 20 and not any(kw in line for kw in ['直播','抖音','关注','粉丝','点赞']):
+                return line
+    except Exception as e:
+        log(f"获取主播名失败: {e}")
+    return ""
+
 def navigate_page(page, room_id):
     url = f"https://live.douyin.com/{room_id}"
     log(f"打开: {url}")
     page.goto(url, wait_until="domcontentloaded", timeout=30000)
     time.sleep(5)
 
-def start_recording(url, quality, room_id, room_name=""):
+def start_recording(url, quality, room_id, anchor_name=""):
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    base = f"{room_id}_{quality}_{ts}"
+    # 文件名用主播真实名称（去掉非法字符）
+    safe_name = re.sub(r'[\\/:*?"<>|]', '_', anchor_name) if anchor_name else room_id
+    base = f"{safe_name}_{quality}_{ts}"
     outfile = os.path.join(OUTPUT_DIR, f"{base}.mp4")
     audiofile = os.path.join(OUTPUT_DIR, f"{base}.wav")
-    with open(os.path.join(OUTPUT_DIR, f"{room_id}_meta.json"), "w", encoding="utf-8") as f:
-        json.dump({"room_id":room_id,"room_name":room_name,"filename":f"{base}.mp4","audio":f"{base}.wav","quality":quality}, f)
+    with open(os.path.join(OUTPUT_DIR, f"{safe_name}_meta.json"), "w", encoding="utf-8") as f:
+        json.dump({"room_id":room_id,"anchor_name":anchor_name,"filename":f"{base}.mp4","audio":f"{base}.wav","quality":quality}, f)
     log(f"开始录制: {room_name}/{base}.mp4 [{quality}]  + 同步抽音频")
     # 视频 -c copy
     proc = subprocess.Popen([FFMPEG,"-y","-loglevel","warning","-i",url,"-c","copy","-movflags","+faststart+frag_keyframe+empty_moov","-f","mp4",outfile],
@@ -224,6 +261,8 @@ def run_test():
         page = context.new_page()
         navigate_page(page, TEST_ROOM)
         time.sleep(5)
+        test_anchor_name = get_anchor_name(page) or f"room_{TEST_ROOM}"
+        log(f"主播昵称: {test_anchor_name}")
         
         live = is_live_page(page)
         log(f"直播间: {'ONAIR' if live else 'OFF'}")
@@ -240,7 +279,7 @@ def run_test():
                 time.sleep(3)
             
             if url:
-                proc, outfile, audio_proc, audiofile = start_recording(url, quality, TEST_ROOM, "test")
+                proc, outfile, audio_proc, audiofile = start_recording(url, quality, TEST_ROOM, test_anchor_name)
                 log(f"录制 {TEST_DURATION}秒...")
                 time.sleep(TEST_DURATION)
                 
@@ -252,8 +291,8 @@ def run_test():
                 log(f"完成: 视频 {vsize/1024/1024:.1f}MB, 音频 {asize/1024/1024:.1f}MB")
                 
                 # 上传文件
-                upload_now(outfile, "test")
-                upload_now(audiofile, "test")
+                upload_now(outfile, test_anchor_name)
+                upload_now(audiofile, test_anchor_name)
                 
                 # 转写
                 if os.path.exists(audiofile) and asize > 0:
@@ -267,8 +306,8 @@ def run_test():
                                 print(line, end="")
                         log(f"=== 字幕文件: {os.path.basename(srt)} ===")
                         # 上传转写结果
-                        upload_now(txt, "test")
-                        upload_now(srt, "test")
+                        upload_now(txt, test_anchor_name)
+                        upload_now(srt, test_anchor_name)
                     except Exception as e:
                         log(f"转写出错: {e}")
                         tb.print_exc()
@@ -296,13 +335,18 @@ def run():
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True, args=["--no-sandbox","--disable-gpu","--disable-dev-shm-usage"])
         context = browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36", viewport={"width":1280,"height":720})
-        pages, room_names = {}, {r["id"]:r["name"] for r in rooms}
+        pages, room_names, anchor_names = {}, {}, {}
         prev_live = {}
         try:
             for r in rooms:
                 page = context.new_page()
                 navigate_page(page, r["id"])
                 pages[r["id"]] = page
+                # 取主播真实昵称
+                aname = get_anchor_name(page)
+                if aname:
+                    anchor_names[r["id"]] = aname
+                    log(f"  主播昵称: {aname}")
             start_time = last_refresh = time.time()
             while True:
                 now = time.time()
@@ -318,16 +362,20 @@ def run():
                             new_page = context.new_page()
                             navigate_page(new_page, nr["id"])
                             pages[nr["id"]] = new_page
+                            aname = get_anchor_name(new_page)
+                            anchor_names[nr["id"]] = aname if aname else nr["name"]
                             room_names[nr["id"]] = nr["name"]
+                            log(f"  主播昵称: {aname}")
                     new_ids = {r["id"] for r in new_rooms}
                     for rid in list(pages.keys()):
                         if rid not in new_ids:
                             log(f"房间已移除: {room_names.get(rid,rid)}")
-                            if rid in recordings: handle_room_end(rid, recordings, room_names, now)
+                            if rid in recordings: handle_room_end(rid, recordings, anchor_names, now)
                             try: pages[rid].close()
                             except: pass
                             del pages[rid]
                             room_names.pop(rid, None)
+                            anchor_names.pop(rid, None)
                             prev_live.pop(rid, None)
                     log(f"周期性刷新页面... ({len(pages)}个房间)")
                     for rid, page in pages.items():
@@ -350,18 +398,19 @@ def run():
                             if url: break
                             log(f"[{rid}] 等待推流地址... ({attempt+1}/8)"); time.sleep(3)
                         if url:
-                            proc, outfile, audio_proc, audiofile = start_recording(url, quality, rid, room_names.get(rid,rid))
+                            aname = anchor_names.get(rid, room_names.get(rid, rid))
+                            proc, outfile, audio_proc, audiofile = start_recording(url, quality, rid, aname)
                             recordings[rid] = {"proc":proc,"outfile":outfile,"audio_proc":audio_proc,"audiofile":audiofile,"start":now}
                         else: log(f"[{rid}] 获取推流地址失败")
                     if rid in recordings and not live:
-                        handle_room_end(rid, recordings, room_names, now)
+                        handle_room_end(rid, recordings, anchor_names, now)
                 for rid in list(recordings.keys()):
                     if time.time()-recordings[rid]["start"] > MAX_DURATION:
-                        handle_room_end(rid, recordings, room_names, time.time())
+                        handle_room_end(rid, recordings, anchor_names, time.time())
                 time.sleep(CHECK_INTERVAL)
         except KeyboardInterrupt: log("用户中断")
         finally:
-            for rid in list(recordings.keys()): handle_room_end(rid, recordings, room_names, time.time())
+            for rid in list(recordings.keys()): handle_room_end(rid, recordings, anchor_names, time.time())
             for p in pages.values():
                 try: p.close()
                 except: pass
