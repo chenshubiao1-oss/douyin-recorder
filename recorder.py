@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""抖音直播监控录制器 - GitHub Actions 版本，多房间同时录制 + 录制完成即实时上传"""
+"""抖音直播监控录制器 - 多房间同时录制 + 录制完成即实时上传 + 同步抽音频(用于转写)"""
 import os, sys, json, time, subprocess, re
 from datetime import datetime
 
@@ -15,7 +15,6 @@ recordings = {}
 _renew_triggered = False
 
 def load_rooms_from_github():
-    """从GitHub API拉取最新rooms.txt"""
     if not GH_REPO or not GH_TOKEN:
         return load_rooms()
     try:
@@ -52,8 +51,7 @@ def load_rooms():
     with open(ROOMS_FILE, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
-            if not line or line.startswith("#"):
-                continue
+            if not line or line.startswith("#"): continue
             if "=" in line:
                 parts = line.split("=", 1)
                 rid, name = parts[0].strip(), parts[1].strip()
@@ -106,11 +104,9 @@ def is_live_page(page):
             return False
         text = page.evaluate("document.body?.innerText?.slice(0,300)||''")
         for w in ['直播已结束','主播暂时离开','下播了','主播不在','当前没有直播','主播正在赶来的路上']:
-            if w in text:
-                return False
+            if w in text: return False
         return page.evaluate("!!document.querySelector('video')")
-    except:
-        return False
+    except: return False
 
 def navigate_page(page, room_id):
     url = f"https://live.douyin.com/{room_id}"
@@ -121,47 +117,44 @@ def navigate_page(page, room_id):
 def start_recording(url, quality, room_id, room_name=""):
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    outfile = os.path.join(OUTPUT_DIR, f"{room_id}_{quality}_{ts}.mp4")
+    base = f"{room_id}_{quality}_{ts}"
+    outfile = os.path.join(OUTPUT_DIR, f"{base}.mp4")
+    audiofile = os.path.join(OUTPUT_DIR, f"{base}.wav")
     with open(os.path.join(OUTPUT_DIR, f"{room_id}_meta.json"), "w", encoding="utf-8") as f:
-        json.dump({"room_id":room_id,"room_name":room_name,"filename":os.path.basename(outfile),"quality":quality}, f)
-    log(f"开始录制: {room_name}/{os.path.basename(outfile)} [{quality}]")
+        json.dump({"room_id":room_id,"room_name":room_name,"filename":f"{base}.mp4","audio":f"{base}.wav","quality":quality}, f)
+    log(f"开始录制: {room_name}/{base}.mp4 [{quality}]  + 同步抽音频")
+    # 视频 -c copy
     proc = subprocess.Popen([FFMPEG,"-y","-loglevel","warning","-i",url,"-c","copy","-movflags","+faststart+frag_keyframe+empty_moov","-f","mp4",outfile],
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    return proc, outfile
+    # 音频 - 16kHz mono pcm_s16le wav
+    audio_proc = subprocess.Popen([FFMPEG,"-y","-loglevel","warning","-i",url,"-vn","-acodec","pcm_s16le","-ar","16000","-ac","1",audiofile],
+                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return proc, outfile, audio_proc, audiofile
 
-def stop_recording(proc):
+def stop_proc(proc):
     if proc and proc.poll() is None:
         proc.terminate()
         try: proc.wait(timeout=10)
         except: proc.kill()
-        time.sleep(1)
+    time.sleep(0.5)
 
 def upload_now(filepath, room_name):
-    """录制结束后立即上传单个文件到当前workflow的Artifact"""
-    if not filepath or not os.path.exists(filepath):
-        return
+    if not filepath or not os.path.exists(filepath): return
     fname = os.path.basename(filepath)
     fsize = os.path.getsize(filepath)
     try:
-        result = subprocess.run(
-            ["gh", "api", "-X", "POST", f"/repos/{GH_REPO}/actions/artifacts",
-             "-f", f"name=rec-{room_name}-{datetime.now().strftime('%H%M%S')}",
-             "-f", f"path={filepath}"],
-            capture_output=True, text=True, timeout=60,
-            env={**os.environ, "GITHUB_TOKEN": GH_TOKEN}
-        )
+        result = subprocess.run(["gh","api","-X","POST",f"/repos/{GH_REPO}/actions/artifacts",
+             "-f",f"name=rec-{room_name}-{datetime.now().strftime('%H%M%S')}","-f",f"path={filepath}"],
+            capture_output=True, text=True, timeout=60, env={**os.environ, "GITHUB_TOKEN": GH_TOKEN})
         if result.returncode == 0:
             log(f"实时上传成功: {room_name}/{fname} ({fsize/1024/1024:.1f}MB)")
         else:
-            log(f"实时上传失败: {result.stderr[:200]}")
-            # fallback: 用gh release upload
-            log(f"尝试用Release上传...")
+            log(f"实时上传失败: {result.stderr[:200]}，尝试Release...")
             release_tag = f"rec-{datetime.now().strftime('%Y%m%d')}"
             subprocess.run(["gh","release","create",release_tag,"--repo",GH_REPO,"--title",f"录制 {datetime.now().strftime('%Y-%m-%d')}","--notes","自动上传","--target","main"],
                           capture_output=True, timeout=30, env={**os.environ, "GITHUB_TOKEN": GH_TOKEN})
             r2 = subprocess.run(["gh","release","upload",release_tag,filepath,"--repo",GH_REPO,"--clobber"],
-                               capture_output=True, text=True, timeout=120,
-                               env={**os.environ, "GITHUB_TOKEN": GH_TOKEN})
+                               capture_output=True, text=True, timeout=120, env={**os.environ, "GITHUB_TOKEN": GH_TOKEN})
             if r2.returncode == 0:
                 log(f"Release上传成功: {room_name}/{fname} ({fsize/1024/1024:.1f}MB)")
             else:
@@ -171,8 +164,7 @@ def upload_now(filepath, room_name):
 
 def trigger_renewal():
     global _renew_triggered
-    if not GH_REPO or not GH_TOKEN or _renew_triggered:
-        return
+    if not GH_REPO or not GH_TOKEN or _renew_triggered: return
     try:
         import urllib.request
         d = json.dumps({"ref":"main"}).encode()
@@ -180,21 +172,27 @@ def trigger_renewal():
             data=d, headers={"Authorization":f"Bearer {GH_TOKEN}","Content-Type":"application/json"}, method="POST")
         urllib.request.urlopen(req)
         log("续命: 已触发下一个workflow")
-    except Exception as e:
-        log(f"续命失败: {e}")
+    except Exception as e: log(f"续命失败: {e}")
     _renew_triggered = True
+
+def handle_room_end(rid, recordings, room_names, now):
+    """停止录制并上传视频+音频"""
+    rec = recordings.pop(rid)
+    stop_proc(rec.get("proc"))
+    stop_proc(rec.get("audio_proc"))
+    for key in ["outfile", "audiofile"]:
+        f = rec.get(key)
+        if f and os.path.exists(f):
+            upload_now(f, room_names.get(rid, rid))
 
 def run():
     rooms = load_rooms()
     if not rooms:
-        log("ERROR: 没有配置任何房间ID")
-        sys.exit(1)
+        log("ERROR: 没有配置任何房间ID"); sys.exit(1)
     log(f"加载 {len(rooms)} 个房间:")
-    for r in rooms:
-        log(f"  {r['id']} = {r['name']}")
+    for r in rooms: log(f"  {r['id']} = {r['name']}")
     log(f"检测间隔: {CHECK_INTERVAL}s | 任务最长: {MAX_DURATION//3600}h")
-    if GH_REPO and GH_TOKEN:
-        log("续命+实时上传: 开启")
+    if GH_REPO and GH_TOKEN: log("续命+实时上传: 开启")
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True, args=["--no-sandbox","--disable-gpu","--disable-dev-shm-usage"])
@@ -214,24 +212,19 @@ def run():
                 if elapsed > MAX_DURATION:
                     log(f"任务超时 ({elapsed/3600:.1f}h)，退出"); break
                 if now - last_refresh > 300:
-                    # 从GitHub拉取最新rooms.txt，支持动态加人
                     new_rooms = load_rooms_from_github()
                     for nr in new_rooms:
                         if nr["id"] not in pages:
-                            # 新房间: 打开新页面
                             log(f"检测到新房间: {nr['id']} = {nr['name']}，动态添加")
                             new_page = context.new_page()
                             navigate_page(new_page, nr["id"])
                             pages[nr["id"]] = new_page
                             room_names[nr["id"]] = nr["name"]
-                    # 检查已删除的房间
                     new_ids = {r["id"] for r in new_rooms}
                     for rid in list(pages.keys()):
                         if rid not in new_ids:
                             log(f"房间已移除: {room_names.get(rid,rid)}")
-                            if rid in recordings:
-                                rec = recordings.pop(rid)
-                                stop_recording(rec["proc"])
+                            if rid in recordings: handle_room_end(rid, recordings, room_names, now)
                             try: pages[rid].close()
                             except: pass
                             del pages[rid]
@@ -258,33 +251,18 @@ def run():
                             if url: break
                             log(f"[{rid}] 等待推流地址... ({attempt+1}/8)"); time.sleep(3)
                         if url:
-                            proc, outfile = start_recording(url, quality, rid, room_names.get(rid,rid))
-                            recordings[rid] = {"proc":proc,"outfile":outfile,"start":now}
+                            proc, outfile, audio_proc, audiofile = start_recording(url, quality, rid, room_names.get(rid,rid))
+                            recordings[rid] = {"proc":proc,"outfile":outfile,"audio_proc":audio_proc,"audiofile":audiofile,"start":now}
                         else: log(f"[{rid}] 获取推流地址失败")
                     if rid in recordings and not live:
-                        rec = recordings.pop(rid)
-                        stop_recording(rec["proc"])
-                        f = rec["outfile"]
-                        if f and os.path.exists(f):
-                            sz, dur = os.path.getsize(f), now-rec["start"]
-                            log(f"[{room_names.get(rid,rid)}] 录制结束: {os.path.basename(f)} ({sz/1024/1024:.1f}MB, {dur/60:.0f}m)")
-                            upload_now(f, room_names.get(rid,rid))
+                        handle_room_end(rid, recordings, room_names, now)
                 for rid in list(recordings.keys()):
-                    rec = recordings[rid]
-                    if now-rec["start"] > MAX_DURATION:
-                        recordings.pop(rid)
-                        stop_recording(rec["proc"])
-                        f = rec["outfile"]
-                        if f and os.path.exists(f):
-                            log(f"[{room_names.get(rid,rid)}] 超时停止: {os.path.basename(f)} ({os.path.getsize(f)/1024/1024:.1f}MB)")
-                            upload_now(f, room_names.get(rid,rid))
+                    if time.time()-recordings[rid]["start"] > MAX_DURATION:
+                        handle_room_end(rid, recordings, room_names, time.time())
                 time.sleep(CHECK_INTERVAL)
         except KeyboardInterrupt: log("用户中断")
         finally:
-            for rid in list(recordings.keys()):
-                rec = recordings.pop(rid); stop_recording(rec["proc"])
-                if rec["outfile"] and os.path.exists(rec["outfile"]):
-                    upload_now(rec["outfile"], room_names.get(rid,rid))
+            for rid in list(recordings.keys()): handle_room_end(rid, recordings, room_names, time.time())
             for p in pages.values():
                 try: p.close()
                 except: pass
