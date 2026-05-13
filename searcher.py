@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""抖音搜索发现 - 纯API版（无需Playwright）
-   使用抖音内部搜索API，只需要requests+cookie
-"""
+"""抖音搜索发现 - requests 搜索页+API混合版"""
 import os, sys, json, time, re, base64, urllib.request, urllib.error, traceback as tb
 from datetime import datetime
+from urllib.parse import quote
 
 GH_REPO = os.environ.get("GH_REPO", "")
 GH_TOKEN = os.environ.get("GH_TOKEN", "")
@@ -64,39 +63,115 @@ def update_rooms(content, new_rooms, sha):
         log(f"更新rooms.txt失败: {e}")
         return False
 
-def search_douyin_api(keyword, cookie_dict):
-    """直接用API搜索抖音直播间"""
-    # 构建cookie字符串
-    cookie_str = "; ".join([f"{c['name']}={c['value']}" for c in cookie_dict])
+def search_keyword(keyword, min_watchers, cookie_str):
+    """搜索一个关键词，返回 [(rid, anchor, watchers)]"""
+    results = []
     
-    # URL编码关键字
-    from urllib.parse import quote
-    encoded_kw = quote(keyword, safe="")
-    
-    # 尝试多个搜索API端点
-    url = f"https://www.douyin.com/aweme/v1/web/live/search/?keyword={encoded_kw}&type=live&offset=0&count=20"
-    log(f"请求API: {url}")
-    
-    req = urllib.request.Request(url, headers={
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Cookie": cookie_str,
-        "Accept": "application/json, text/plain, */*",
-        "Referer": "https://www.douyin.com/",
-        "Origin": "https://www.douyin.com",
-    })
-    
+    # 方式1: 直接请求搜索页HTML，从页面中提取房间ID和人数
     try:
+        url = f"https://www.douyin.com/search/{quote(keyword)}?type=live"
+        log(f"请求搜索页: {url}")
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Cookie": cookie_str,
+            "Accept": "text/html,application/xhtml+xml",
+            "Accept-Language": "zh-CN,zh;q=0.9",
+        })
         resp = urllib.request.urlopen(req, timeout=30)
-        data = json.loads(resp.read().decode("utf-8"))
-        log(f"API返回: {json.dumps(data)[:500]}")
-        return data
-    except urllib.error.HTTPError as e:
-        body = e.read().decode("utf-8", errors="replace")
-        log(f"API请求失败: {e.code} {body[:500]}")
-        return None
+        html = resp.read().decode("utf-8", errors="replace")
+        
+        # 从HTML中提取所有房间ID
+        room_ids = set(re.findall(r'live\.douyin\.com/(\d{12,20})', html))
+        log(f"搜索页HTML中找到 {len(room_ids)} 个房间ID")
+        
+        if room_ids:
+            # 打印前几个id
+            log(f"房间ID: {list(room_ids)[:10]}")
+            for rid in list(room_ids)[:30]:
+                results.append((rid, rid, 0))
     except Exception as e:
-        log(f"API请求异常: {e}")
-        return None
+        log(f"搜索页请求失败: {e}")
+    
+    # 方式2: 尝试搜索API
+    try:
+        api_url = f"https://www.douyin.com/aweme/v1/web/live/search/?keyword={quote(keyword)}&type=0&offset=0&count=20&source=0&search_source=tab_search"
+        req2 = urllib.request.Request(api_url, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Cookie": cookie_str,
+            "Accept": "application/json",
+            "Referer": f"https://www.douyin.com/search/{quote(keyword)}?type=live",
+        })
+        resp2 = urllib.request.urlopen(req2, timeout=30)
+        api_data = json.loads(resp2.read().decode("utf-8"))
+        log(f"API返回: {json.dumps(api_data)[:400]}")
+        
+        # 从API中提取房间
+        data_list = api_data
+        if isinstance(api_data, dict):
+            data_list = api_data.get("data", api_data.get("items", []))
+            if isinstance(data_list, dict):
+                data_list = data_list.get("data", data_list.get("items", []))
+        
+        if isinstance(data_list, list):
+            for item in data_list:
+                if isinstance(item, dict):
+                    rid = item.get("room_id") or item.get("id") or item.get("aweme_id", "")
+                    watchers = item.get("user_count") or item.get("watch_count") or 0
+                    anchor = item.get("anchor_name") or item.get("nickname") or item.get("nick", "") or ""
+                    if rid and str(rid).isdigit():
+                        results.append((str(rid), anchor or str(rid), int(watchers)))
+    except Exception as e:
+        log(f"API请求失败: {e}")
+    
+    # 方式3: 对于搜索结果中发现的房间，尝试打开直播间页获取人数
+    # 从方式1拿到的rid（在线=0），尝试访问直播间确认
+    final = []
+    seen = set()
+    for rid, anchor, watchers in results:
+        if rid in seen:
+            continue
+        seen.add(rid)
+        if watchers > 0:
+            # API直接给了人数
+            if watchers >= min_watchers:
+                final.append((rid, anchor, watchers))
+        else:
+            # 需要从HTML获取人数
+            try:
+                live_url = f"https://live.douyin.com/{rid}"
+                req3 = urllib.request.Request(live_url, headers={
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                    "Cookie": cookie_str,
+                })
+                resp3 = urllib.request.urlopen(req3, timeout=15)
+                live_html = resp3.read().decode("utf-8", errors="replace")
+                
+                # 检查是否在直播
+                if "暂停" in live_html and "直播已结束" in live_html:
+                    continue
+                
+                # 提取在线人数
+                w = 0
+                for p in [r'([\d.]+)\s*万?\s*[人着][在正]', r'(\d[\d,]*)\s*[人着]']:
+                    m = re.search(p, live_html)
+                    if m:
+                        s = m.group(1).replace(",", "")
+                        w = int(float(s.replace("万", ""))*10000) if "万" in s else int(s)
+                        break
+                
+                # 提取主播名
+                aname = anchor
+                if not aname or aname == rid:
+                    title_m = re.search(r'<title>([^<]+)', live_html)
+                    if title_m:
+                        aname = title_m.group(1).split("-")[0].strip()
+                
+                if w >= min_watchers:
+                    final.append((rid, aname, w))
+            except:
+                pass
+    
+    return final
 
 def main():
     if not DOUYIN_COOKIE:
@@ -106,9 +181,9 @@ def main():
         log("需要 GH_REPO 和 GH_TOKEN")
         return
     
-    # 解析cookie
     try:
         cookie_dict = json.loads(base64.b64decode(DOUYIN_COOKIE).decode("utf-8"))
+        cookie_str = "; ".join([f"{c['name']}={c['value']}" for c in cookie_dict])
         log(f"Cookie: {len(cookie_dict)}条")
     except Exception as e:
         log(f"Cookie解析失败: {e}")
@@ -123,45 +198,13 @@ def main():
     all_new = {}
     
     for keyword, min_watchers in SEARCH_KEYWORDS:
-        log(f"\n===== 搜索: {keyword} =====")
-        data = search_douyin_api(keyword, cookie_dict)
+        log(f"\n===== 搜索: {keyword} (>={min_watchers}人) =====")
+        found = search_keyword(keyword, min_watchers, cookie_str)
         
-        if data is None:
-            log(f"'{keyword}' API请求失败")
-            continue
-        
-        # 解析不同格式
-        rooms_found = []
-        
-        # 格式1: aweme/v1/web/live/search/ 返回格式
-        if isinstance(data, dict):
-            # 尝试多种路径
-            items = data.get("data", {}).get("data", []) or data.get("data", {}).get("items", []) or data.get("data", {}).get("results", []) or data.get("items", [])
-            
-            if not items and isinstance(data.get("data"), list):
-                items = data["data"]
-            
-            for item in items:
-                room_id = item.get("room_id") or item.get("id") or item.get("live_room_id") or item.get("aweme_id", "")
-                user_count = item.get("user_count") or item.get("watch_count") or item.get("total_user_count") or 0
-                anchor = item.get("anchor_name") or item.get("nickname") or item.get("nick", "") or ""
-                
-                if room_id:
-                    rooms_found.append((str(room_id), anchor, int(user_count)))
-        
-        log(f"解析到 {len(rooms_found)} 个直播间")
-        
-        for rid, anchor, watchers in rooms_found:
-            if rid in existing_rooms or rid in all_new:
-                continue
-            if not rid.isdigit():
-                continue
-            aname = anchor or rid
-            if watchers >= min_watchers:
-                all_new[rid] = f"{rid}={aname}(搜索:{keyword})"
-                log(f"  ✅ 收录: {rid} = {aname} 在线={watchers}")
-            else:
-                log(f"  ⏭ 人数不足: {rid} = {aname} 在线={watchers} < {min_watchers}")
+        for rid, anchor, watchers in found:
+            if rid not in existing_rooms and rid not in all_new:
+                all_new[rid] = f"{rid}={anchor}(搜索:{keyword})"
+                log(f"  ✅ {rid} = {anchor} 在线={watchers}")
     
     if all_new:
         log(f"\n共发现 {len(all_new)} 个新直播间")
