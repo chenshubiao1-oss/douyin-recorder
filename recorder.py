@@ -418,9 +418,23 @@ def run():
                             anchor_names.pop(rid, None)
                             prev_live.pop(rid, None)
                     log(f"周期性刷新页面... ({len(pages)}个房间)")
-                    for rid, page in pages.items():
-                        try: page.reload(wait_until="domcontentloaded",timeout=30000); time.sleep(3)
-                        except: pass
+                    for rid, page in list(pages.items()):
+                        try:
+                            import threading
+                            done = [False]
+                            def _reload(page=page):
+                                try: page.reload(wait_until="domcontentloaded",timeout=30000)
+                                except: pass
+                                done[0] = True
+                            t = threading.Thread(target=_reload, daemon=True)
+                            t.start()
+                            t.join(35)  # 最多等35秒
+                        except:
+                            pass
+                        try:
+                            time.sleep(3)
+                        except:
+                            pass
                     last_refresh = now
                 
                 for rid, page in pages.items():
