@@ -147,40 +147,23 @@ def upload_now(filepath, room_name):
     if not filepath or not os.path.exists(filepath): return
     fname = os.path.basename(filepath)
     fsize = os.path.getsize(filepath)
-    try:
-        # 方式1: 用 GitHub Artifacts Upload API (POST multipart)
-        # 先用 gh api 获取 upload URL
-        import requests
-        headers = {"Authorization": f"Bearer {GH_TOKEN}", "Accept": "application/vnd.github+json"}
-        
-        # 先创建 artifact 记录
-        create_url = f"https://api.github.com/repos/{GH_REPO}/actions/artifacts"
-        with open(filepath, "rb") as f:
-            files = {"file": (fname, f, "application/octet-stream")}
-            data = {"name": f"rec-{room_name}-{datetime.now().strftime('%H%M%S')}", "retention_days": "90"}
-            resp = requests.post(create_url, headers=headers, data=data, files=files, timeout=120)
-        
-        if resp.status_code in (200, 201):
-            log(f"实时上传成功: {room_name}/{fname} ({fsize/1024/1024:.1f}MB)")
-            return
-        else:
-            log(f"实时上传失败: {resp.status_code} {resp.reason[:200]}，尝试Release...")
-    except Exception as e:
-        log(f"实时上传异常: {e}，尝试Release...")
     
-    # 方式2: Release 兜底 (永久存储)
+    # 用 Release 上传 (永久存储)
     try:
         release_tag = f"rec-{datetime.now().strftime('%Y%m%d')}"
-        subprocess.run(["gh","release","create",release_tag,"--repo",GH_REPO,"--title",f"录制 {datetime.now().strftime('%Y-%m-%d')}","--notes","自动上传","--target","main"],
+        # 先尝试创建 Release（如果已存在会失败，忽略即可）
+        subprocess.run(["gh","release","create",release_tag,"--repo",GH_REPO,
+                       "--title",f"录制 {datetime.now().strftime('%Y-%m-%d')}",
+                       "--notes","自动上传","--target","main"],
                       capture_output=True, timeout=30, env={**os.environ, "GITHUB_TOKEN": GH_TOKEN})
-        r2 = subprocess.run(["gh","release","upload",release_tag,filepath,"--repo",GH_REPO,"--clobber"],
-                           capture_output=True, text=True, timeout=120, env={**os.environ, "GITHUB_TOKEN": GH_TOKEN})
-        if r2.returncode == 0:
-            log(f"Release上传成功: {room_name}/{fname} ({fsize/1024/1024:.1f}MB)")
+        r = subprocess.run(["gh","release","upload",release_tag,filepath,"--repo",GH_REPO,"--clobber"],
+                          capture_output=True, text=True, timeout=120, env={**os.environ, "GITHUB_TOKEN": GH_TOKEN})
+        if r.returncode == 0:
+            log(f"实时上传成功: {room_name}/{fname} ({fsize/1024/1024:.1f}MB) -> Release")
         else:
-            log(f"Release上传失败: {r2.stderr[:200]}")
+            log(f"实时上传失败: {r.stderr[:200]}")
     except Exception as e:
-        log(f"Release上传异常: {e}")
+        log(f"上传异常: {e}")
 
 def trigger_renewal():
     global _renew_triggered
