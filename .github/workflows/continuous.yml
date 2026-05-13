@@ -39,16 +39,17 @@ jobs:
             ~/.cache/torch
             ~/.cache/modelscope
             ~/.cache/huggingface
-          key: deps-${{ runner.os }}-${{ hashFiles('requirements.txt') }}-v2
+            ~/.cache/ms-playwright
+          key: deps-v3-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
           restore-keys: |
-            deps-${{ runner.os }}-
+            deps-v3-${{ runner.os }}-
 
       - name: 安装依赖
         run: |
           sudo apt-get install -y -qq ffmpeg
           python -m pip install --upgrade pip
-          pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu --quiet
-          pip install playwright funasr requests
+          pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu --only-binary=:all:
+          pip install playwright funasr --only-binary=:all:
           python -m playwright install chromium --with-deps
           mkdir -p /tmp/recordings /tmp/transcripts
 
