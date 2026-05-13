@@ -52,9 +52,6 @@ jobs:
             deps-fixed-v1-
             deps-v3-${{ runner.os }}-
             deps-v3-
-          restore-keys: |
-            deps-v3-${{ runner.os }}-
-            deps-v3-
 
       - name: 安装依赖
         run: |
