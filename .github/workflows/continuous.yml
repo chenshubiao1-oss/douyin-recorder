@@ -21,8 +21,6 @@ on:
 
 env:
   PYTHON_VERSION: '3.11'
-  PIP_DEFAULT_TIMEOUT: 30
-  PIP_RETRIES: 2
 
 jobs:
   record:
@@ -49,21 +47,26 @@ jobs:
             ~/.cache/modelscope
             ~/.cache/huggingface
             ~/.cache/ms-playwright
-          key: deps-v3-${{ runner.os }}-fixed-${{ github.run_id }}
+          key: deps-v3-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
           restore-keys: |
+            deps-v3-${{ runner.os }}-
             deps-v3-
-            deps-
-            deps-
-            dep-
-            de
 
-      - name: 安装依赖
+      - name: 安装ffmpeg
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y ffmpeg
+
+      - name: 安装依赖(分步安装减少内存)
+        shell: bash
+        run: |
           python -m pip install --upgrade pip
-          pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu --prefer-binary --timeout 60
-          pip install playwright funasr requests --prefer-binary --timeout 60
+          # 每步只装一个包，避免dependency resolver内存爆炸
+          pip install --timeout 60 torch --index-url https://download.pytorch.org/whl/cpu
+          pip install --timeout 60 torchaudio --index-url https://download.pytorch.org/whl/cpu
+          pip install --timeout 60 playwright
+          pip install --timeout 60 requests
+          pip install --timeout 60 funasr
           python -m playwright install chromium --with-deps
           mkdir -p /tmp/recordings /tmp/transcripts
 
