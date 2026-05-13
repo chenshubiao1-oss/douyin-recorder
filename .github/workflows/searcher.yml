@@ -1,0 +1,45 @@
+name: 搜索结果发现
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'  # 每10分钟
+
+env:
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  search:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 设置Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: 缓存依赖
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.cache/ms-playwright
+          key: searcher-deps-${{ runner.os }}
+          restore-keys: |
+            searcher-deps-
+
+      - name: 安装依赖
+        run: |
+          pip install --timeout 60 playwright requests
+          python -m playwright install chromium --with-deps
+
+      - name: 搜索并更新房间
+        run: python searcher.py
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DOUYIN_COOKIE: ${{ secrets.DOUYIN_COOKIE }}
