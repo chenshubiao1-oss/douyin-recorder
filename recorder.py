@@ -192,7 +192,7 @@ def run():
 
             start_time = time.time()
             last_refresh = time.time()
-            last_status_log = {}
+            prev_live = {}
 
             while True:
                 now = time.time()
@@ -220,20 +220,22 @@ def run():
                     last_refresh = now
 
                 for rid, page in pages.items():
-                    live = False
                     try:
                         live = is_live_page(page)
                     except Exception as e:
-                        log(f"[{room_names.get(rid, rid)}] is_live_page() 异常: {e}")
+                        live = False
+                        log(f"[{room_names.get(rid, rid)}] is_live 异常: {e}")
 
+                    # 只有在状态变化时才打印
+                    prev = prev_live.get(rid, None)
+                    if prev is None or prev != live:
+                        status_str = "ONAIR" if live else "OFF"
+                        log(f"[{room_names.get(rid, rid)}] is_live={status_str}")
+                        prev_live[rid] = live
+
+                    # 开播且未录制 -> 开始录制
                     if live and recording["proc"] is None:
-                        log(f"[{room_names.get(rid, rid)}] 检测到开播!")
-
-                    if live:
-                        # 每3分钟打一次live状态，方便追踪
-                        if int(time.time() / 180) != int(last_status_log.get(rid, 0) / 180):
-                            log(f"[{room_names.get(rid, rid)}] is_live=True")
-                            last_status_log[rid] = time.time()
+                        log(f"[{room_names.get(rid, rid)}] 检测到开播! 刷新页面提取推流地址...")
                         try:
                             page.reload(wait_until="domcontentloaded", timeout=30000)
                             time.sleep(5)
