@@ -57,11 +57,8 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y ffmpeg
           python -m pip install --upgrade pip
-          # 安装 torch（不用解析整个依赖树）
-          pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu --no-deps --timeout 120
-          # 安装核心包（--no-deps 避免无限解析，手动补必需依赖）
-          pip install --no-deps --timeout 120 funasr playwright requests pyee
-          pip install --no-deps --timeout 120 dashscope addict numpy scipy 2>/dev/null || true
+          pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu --prefer-binary --timeout 60
+          pip install playwright funasr requests --prefer-binary --timeout 60
           python -m playwright install chromium --with-deps
           mkdir -p /tmp/recordings /tmp/transcripts
 
