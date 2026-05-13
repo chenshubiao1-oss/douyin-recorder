@@ -218,11 +218,12 @@ def run_test():
     from transcriber import transcribe
     log(f"测试模式: 录制 {TEST_ROOM} {TEST_DURATION}秒后转写")
     
-    # 先预加载 SenseVoice 模型（确保转写时不卡在下载）
-    log("预加载 SenseVoice 模型...")
+    # 先预加载 SenseVoice 模型（阻塞直到下载完成）
+    log("预加载 SenseVoice 模型... (第一次运行需下载 ~893MB，约35分钟)")
+    import time as ttime
+    t0 = ttime.time()
+    _model = None
     try:
-        import time as ttime
-        t0 = ttime.time()
         from funasr import AutoModel
         _model = AutoModel(
             model="iic/SenseVoiceSmall",
@@ -231,9 +232,10 @@ def run_test():
             vad_model="iic/speech_fsmn_vad_zh-cn_16k-common-pytorch",
             vad_kwargs={"max_single_segment_time": 60000},
         )
+        )
         log(f"模型加载完成 ({(ttime.time()-t0)/60:.1f}分钟)")
     except Exception as e:
-        log(f"模型预加载失败: {e}，继续运行但转写可能失败")
+        log(f"模型预加载失败: {e}")
     
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True, args=["--no-sandbox","--disable-gpu","--disable-dev-shm-usage"])
