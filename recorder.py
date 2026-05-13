@@ -155,9 +155,9 @@ def upload_now(filepath, room_name):
         subprocess.run(["gh","release","create",release_tag,"--repo",GH_REPO,
                        "--title",f"录制 {datetime.now().strftime('%Y-%m-%d')}",
                        "--notes","自动上传","--target","main"],
-                      capture_output=True, timeout=30, env={**os.environ, "GITHUB_TOKEN": GH_TOKEN})
+                      capture_output=True, timeout=30, env={**os.environ, "GH_TOKEN": GH_TOKEN, "GITHUB_TOKEN": GH_TOKEN})
         r = subprocess.run(["gh","release","upload",release_tag,filepath,"--repo",GH_REPO,"--clobber"],
-                          capture_output=True, text=True, timeout=120, env={**os.environ, "GITHUB_TOKEN": GH_TOKEN})
+                          capture_output=True, text=True, timeout=120, env={**os.environ, "GH_TOKEN": GH_TOKEN, "GITHUB_TOKEN": GH_TOKEN})
         if r.returncode == 0:
             log(f"实时上传成功: {room_name}/{fname} ({fsize/1024/1024:.1f}MB) -> Release")
         else:
