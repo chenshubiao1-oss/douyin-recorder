@@ -17,7 +17,7 @@ on:
         default: '60'
 
   schedule:
-    - cron: '0 1 * * *'
+    - cron: '0 22 * * *'  # 每天 UTC 22:00 (泰时 05:00)
 
 env:
   PYTHON_VERSION: '3.11'
