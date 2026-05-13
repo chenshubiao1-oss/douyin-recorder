@@ -21,6 +21,8 @@ on:
 
 env:
   PYTHON_VERSION: '3.11'
+  PIP_DEFAULT_TIMEOUT: 30
+  PIP_RETRIES: 2
 
 jobs:
   record:
@@ -47,18 +49,21 @@ jobs:
             ~/.cache/modelscope
             ~/.cache/huggingface
             ~/.cache/ms-playwright
-          key: deps-v3-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+          key: deps-v3-${{ runner.os }}-fixed-${{ github.run_id }}
           restore-keys: |
-            deps-v3-${{ runner.os }}-
             deps-v3-
+            deps-
+            deps-
+            dep-
+            de
 
       - name: 安装依赖
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y ffmpeg
           python -m pip install --upgrade pip
-          PIP_DEFAULT_TIMEOUT=30 pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu --prefer-binary --timeout 30
-          PIP_DEFAULT_TIMEOUT=30 pip install playwright funasr requests --prefer-binary --timeout 30
+          pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu --prefer-binary --timeout 60
+          pip install playwright funasr requests --prefer-binary --timeout 60
           python -m playwright install chromium --with-deps
           mkdir -p /tmp/recordings /tmp/transcripts
 
@@ -87,6 +92,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: transcripts-${{ github.run_id }}
-          path: /tmp/transcripts/'
+          path: /tmp/transcripts/
           retention-days: 90
           if-no-files-found: ignore
