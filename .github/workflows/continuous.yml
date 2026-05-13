@@ -51,22 +51,17 @@ jobs:
           restore-keys: |
             deps-v3-${{ runner.os }}-
             deps-v3-
+            deps-
+            dep-
+            de
 
-      - name: 安装ffmpeg
+      - name: 安装依赖
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y ffmpeg
-
-      - name: 安装依赖(分步安装减少内存)
-        shell: bash
-        run: |
           python -m pip install --upgrade pip
-          # 每步只装一个包，避免dependency resolver内存爆炸
-          pip install --timeout 60 torch --index-url https://download.pytorch.org/whl/cpu
-          pip install --timeout 60 torchaudio --index-url https://download.pytorch.org/whl/cpu
-          pip install --timeout 60 playwright
-          pip install --timeout 60 requests
-          pip install --timeout 60 funasr
+          pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu --prefer-binary --timeout 60
+          pip install playwright funasr requests --prefer-binary --timeout 60
           python -m playwright install chromium --with-deps
           mkdir -p /tmp/recordings /tmp/transcripts
 
