@@ -36,7 +36,8 @@ jobs:
 
       - name: 安装依赖
         run: |
-          pip install --timeout 60 playwright requests
+          pip install --timeout 60 playwright
+          pip install --timeout 60 requests
           python -m playwright install chromium --with-deps
 
       - name: 搜索并更新房间
