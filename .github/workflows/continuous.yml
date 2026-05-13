@@ -2,6 +2,16 @@ name: 24h连续监控
 
 on:
   workflow_dispatch:
+    inputs:
+      test_mode:
+        description: '测试模式: 录制60秒+转写'
+        required: false
+        default: ''
+      test_room:
+        description: '测试房间ID'
+        required: false
+        default: '344763580'
+
   schedule:
     - cron: '0 1 * * *'
 
@@ -25,9 +35,9 @@ jobs:
         run: |
           sudo apt-get install -y -qq ffmpeg
           python -m pip install --upgrade pip
-          pip install playwright
+          pip install playwright funasr
           python -m playwright install chromium --with-deps
-          mkdir -p /tmp/recordings
+          mkdir -p /tmp/recordings /tmp/transcripts
 
       - name: 启动监控录制
         run: python recorder.py
@@ -36,6 +46,8 @@ jobs:
           GH_REPO: ${{ github.repository }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_RUN_ID: ${{ github.run_id }}
+          TEST_MODE: ${{ github.event.inputs.test_mode || '' }}
+          TEST_ROOM: ${{ github.event.inputs.test_room || '344763580' }}
 
       - name: 上传录制文件
         if: always()
@@ -43,5 +55,14 @@ jobs:
         with:
           name: douyin-${{ github.run_id }}-${{ github.run_attempt }}
           path: /tmp/recordings/
+          retention-days: 90
+          if-no-files-found: ignore
+
+      - name: 上传转写结果
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: transcripts-${{ github.run_id }}
+          path: /tmp/transcripts/
           retention-days: 90
           if-no-files-found: ignore
