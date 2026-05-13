@@ -187,7 +187,30 @@ def run():
                 if elapsed > MAX_DURATION:
                     log(f"任务超时 ({elapsed/3600:.1f}h)，退出"); break
                 if now - last_refresh > 300:
-                    log("周期性刷新页面...")
+                    # 重新读取rooms.txt，支持动态加人
+                    new_rooms = load_rooms()
+                    for nr in new_rooms:
+                        if nr["id"] not in pages:
+                            # 新房间: 打开新页面
+                            log(f"检测到新房间: {nr['id']} = {nr['name']}，动态添加")
+                            new_page = context.new_page()
+                            navigate_page(new_page, nr["id"])
+                            pages[nr["id"]] = new_page
+                            room_names[nr["id"]] = nr["name"]
+                    # 检查已删除的房间
+                    new_ids = {r["id"] for r in new_rooms}
+                    for rid in list(pages.keys()):
+                        if rid not in new_ids:
+                            log(f"房间已移除: {room_names.get(rid,rid)}")
+                            if rid in recordings:
+                                rec = recordings.pop(rid)
+                                stop_recording(rec["proc"])
+                            try: pages[rid].close()
+                            except: pass
+                            del pages[rid]
+                            room_names.pop(rid, None)
+                            prev_live.pop(rid, None)
+                    log(f"周期性刷新页面... ({len(pages)}个房间)")
                     for rid, page in pages.items():
                         try: page.reload(wait_until="domcontentloaded",timeout=30000); time.sleep(3)
                         except: pass
