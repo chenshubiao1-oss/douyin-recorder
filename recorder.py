@@ -164,7 +164,7 @@ def start_recording(url, quality, room_id, anchor_name=""):
     audiofile = os.path.join(OUTPUT_DIR, f"{base}.wav")
     with open(os.path.join(OUTPUT_DIR, f"{safe_name}_meta.json"), "w", encoding="utf-8") as f:
         json.dump({"room_id":room_id,"anchor_name":anchor_name,"filename":f"{base}.mp4","audio":f"{base}.wav","quality":quality}, f)
-    log(f"开始录制: {room_name}/{base}.mp4 [{quality}]  + 同步抽音频")
+    log(f"开始录制: {anchor_name}/{base}.mp4 [{quality}]  + 同步抽音频")
     # 视频 -c copy
     proc = subprocess.Popen([FFMPEG,"-y","-loglevel","warning","-i",url,"-c","copy","-movflags","+faststart+frag_keyframe+empty_moov","-f","mp4",outfile],
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
