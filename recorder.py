@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 """抖音直播监控录制器 - 多房间同时录制 + 录制完成即实时上传 + 同步抽音频(用于转写)"""
-import os, sys, json, time, subprocess, re
+import os, sys, json, time, subprocess, re, signal
 from datetime import datetime
+
+# 全局常量
+URLLIB_TIMEOUT = 30  # 所有网络请求 timeout
+PAGE_EVAL_TIMEOUT = 15000  # page.evaluate timeout (ms)
+WATCHDOG_TIMEOUT = 180  # 主循环看门狗（秒）超过则认为本轮卡死，跳过
 
 ROOMS_FILE = os.environ.get("ROOMS_FILE", "rooms.txt")
 CHECK_INTERVAL = int(os.environ.get("CHECK_INTERVAL", "15"))
@@ -26,7 +31,7 @@ def load_rooms_from_github():
         import urllib.request, base64
         req = urllib.request.Request(f"https://api.github.com/repos/{GH_REPO}/contents/rooms.txt",
             headers={"Authorization":f"Bearer {GH_TOKEN}","Accept":"application/vnd.github+json"})
-        resp = json.loads(urllib.request.urlopen(req).read())
+        resp = json.loads(urllib.request.urlopen(req, timeout=URLLIB_TIMEOUT).read())
         content = base64.b64decode(resp["content"]).decode("utf-8")
         rooms = []
         for line in content.split("\n"):
@@ -91,7 +96,7 @@ def get_stream_url(page, room_id):
     }
     """
     try:
-        raw = page.evaluate(js)
+        raw = page.evaluate(js, timeout=PAGE_EVAL_TIMEOUT)
         if raw:
             streams = json.loads(raw)
             priority = {"FULL_HD1": 4, "HD1": 3, "SD1": 2, "SD2": 1}
@@ -103,21 +108,30 @@ def get_stream_url(page, room_id):
         log(f"JS eval error: {e}")
     return (None, None)
 
+def _try_eval(page, js, default=None):
+    """安全的 page.evaluate，带 timeout，异常返回 default"""
+    try:
+        return page.evaluate(js, timeout=PAGE_EVAL_TIMEOUT)
+    except Exception:
+        return default
+
 def is_live_page(page):
     try:
-        if not page.evaluate("""() => {const s=document.querySelectorAll('script:not([src])');for(const x of s){if((x.textContent||'').includes('flv_pull_url'))return true}return false}"""):
+        if not _try_eval(page, """() => {const s=document.querySelectorAll('script:not([src])');for(const x of s){if((x.textContent||'').includes('flv_pull_url'))return true}return false}""", False):
             return False
-        text = page.evaluate("document.body?.innerText?.slice(0,300)||''")
-        for w in ['直播已结束','主播暂时离开','下播了','主播不在','当前没有直播','主播正在赶来的路上']:
-            if w in text: return False
-        return page.evaluate("!!document.querySelector('video')")
-    except: return False
+        text = _try_eval(page, "document.body?.innerText?.slice(0,300)||''", '')
+        if text:
+            for w in ['直播已结束','主播暂时离开','下播了','主播不在','当前没有直播','主播正在赶来的路上']:
+                if w in text: return False
+        return _try_eval(page, "!!document.querySelector('video')", False)
+    except:
+        return False
 
 def get_anchor_name(page):
     """从抖音直播间页面提取主播真实昵称"""
     try:
         # 尝试从 title 提取 (格式: "主播名 正在直播")
-        title = page.evaluate("document.title || ''")
+        title = _try_eval(page, "document.title || ''", '')
         if title:
             name = title.replace(' 正在直播', '').replace(' 的直播间', '').replace(' - 抖音', '').strip()
             if name:
@@ -134,16 +148,17 @@ def get_anchor_name(page):
             }
             return '';
         }"""
-        name = page.evaluate(js)
+        name = _try_eval(page, js, '')
         if name:
             return name
             
         # 从页面可见文本找主播名
-        text = page.evaluate("document.body?.innerText?.slice(0,200) || ''")
-        for line in text.split('\n'):
-            line = line.strip()
-            if line and len(line) < 20 and not any(kw in line for kw in ['直播','抖音','关注','粉丝','点赞']):
-                return line
+        text = _try_eval(page, "document.body?.innerText?.slice(0,200) || ''", '')
+        if text:
+            for line in text.split('\n'):
+                line = line.strip()
+                if line and len(line) < 20 and not any(kw in line for kw in ['直播','抖音','关注','粉丝','点赞']):
+                    return line
     except Exception as e:
         log(f"获取主播名失败: {e}")
     return ""
@@ -204,12 +219,12 @@ def upload_now(filepath, room_name):
         req = urllib.request.Request(f"https://api.github.com/repos/{GH_REPO}/releases",
             data=d, headers=headers, method="POST")
         try:
-            resp = urllib.request.urlopen(req)
+            resp = urllib.request.urlopen(req, timeout=URLLIB_TIMEOUT)
             rel_data = json.loads(resp.read())
         except urllib.error.HTTPError as e2:
             if e2.code == 422:  # already exists, fetch it
                 req2 = urllib.request.Request(f"https://api.github.com/repos/{GH_REPO}/releases/tags/{release_tag}", headers=headers)
-                rel_data = json.loads(urllib.request.urlopen(req2).read())
+                rel_data = json.loads(urllib.request.urlopen(req2, timeout=URLLIB_TIMEOUT).read())
             else:
                 log(f"创建Release失败: {e2.code} {e2.read().decode('utf-8')[:150]}")
                 return
@@ -233,6 +248,11 @@ def upload_now(filepath, room_name):
         log(f"实时上传成功: {room_name}/{fname} ({fsize/1024/1024:.1f}MB) -> Release")
     except Exception as e:
         log(f"上传异常: {e}")
+        # 上传失败后删除本地文件（避免残留），但删除前先报告
+        try:
+            log(f"上传失败，文件保留在: {filepath}")
+        except:
+            pass
 
 def trigger_renewal():
     global _renew_triggered
@@ -242,7 +262,7 @@ def trigger_renewal():
         d = json.dumps({"ref":"main"}).encode()
         req = urllib.request.Request(f"https://api.github.com/repos/{GH_REPO}/actions/workflows/continuous.yml/dispatches",
             data=d, headers={"Authorization":f"Bearer {GH_TOKEN}","Content-Type":"application/json"}, method="POST")
-        urllib.request.urlopen(req)
+        urllib.request.urlopen(req, timeout=URLLIB_TIMEOUT)
         log("续命: 已触发下一个workflow")
     except Exception as e: log(f"续命失败: {e}")
     _renew_triggered = True
@@ -354,10 +374,18 @@ def run():
                 if aname:
                     anchor_names[r["id"]] = aname
                     log(f"  主播昵称: {aname}")
-            start_time = last_refresh = time.time()
+            start_time = last_refresh = last_watchdog = time.time()
             while True:
                 now = time.time()
                 elapsed = now - start_time
+                
+                # 看门狗: 如果循环超过 WATCHDOG_TIMEOUT 秒没完成，跳过本轮
+                if now - last_watchdog > WATCHDOG_TIMEOUT:
+                    log(f"看门狗: 上一轮循环超过{WATCHDOG_TIMEOUT}s，跳过重新开始")
+                    last_watchdog = now
+                    continue
+                last_watchdog = now
+                
                 if elapsed > 350*60: trigger_renewal()
                 if elapsed > MAX_DURATION:
                     log(f"任务超时 ({elapsed/3600:.1f}h)，退出"); break
