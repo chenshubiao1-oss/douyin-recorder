@@ -214,9 +214,26 @@ def handle_room_end(rid, recordings, room_names, now):
             upload_now(f, room_names.get(rid, rid))
 
 def run_test():
-    """测试模式: 录制指定房间 -> 转写 -> 退出"""
+    """测试模式: 预加载模型 -> 录制 -> 转写 -> 退出"""
     from transcriber import transcribe
     log(f"测试模式: 录制 {TEST_ROOM} {TEST_DURATION}秒后转写")
+    
+    # 先预加载 SenseVoice 模型（确保转写时不卡在下载）
+    log("预加载 SenseVoice 模型...")
+    try:
+        import time as ttime
+        t0 = ttime.time()
+        from funasr import AutoModel
+        _model = AutoModel(
+            model="iic/SenseVoiceSmall",
+            disable_update=True,
+            device="cpu",
+            vad_model="iic/speech_fsmn_vad_zh-cn_16k-common-pytorch",
+            vad_kwargs={"max_single_segment_time": 60000},
+        )
+        log(f"模型加载完成 ({(ttime.time()-t0)/60:.1f}分钟)")
+    except Exception as e:
+        log(f"模型预加载失败: {e}，继续运行但转写可能失败")
     
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True, args=["--no-sandbox","--disable-gpu","--disable-dev-shm-usage"])
@@ -259,7 +276,7 @@ def run_test():
                 if os.path.exists(audiofile) and asize > 0:
                     log("=== 开始转写 ===")
                     try:
-                        txt, srt = transcribe(audiofile)
+                        txt, srt = transcribe(audiofile, model=_model)
                         log("=== 转写结果 ===")
                         with open(txt, "r", encoding="utf-8") as f:
                             for line in f:
