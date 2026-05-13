@@ -1,19 +1,7 @@
-name: 转录特定Artifact
+name: 转录ArtifactWAV
 
 on:
   workflow_dispatch:
-    inputs:
-      artifact_id:
-        description: 'Artifact ID'
-        required: true
-        default: '6970939333'
-      wav_name:
-        description: 'WAV文件名(含路径)'
-        required: true
-        default: '麻花在泰国的抖音直播间直播_FULL_HD1_20260513_101206.wav'
-
-env:
-  PYTHON_VERSION: '3.11'
 
 jobs:
   transcribe:
@@ -29,121 +17,86 @@ jobs:
       - name: 设置Python
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          python-version: '3.11'
 
-      - name: 安装依赖
+      - name: 系统依赖
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y ffmpeg unzip
+
+      - name: 安装Python依赖
+        run: |
           python -m pip install --upgrade pip
           pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu --prefer-binary --timeout 60
           pip install funasr requests --prefer-binary --timeout 60
 
-      - name: 下载Artifact并提取WAV
+      - name: 下载并提取Artifact
         run: |
-          mkdir -p /tmp/artifact /tmp/wav_dir /tmp/transcripts
+          mkdir -p /tmp/artifact /tmp/transcripts
           curl -sL -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/artifacts/${{ github.event.inputs.artifact_id }}/zip" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/artifacts/6970939333/zip" \
             -o /tmp/artifact.zip
-          echo "下载完成"
-          ls -lh /tmp/artifact.zip
-          unzip -o /tmp/artifact.zip -d /tmp/artifact/
-          echo "解压完成"
-          ls -la /tmp/artifact/
+          unzip -o /tmp/artifact.zip -d /tmp/artifact/ 2>/dev/null
 
-      - name: 查找WAV文件
+      - name: 查找WAV并转录
         run: |
-          wav_name="${{ github.event.inputs.wav_name }}"
-          echo "查找: $wav_name"
-          found=$(find /tmp/artifact -name "*.wav" -type f | head -20)
-          echo "找到的WAV文件:"
-          echo "$found"
-          # 用输入的名字
-          found2=$(find /tmp/artifact -name "$wav_name" -type f)
-          if [ -z "$found2" ]; then
-            # 尝试找名字包含'麻花'的
-            found2=$(find /tmp/artifact -name "*麻花*wav" -type f)
-          fi
-          echo "目标文件: $found2"
-          if [ -n "$found2" ]; then
-            cp "$found2" /tmp/wav_dir/
-            echo "WAV_PATH=$found2" >> $GITHUB_ENV
-          else
-            echo "WAV_PATH=" >> $GITHUB_ENV
-          fi
-
-      - name: 执行转录
-        run: |
-          if [ -z "$WAV_PATH" ] || [ ! -f "$WAV_PATH" ]; then
-            echo "无目标WAV文件"
-            exit 1
-          fi
-          echo "转录: $WAV_PATH"
-          
-          python -u << 'PYEOF'
-import sys, os, json
+          python3 << 'PYEOF'
+import os, sys, glob
 sys.path.insert(0, '.')
 from transcriber import transcribe
 
-wav_path = os.environ.get('WAV_PATH', '')
-if not wav_path or not os.path.exists(wav_path):
-    print('No WAV file')
-    exit(1)
+wav_dir = '/tmp/artifact'
+wavs = glob.glob(os.path.join(wav_dir, '**', '*.wav'), recursive=True)
+print(f'找到 {len(wavs)} 个WAV文件')
+for w in wavs:
+    print(f'  {os.path.basename(w)} ({os.path.getsize(w)/1024/1024:.1f}MB)')
 
-print('WAV: ' + wav_path + ' (' + str(round(os.path.getsize(wav_path)/1024/1024,1)) + 'MB)')
-txt_path, srt_path = transcribe(wav_path)
-print('转录完成')
-print('TXT: ' + txt_path)
-print('SRT: ' + srt_path)
-
-# Upload to Release
-import urllib.request, json, base64
-token = os.environ.get('GITHUB_TOKEN', '')
-repo = os.environ.get('GITHUB_REPOSITORY', '')
-
-base_name = os.path.splitext(os.path.basename(wav_path))[0]
-
-for fpath, label in [(txt_path, 'txt'), (srt_path, 'srt')]:
-    if not os.path.exists(fpath):
-        continue
-    fsize = os.path.getsize(fpath)
-    fname = base_name + '.' + label
-    with open(fpath, 'rb') as fr:
-        data = fr.read()
-    
-    # Get or create Release
-    h = {'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github+json'}
+for wav_path in wavs:
+    print(f'\n转录: {os.path.basename(wav_path)}')
     try:
-        req = urllib.request.Request('https://api.github.com/repos/' + repo + '/releases?per_page=5', headers=h)
-        releases = json.loads(urllib.request.urlopen(req).read())
-        rel_id = None
-        for rel in releases:
-            if rel.get('tag_name', '') == 'rec-20260513':
-                rel_id = rel['id']
-                break
-        if not rel_id:
-            # create
-            d = json.dumps({'tag_name': 'rec-20260513', 'name': 'rec-20260513'}).encode()
-            req2 = urllib.request.Request('https://api.github.com/repos/' + repo + '/releases',
-                data=d, headers={**h, 'Content-Type': 'application/json'}, method='POST')
-            rel_data = json.loads(urllib.request.urlopen(req2).read())
-            rel_id = rel_data['id']
+        txt_path, srt_path = transcribe(wav_path)
+        print(f'  TXT: {os.path.basename(txt_path)}')
+        print(f'  SRT: {os.path.basename(srt_path)}')
         
-        # Upload asset
-        upload_url = 'https://uploads.github.com/repos/' + repo + '/releases/' + str(rel_id) + '/assets?name=' + urllib.request.quote(fname)
-        req3 = urllib.request.Request(upload_url, data=data, headers={**h, 'Content-Type': 'application/octet-stream'}, method='POST')
-        resp = json.loads(urllib.request.urlopen(req3).read())
-        print('已上传 ' + fname + ' (' + str(round(fsize/1024,1)) + 'KB)')
+        # Upload to Release
+        import urllib.request, json
+        token = os.environ.get('GITHUB_TOKEN', '')
+        repo = os.environ.get('GITHUB_REPOSITORY', '')
+        h = {'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github+json'}
+        
+        base_name = os.path.splitext(os.path.basename(wav_path))[0]
+        for fp, ext in [(txt_path, 'txt'), (srt_path, 'srt')]:
+            with open(fp, 'rb') as fr:
+                data = fr.read()
+            fname = base_name + '.' + ext
+            
+            # Get release
+            req = urllib.request.Request('https://api.github.com/repos/' + repo + '/releases?per_page=5', headers=h)
+            releases = json.loads(urllib.request.urlopen(req).read())
+            rel_id = None
+            for rel in releases:
+                if rel.get('tag_name', '') == 'rec-20260513':
+                    rel_id = rel['id']
+                    break
+            if not rel_id:
+                d2 = json.dumps({'tag_name': 'rec-20260513', 'name': 'rec-20260513'}).encode()
+                req2 = urllib.request.Request('https://api.github.com/repos/' + repo + '/releases',
+                    data=d2, headers={**h, 'Content-Type': 'application/json'}, method='POST')
+                rel_id = json.loads(urllib.request.urlopen(req2).read())['id']
+            
+            upload_url = 'https://uploads.github.com/repos/' + repo + '/releases/' + str(rel_id) + '/assets?name=' + urllib.request.quote(fname)
+            req3 = urllib.request.Request(upload_url, data=data, headers={**h, 'Content-Type': 'application/octet-stream'}, method='POST')
+            json.loads(urllib.request.urlopen(req3).read())
+            print(f'  上传: {fname} ({len(data)/1024:.1f}KB)')
     except Exception as e:
-        print('上传失败 ' + fname + ': ' + str(e)[:100])
-
+        print(f'  失败: {str(e)[:100]}')
 PYEOF
 
       - name: 上传转录结果
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: transcribe-${{ github.event.inputs.wav_name }}
+          name: transcribe-artifact-result
           path: /tmp/transcripts/
           retention-days: 30
           if-no-files-found: ignore
