@@ -11,6 +11,10 @@ on:
         description: '测试房间ID'
         required: false
         default: '198953345595'
+      test_duration:
+        description: '测试录制时长(秒)'
+        required: false
+        default: '60'
 
   schedule:
     - cron: '0 1 * * *'
@@ -67,6 +71,7 @@ jobs:
           GH_RUN_ID: ${{ github.run_id }}
           TEST_MODE: ${{ github.event.inputs.test_mode || '' }}
           TEST_ROOM: ${{ github.event.inputs.test_room || '344763580' }}
+          TEST_DURATION: ${{ github.event.inputs.test_duration || '60' }}
 
       - name: 上传录制文件
         if: always()
