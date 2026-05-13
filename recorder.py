@@ -280,8 +280,6 @@ def handle_room_end(rid, recordings, room_names, now):
 
 
 def run_test():
-
-def run_test():
     """测试模式: 录制 -> 转写 -> 退出"""
     from transcriber import transcribe
     log(f"测试模式: 录制 {TEST_ROOM} {TEST_DURATION}秒后转写")
