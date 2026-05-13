@@ -15,6 +15,11 @@ OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "/tmp/recordings")
 FFMPEG = os.environ.get("FFMPEG", "ffmpeg")
 GH_REPO = os.environ.get("GH_REPO", "")
 GH_TOKEN = os.environ.get("GH_TOKEN", "")
+DOUYIN_COOKIE = os.environ.get("DOUYIN_COOKIE", "")  # base64编码的cookie JSON
+
+# 搜索配置（从rooms.txt读取 #SEARCH:关键词,最低人数 行）
+SEARCH_INTERVAL = 600  # 每10分钟搜索一次
+SEARCH_CONFIGS = []  # [(keyword, min_watchers), ...]
 
 # 测试模式: 录制指定房间60秒后立即转写并退出
 TEST_MODE = os.environ.get("TEST_MODE", "")
@@ -277,6 +282,108 @@ def handle_room_end(rid, recordings, room_names, now):
         if f and os.path.exists(f):
             upload_now(f, room_names.get(rid, rid))
 
+def load_search_configs():
+    """从rooms.txt加载搜索配置"""
+    global SEARCH_CONFIGS
+    configs = []
+    try:
+        if GH_REPO and GH_TOKEN:
+            import urllib.request, base64
+            req = urllib.request.Request(f"https://api.github.com/repos/{GH_REPO}/contents/rooms.txt",
+                headers={"Authorization":f"Bearer {GH_TOKEN}","Accept":"application/vnd.github+json"})
+            resp = json.loads(urllib.request.urlopen(req, timeout=URLLIB_TIMEOUT).read())
+            content = base64.b64decode(resp["content"]).decode("utf-8")
+            lines = content.split("\n")
+        elif os.path.exists(ROOMS_FILE):
+            with open(ROOMS_FILE, encoding="utf-8") as f:
+                lines = f.readlines()
+        else:
+            return
+        
+        for line in lines:
+            line = line.strip()
+            if line.startswith("#SEARCH:"):
+                parts = line.replace("#SEARCH:", "").split(",")
+                keyword = parts[0].strip()
+                min_watchers = int(parts[1].strip()) if len(parts) > 1 and parts[1].strip().isdigit() else 1000
+                configs.append((keyword, min_watchers))
+        SEARCH_CONFIGS = configs
+        if configs:
+            log(f"加载搜索配置: {configs}")
+    except Exception as e:
+        log(f"加载搜索配置失败: {e}")
+
+def inject_cookies(context):
+    """从环境变量注入Douyin Cookie"""
+    if not DOUYIN_COOKIE:
+        log("没有DOUYIN_COOKIE环境变量，跳过Cookie注入")
+        return
+    try:
+        import base64
+        json_str = base64.b64decode(DOUYIN_COOKIE).decode("utf-8")
+        cookies = json.loads(json_str)
+        context.add_cookies(cookies)
+        log(f"Cookie注入成功 ({len(cookies)}条)")
+    except Exception as e:
+        log(f"Cookie注入失败: {e}")
+
+def search_and_add_rooms(context, pages, anchor_names, room_names, prev_live):
+    """搜索关键词直播间，符合条件的加入监控"""
+    if not SEARCH_CONFIGS:
+        return
+    if not DOUYIN_COOKIE:
+        log("搜索需要Cookie，跳过")
+        return
+    
+    for keyword, min_watchers in SEARCH_CONFIGS:
+        try:
+            log(f"搜索关键词: {keyword} (最低{min_watchers}人)")
+            page = context.new_page()
+            url = f"https://www.douyin.com/search/{keyword}?type=live"
+            page.goto(url, wait_until="domcontentloaded", timeout=60000)
+            time.sleep(5)
+            
+            # 提取搜索结果中的直播间链接
+            links = _try_eval(page, """() => {
+                const items = document.querySelectorAll('a[href*="live.douyin.com/"]');
+                return Array.from(new Set(Array.from(items).map(a => a.href))).filter(h => h.match(/live\.douyin\.com\/(\d+)/));
+            }""", [])
+            
+            found = 0
+            for href in links:
+                match = re.search(r'live\.douyin\.com/(\d+)', href)
+                if not match:
+                    continue
+                rid = match.group(1)
+                if rid in pages:
+                    continue  # 已监控
+                
+                # 打开直播间页面获取流地址(验证是否真的有流)
+                try:
+                    lp = context.new_page()
+                    navigate_page(lp, rid)
+                    aname = get_anchor_name(lp) or keyword
+                    live = is_live_page(lp)
+                    if live:
+                        pages[rid] = lp
+                        anchor_names[rid] = aname
+                        room_names[rid] = f"{aname}(搜索:{keyword})"
+                        log(f"搜索发现新直播间: {rid} = {aname}")
+                        found += 1
+                    else:
+                        try: lp.close()
+                        except: pass
+                except Exception as e:
+                    try: lp.close()
+                    except: pass
+                    log(f"检查直播间{rid}失败: {e}")
+            
+            try: page.close()
+            except: pass
+            log(f"搜索 '{keyword}' 完成，新增{found}个直播间")
+        except Exception as e:
+            log(f"搜索 '{keyword}' 出错: {e}")
+
 def run_test():
     """测试模式: 录制 -> 转写 -> 退出"""
     from transcriber import transcribe
@@ -362,6 +469,15 @@ def run():
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True, args=["--no-sandbox","--disable-gpu","--disable-dev-shm-usage"])
         context = browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36", viewport={"width":1280,"height":720})
+        
+        # 注入Cookie（用于搜索）
+        inject_cookies(context)
+        
+        # 加载搜索配置
+        load_search_configs()
+        if SEARCH_CONFIGS:
+            log(f"搜索关键词配置: {SEARCH_CONFIGS}")
+        
         pages, room_names, anchor_names = {}, {}, {}
         prev_live = {}
         try:
@@ -417,6 +533,11 @@ def run():
                         try: page.reload(wait_until="domcontentloaded",timeout=30000); time.sleep(3)
                         except: pass
                     last_refresh = now
+                
+                # 每SEARCH_INTERVAL秒搜索一次关键词（需要Cookie）
+                if SEARCH_CONFIGS and elapsed > 30 and int(elapsed) % SEARCH_INTERVAL < CHECK_INTERVAL + 5:
+                    search_and_add_rooms(context, pages, anchor_names, room_names, prev_live)
+                
                 for rid, page in pages.items():
                     try: live = is_live_page(page)
                     except: live = False
