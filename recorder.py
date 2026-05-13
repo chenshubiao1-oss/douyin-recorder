@@ -148,30 +148,45 @@ def upload_now(filepath, room_name):
     fname = os.path.basename(filepath)
     fsize = os.path.getsize(filepath)
     
-    # 用 Release 上传 (永久存储)
+    # 用 Release API 上传 (永久存储，全部用 urllib，不依赖 gh cli)
     try:
-        release_tag = f"rec-{datetime.now().strftime('%Y%m%d')}"
-        
-        # 先用API创建 Release（如果已存在忽略错误）
         import urllib.request
-        d = json.dumps({"tag_name": release_tag, "name": f"录制 {datetime.now().strftime('%Y-%m-%d')}", 
+        release_tag = f"rec-{datetime.now().strftime('%Y%m%d')}"
+        headers = {"Authorization": f"Bearer {GH_TOKEN}", "Content-Type": "application/json"}
+        
+        # 1. 查找或创建 Release
+        d = json.dumps({"tag_name": release_tag, "name": f"录制 {datetime.now().strftime('%Y-%m-%d')}",
                         "body": "自动上传", "target_commitish": "main"}).encode()
         req = urllib.request.Request(f"https://api.github.com/repos/{GH_REPO}/releases",
-            data=d, headers={"Authorization": f"Bearer {GH_TOKEN}", "Content-Type": "application/json"},
-            method="POST")
+            data=d, headers=headers, method="POST")
         try:
-            urllib.request.urlopen(req)
+            resp = urllib.request.urlopen(req)
+            rel_data = json.loads(resp.read())
         except urllib.error.HTTPError as e2:
-            err_body = e2.read().decode('utf-8')[:200]
-            log(f"创建Release: {e2.code} {err_body}")
+            if e2.code == 422:  # already exists, fetch it
+                req2 = urllib.request.Request(f"https://api.github.com/repos/{GH_REPO}/releases/tags/{release_tag}", headers=headers)
+                rel_data = json.loads(urllib.request.urlopen(req2).read())
+            else:
+                log(f"创建Release失败: {e2.code} {e2.read().decode('utf-8')[:150]}")
+                return
         
-        # 用 gh upload（API上传大文件方式比较复杂）
-        r = subprocess.run(["gh","release","upload",release_tag,filepath,"--repo",GH_REPO,"--clobber"],
-                          capture_output=True, text=True, timeout=120, env={**os.environ, "GH_TOKEN": GH_TOKEN, "GITHUB_TOKEN": GH_TOKEN})
-        if r.returncode == 0:
-            log(f"实时上传成功: {room_name}/{fname} ({fsize/1024/1024:.1f}MB) -> Release")
-        else:
-            log(f"实时上传失败: {r.stderr[:300]}")
+        upload_url_template = rel_data.get('upload_url', '')
+        if not upload_url_template:
+            log("Release创建成功但无upload_url")
+            return
+        
+        # 2. 上传文件到 Release (需要替换 {?name,label})
+        upload_url = upload_url_template.replace('{?name,label}', f'?name={fname}')
+        with open(filepath, 'rb') as f:
+            file_data = f.read()
+        upload_headers = {
+            "Authorization": f"Bearer {GH_TOKEN}",
+            "Content-Type": "application/octet-stream",
+            "Content-Length": str(len(file_data))
+        }
+        upload_req = urllib.request.Request(upload_url, data=file_data, headers=upload_headers, method="POST")
+        upload_resp = urllib.request.urlopen(upload_req, timeout=300)
+        log(f"实时上传成功: {room_name}/{fname} ({fsize/1024/1024:.1f}MB) -> Release")
     except Exception as e:
         log(f"上传异常: {e}")
 
