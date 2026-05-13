@@ -57,8 +57,8 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y ffmpeg
           python -m pip install --upgrade pip
-          pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu --prefer-binary --timeout 60
-          pip install playwright funasr requests --prefer-binary --timeout 60
+          PIP_DEFAULT_TIMEOUT=30 pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu --prefer-binary --timeout 30
+          PIP_DEFAULT_TIMEOUT=30 pip install playwright funasr requests --prefer-binary --timeout 30
           python -m playwright install chromium --with-deps
           mkdir -p /tmp/recordings /tmp/transcripts
 
@@ -87,6 +87,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: transcripts-${{ github.run_id }}
-          path: /tmp/transcripts/
+          path: /tmp/transcripts/'
           retention-days: 90
           if-no-files-found: ignore
