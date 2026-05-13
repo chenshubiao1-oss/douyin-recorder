@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""抖音直播监控录制器 - GitHub Actions 版本"""
+"""抖音直播监控录制器 - GitHub Actions 版本，支持多房间同时录制"""
 import os, sys, json, time, subprocess, re
 from datetime import datetime
 
@@ -12,10 +12,10 @@ FFMPEG = os.environ.get("FFMPEG", "ffmpeg")
 
 GH_REPO = os.environ.get("GH_REPO", "")
 GH_TOKEN = os.environ.get("GH_TOKEN", "")
-GH_RUN_ID = os.environ.get("GH_RUN_ID", "")
 
 # ---------- 状态 ----------
-recording = {"proc": None, "outfile": None, "room": None, "start": None}
+# 支持同时录制多个房间
+recordings = {}  # {room_id: {"proc": Popen, "outfile": str, "start": timestamp}}
 _renew_triggered = False
 
 def log(msg):
@@ -43,25 +43,23 @@ def load_rooms():
                 rooms.append({"id": rid, "name": name})
     return rooms
 
-# ---------- Playwright ----------
 from playwright.sync_api import sync_playwright
 
 def get_stream_url(page, room_id):
-    """从页面提取最高的flv推流地址"""
-    js = """
+    js = r"""
     () => {
         const scripts = document.querySelectorAll('script:not([src])');
         for (const s of scripts) {
             const t = s.textContent || '';
             if (!t.includes('flv_pull_url')) continue;
-            let decoded = t.replace(/\\\\"/g, '"').replace(/\\\\n/g, '').replace(/\\\\t/g, '');
-            const regex = /"(FULL_HD1|HD1|SD1|SD2)"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"/g;
+            let decoded = t.replace(/\\"/g, '"').replace(/\\n/g, '').replace(/\\t/g, '');
+            const regex = /"(FULL_HD1|HD1|SD1|SD2)"\s*:\s*"((?:[^"\\]|\\.)*)"/g;
             const seen = new Set();
             const results = [];
             let m;
             while ((m = regex.exec(decoded)) !== null) {
-                let u = m[2].replace(/\\\\\\//g, '/');
-                u = u.replace(/\\\\u0026/g, '&').replace(/\\\\u003d/g, '=');
+                let u = m[2].replace(/\\\//g, '/');
+                u = u.replace(/\\u0026/g, '&').replace(/\\u003d/g, '=');
                 const base = u.split('?')[0];
                 if (!seen.has(base)) {
                     seen.add(base);
@@ -89,7 +87,6 @@ def get_stream_url(page, room_id):
     return (None, None)
 
 def is_live_page(page):
-    """严格检测: 推流URL + video元素 + 无结束词 = 真开播"""
     try:
         has_flv = page.evaluate('''() => {
             const scripts = document.querySelectorAll("script:not([src])");
@@ -141,7 +138,6 @@ def stop_recording(proc):
         time.sleep(1)
 
 def trigger_renewal():
-    """在超时前触发下一个workflow接力，重叠<5分钟"""
     global _renew_triggered
     if not GH_REPO or not GH_TOKEN or _renew_triggered:
         return
@@ -184,6 +180,8 @@ def run():
         )
         pages = {}
         room_names = {r["id"]: r["name"] for r in rooms}
+        prev_live = {}
+
         try:
             for r in rooms:
                 page = context.new_page()
@@ -192,12 +190,10 @@ def run():
 
             start_time = time.time()
             last_refresh = time.time()
-            prev_live = {}
 
             while True:
                 now = time.time()
                 elapsed = now - start_time
-                record_over = False
 
                 # 续命: 在超时前5分钟触发下一个workflow
                 if elapsed > 350 * 60:
@@ -208,7 +204,7 @@ def run():
                     log(f"任务超时 ({elapsed/3600:.1f}h)，退出")
                     break
 
-                # 周期性刷新 或 当正在录制时短暂退出开始下次轮询
+                # 周期性刷新
                 if now - last_refresh > 300:
                     log("周期性刷新页面...")
                     for rid, page in pages.items():
@@ -219,6 +215,7 @@ def run():
                             pass
                     last_refresh = now
 
+                # ------------------------ 检测 + 录制 ------------------------
                 for rid, page in pages.items():
                     try:
                         live = is_live_page(page)
@@ -226,15 +223,15 @@ def run():
                         live = False
                         log(f"[{room_names.get(rid, rid)}] is_live 异常: {e}")
 
-                    # 只有在状态变化时才打印
+                    # 状态变化时打印
                     prev = prev_live.get(rid, None)
                     if prev is None or prev != live:
                         status_str = "ONAIR" if live else "OFF"
                         log(f"[{room_names.get(rid, rid)}] is_live={status_str}")
                         prev_live[rid] = live
 
-                    # 开播且未录制 -> 开始录制
-                    if live and recording["proc"] is None:
+                    # 开播且该房间未录制 -> 开始录制
+                    if live and rid not in recordings:
                         log(f"[{room_names.get(rid, rid)}] 检测到开播! 刷新页面提取推流地址...")
                         try:
                             page.reload(wait_until="domcontentloaded", timeout=30000)
@@ -250,31 +247,40 @@ def run():
                         if url:
                             rname = room_names.get(rid, rid)
                             proc, outfile = start_recording(url, quality, rid, rname)
-                            recording.update({"proc": proc, "outfile": outfile, "room": rid, "start": now})
+                            recordings[rid] = {"proc": proc, "outfile": outfile, "start": now}
+                        else:
+                            log(f"[{rid}] 获取推流地址失败")
 
-                    elif recording["proc"] is not None:
-                        if recording["room"] == rid:
-                            dur = now - recording["start"]
-                            if not live or dur > MAX_DURATION:
-                                stop_recording(recording["proc"])
-                                f = recording["outfile"]
-                                if f and os.path.exists(f):
-                                    sz = os.path.getsize(f)
-                                    log(f"[{recording['room']}] 录制结束: {os.path.basename(f)} ({sz/1024/1024:.1f}MB, {dur/60:.0f}m)")
-                                recording["proc"] = None
-                                recording["outfile"] = None
-                                record_over = True
-                                break
+                    # 该房间正在录制但已下播 -> 停止录制
+                    if rid in recordings and not live:
+                        rec = recordings.pop(rid)
+                        stop_recording(rec["proc"])
+                        f = rec["outfile"]
+                        if f and os.path.exists(f):
+                            sz = os.path.getsize(f)
+                            dur = now - rec["start"]
+                            log(f"[{room_names.get(rid, rid)}] 录制结束: {os.path.basename(f)} ({sz/1024/1024:.1f}MB, {dur/60:.0f}m)")
 
-                if record_over:
-                    continue
+                # 检查所有录制是否超过5小时上限
+                for rid in list(recordings.keys()):
+                    rec = recordings[rid]
+                    dur = now - rec["start"]
+                    if dur > MAX_DURATION:
+                        rec = recordings.pop(rid)
+                        stop_recording(rec["proc"])
+                        f = rec["outfile"]
+                        if f and os.path.exists(f):
+                            sz = os.path.getsize(f)
+                            log(f"[{room_names.get(rid, rid)}] 录制超时停止: {os.path.basename(f)} ({sz/1024/1024:.1f}MB, {dur/60:.0f}m)")
+
                 time.sleep(CHECK_INTERVAL)
 
         except KeyboardInterrupt:
             log("用户中断")
         finally:
-            if recording["proc"]:
-                stop_recording(recording["proc"])
+            for rid in list(recordings.keys()):
+                rec = recordings.pop(rid)
+                stop_recording(rec["proc"])
             for p in pages.values():
                 try: p.close()
                 except: pass
