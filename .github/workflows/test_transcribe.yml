@@ -2,16 +2,14 @@ name: 测试转写
 
 on:
   workflow_dispatch:
-    inputs:
-      room_id:
-        description: 抖音直播间ID
-        required: true
-        default: '344763580'
 
 jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+
+    env:
+      ROOM_ID: '344763580'
 
     steps:
       - uses: actions/checkout@v4
@@ -26,15 +24,15 @@ jobs:
 
       - name: 录制60秒
         run: |
-          python -u << 'EOF'
-import os, sys, time, subprocess, json
+          python -u << 'PYEOF'
+import os, sys, time, subprocess
 sys.path.insert(0, '.')
 from recorder import navigate_page, is_live_page, get_stream_url, log, start_recording, stop_proc
 from playwright.sync_api import sync_playwright
 
-room_id = "${{ github.event.inputs.room_id }}"
-os.environ['GH_REPO'] = '${{ github.repository }}'
-os.environ['GH_TOKEN'] = '${{ secrets.GITHUB_TOKEN }}'
+room_id = os.environ.get('ROOM_ID', '344763580')
+os.environ['GH_REPO'] = os.environ.get('GITHUB_REPOSITORY', '')
+os.environ['GH_TOKEN'] = os.environ.get('GITHUB_TOKEN', '')
 
 with sync_playwright() as p:
     browser = p.chromium.launch(headless=True, args=['--no-sandbox','--disable-gpu'])
@@ -44,7 +42,7 @@ with sync_playwright() as p:
     time.sleep(5)
     
     is_live = is_live_page(page)
-    log('直播间直播状态: ' + ('ONAIR' if is_live else 'OFF'))
+    log('直播间: ' + ('ONAIR' if is_live else 'OFF'))
     
     if is_live:
         page.reload(wait_until='domcontentloaded', timeout=30000)
@@ -52,12 +50,12 @@ with sync_playwright() as p:
         for attempt in range(8):
             quality, url = get_stream_url(page, room_id)
             if url: break
-            log('等待推流地址... (' + str(attempt+1) + '/8)')
+            log('等待推流... (' + str(attempt+1) + '/8)')
             time.sleep(3)
         
         if url:
             proc, outfile, audio_proc, audiofile = start_recording(url, quality, room_id, 'test')
-            log('开始录制60秒...')
+            log('录制60秒...')
             time.sleep(60)
             
             stop_proc(proc)
@@ -65,7 +63,7 @@ with sync_playwright() as p:
             
             vsize = os.path.getsize(outfile) if os.path.exists(outfile) else 0
             asize = os.path.getsize(audiofile) if os.path.exists(audiofile) else 0
-            log('录制完成: 视频 ' + str(vsize/1024/1024) + 'MB, 音频 ' + str(asize/1024/1024) + 'MB')
+            log('完成: 视频 ' + str(round(vsize/1024/1024,1)) + 'MB, 音频 ' + str(round(asize/1024/1024,1)) + 'MB')
             
             with open('/tmp/audio_path.txt', 'w') as f:
                 f.write(audiofile)
@@ -73,30 +71,28 @@ with sync_playwright() as p:
             log('获取推流地址失败')
             open('/tmp/audio_path.txt', 'w').write('')
     else:
-        log('当前不在直播')
+        log('不在直播')
         open('/tmp/audio_path.txt', 'w').write('')
     
     browser.close()
-
-EOF
+PYEOF
 
       - name: 执行转写
         run: |
           AUDIO_PATH=$(cat /tmp/audio_path.txt)
           if [ -z "$AUDIO_PATH" ] || [ ! -f "$AUDIO_PATH" ]; then
-            echo "无音频文件，跳过转写"
+            echo "无音频文件"
             exit 0
           fi
           echo "音频文件: $AUDIO_PATH ($(du -h $AUDIO_PATH | cut -f1))"
           
-          python -u << 'EOF'
+          python -u << 'PYEOF'
 import sys, os
 sys.path.insert(0, '.')
 from transcriber import transcribe, log
 
 with open('/tmp/audio_path.txt') as f:
     audio_path = f.read().strip()
-
 if not audio_path or not os.path.exists(audio_path):
     log('无音频文件')
     exit(0)
@@ -104,16 +100,17 @@ if not audio_path or not os.path.exists(audio_path):
 log('开始转写: ' + os.path.basename(audio_path))
 try:
     txt, srt = transcribe(audio_path)
-    log('转写结果:')
+    log('=== 转写结果 ===')
     with open(txt, 'r', encoding='utf-8') as f:
         print(f.read())
-    log('SRT也同时生成: ' + os.path.basename(srt))
+    log('=== 字幕文件 ===')
+    print(os.path.basename(srt))
 except Exception as e:
-    log('转写出错: ' + str(e))
+    log('错误: ' + str(e))
     import traceback; traceback.print_exc()
-EOF
+PYEOF
 
-      - name: 上传转写结果
+      - name: 上传结果
         if: always()
         uses: actions/upload-artifact@v4
         with:
