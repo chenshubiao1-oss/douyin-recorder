@@ -67,9 +67,7 @@ def transcribe(wav_path):
     model = AutoModel(
         model="iic/SenseVoiceSmall",
         disable_update=True,
-        device="cpu",
-        vad_model="iic/speech_fsmn_vad_zh-cn_16k-common-pytorch",
-        vad_kwargs={"max_single_segment_time": 60000},
+        device="cpu"
     )
     
     base = os.path.splitext(os.path.basename(wav_path))[0]
