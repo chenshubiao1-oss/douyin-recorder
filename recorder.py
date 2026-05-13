@@ -11,6 +11,11 @@ FFMPEG = os.environ.get("FFMPEG", "ffmpeg")
 GH_REPO = os.environ.get("GH_REPO", "")
 GH_TOKEN = os.environ.get("GH_TOKEN", "")
 
+# 测试模式: 录制指定房间60秒后立即转写并退出
+TEST_MODE = os.environ.get("TEST_MODE", "")
+TEST_ROOM = os.environ.get("TEST_ROOM", "344763580")
+TEST_DURATION = int(os.environ.get("TEST_DURATION", "60"))
+
 recordings = {}
 _renew_triggered = False
 
@@ -185,6 +190,69 @@ def handle_room_end(rid, recordings, room_names, now):
         if f and os.path.exists(f):
             upload_now(f, room_names.get(rid, rid))
 
+def run_test():
+    """测试模式: 录制指定房间 -> 转写 -> 退出"""
+    from transcriber import transcribe
+    log(f"测试模式: 录制 {TEST_ROOM} {TEST_DURATION}秒后转写")
+    
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True, args=["--no-sandbox","--disable-gpu","--disable-dev-shm-usage"])
+        context = browser.new_context(user_agent="Mozilla/5.0", viewport={"width":1280,"height":720})
+        page = context.new_page()
+        navigate_page(page, TEST_ROOM)
+        time.sleep(5)
+        
+        live = is_live_page(page)
+        log(f"直播间: {'ONAIR' if live else 'OFF'}")
+        
+        if live:
+            page.reload(wait_until="domcontentloaded", timeout=30000)
+            time.sleep(5)
+            for attempt in range(8):
+                quality, url = get_stream_url(page, TEST_ROOM)
+                if url: break
+                log(f"等待推流... ({attempt+1}/8)")
+                time.sleep(3)
+            
+            if url:
+                proc, outfile, audio_proc, audiofile = start_recording(url, quality, TEST_ROOM, "test")
+                log(f"录制 {TEST_DURATION}秒...")
+                time.sleep(TEST_DURATION)
+                
+                stop_proc(proc)
+                stop_proc(audio_proc)
+                
+                vsize = os.path.getsize(outfile) if os.path.exists(outfile) else 0
+                asize = os.path.getsize(audiofile) if os.path.exists(audiofile) else 0
+                log(f"完成: 视频 {vsize/1024/1024:.1f}MB, 音频 {asize/1024/1024:.1f}MB")
+                
+                # 上传文件
+                upload_now(outfile, "test")
+                upload_now(audiofile, "test")
+                
+                # 转写
+                if os.path.exists(audiofile) and asize > 0:
+                    log("=== 开始转写 ===")
+                    try:
+                        txt, srt = transcribe(audiofile)
+                        log("=== 转写结果 ===")
+                        with open(txt, "r", encoding="utf-8") as f:
+                            for line in f:
+                                print(line, end="")
+                        log(f"=== 字幕文件: {os.path.basename(srt)} ===")
+                    except Exception as e:
+                        log(f"转写出错: {e}")
+                        import traceback; traceback.print_exc()
+                else:
+                    log("音频文件不存在或为空，跳过转写")
+            else:
+                log("获取推流地址失败")
+        else:
+            log("当前不在直播")
+        
+        browser.close()
+    log("测试结束")
+
 def run():
     rooms = load_rooms()
     if not rooms:
@@ -269,4 +337,7 @@ def run():
             browser.close()
 
 if __name__ == "__main__":
-    run()
+    if TEST_MODE:
+        run_test()
+    else:
+        run()
