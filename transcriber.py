@@ -58,17 +58,16 @@ def download_release_audio():
         log(f"下载异常: {e}")
     return wavs
 
-def transcribe(wav_path):
+def transcribe(wav_path, model=None):
     """用 SenseVoice 转写音频文件"""
-    from funasr import AutoModel
-    
-    # SenseVoiceSmall 模型自动下载
-    log(f"加载 SenseVoice 模型...")
-    model = AutoModel(
-        model="iic/SenseVoiceSmall",
-        disable_update=True,
-        device="cpu"
-    )
+    if model is None:
+        from funasr import AutoModel
+        log(f"加载 SenseVoice 模型...")
+        model = AutoModel(
+            model="iic/SenseVoiceSmall",
+            disable_update=True,
+            device="cpu",
+        )
     
     base = os.path.splitext(os.path.basename(wav_path))[0]
     log(f"转写: {os.path.basename(wav_path)}")
@@ -84,16 +83,26 @@ def transcribe(wav_path):
     srt_lines = []
     idx = 1
     for seg in result:
-        if not hasattr(seg, "text") or not seg.text:
+        # 兼容 dict 和 object 两种返回格式
+        if isinstance(seg, dict):
+            text = seg.get("text", "") or ""
+            ts = seg.get("timestamp", None)
+        else:
+            if not hasattr(seg, "text") or not seg.text:
+                continue
+            text = seg.text
+            ts = getattr(seg, "timestamp", None)
+        
+        if not text:
             continue
-        ts = getattr(seg, "timestamp", None)
-        if ts and isinstance(ts, list) and len(ts) == 2:
+        
+        if ts and isinstance(ts, (list, tuple)) and len(ts) == 2:
             start_s, end_s = ts[0], ts[1]
-            txt_lines.append(f"[{format_time(start_s)} -> {format_time(end_s)}] {seg.text}")
-            srt_lines.extend(make_srt(idx, start_s, end_s, seg.text))
+            txt_lines.append(f"[{format_time(start_s)} -> {format_time(end_s)}] {text}")
+            srt_lines.extend(make_srt(idx, start_s, end_s, text))
             idx += 1
         else:
-            txt_lines.append(seg.text)
+            txt_lines.append(text)
     
     os.makedirs(TRANSCRIBE_DIR, exist_ok=True)
     txt_path = os.path.join(TRANSCRIBE_DIR, f"{base}.txt")
