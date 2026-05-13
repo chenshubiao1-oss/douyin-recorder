@@ -3,6 +3,8 @@ name: 搜索结果发现
 on:
   schedule:
     - cron: '*/10 * * * *'  # 每10分钟
+  workflow_dispatch:
+    inputs: {}
 
 env:
   PYTHON_VERSION: '3.11'
