@@ -69,13 +69,12 @@ def search_douyin_api(keyword, cookie_dict):
     # 构建cookie字符串
     cookie_str = "; ".join([f"{c['name']}={c['value']}" for c in cookie_dict])
     
-    # 尝试多个搜索API端点
-    apis = [
-        f"https://www.douyin.com/aweme/v1/web/live/search/?keyword={keyword}&type=live&offset=0&count=20",
-        f"https://www.douyin.com/search/{keyword}?type=live",
-    ]
+    # URL编码关键字
+    from urllib.parse import quote
+    encoded_kw = quote(keyword, safe="")
     
-    url = apis[0]
+    # 尝试多个搜索API端点
+    url = f"https://www.douyin.com/aweme/v1/web/live/search/?keyword={encoded_kw}&type=live&offset=0&count=20"
     log(f"请求API: {url}")
     
     req = urllib.request.Request(url, headers={
