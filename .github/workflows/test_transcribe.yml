@@ -4,12 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       room_id:
-        description: '抖音直播间ID'
+        description: 抖音直播间ID
         required: true
         default: '344763580'
 
 jobs:
-  test_transcribe:
+  test:
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -25,13 +25,14 @@ jobs:
           mkdir -p /tmp/recordings /tmp/transcripts
 
       - name: 录制60秒
-        run: python -u -c "
-import os, sys, json, time, subprocess
+        run: |
+          python -u << 'EOF'
+import os, sys, time, subprocess, json
 sys.path.insert(0, '.')
 from recorder import navigate_page, is_live_page, get_stream_url, log, start_recording, stop_proc
 from playwright.sync_api import sync_playwright
 
-room_id = '${{ github.event.inputs.room_id }}'
+room_id = "${{ github.event.inputs.room_id }}"
 os.environ['GH_REPO'] = '${{ github.repository }}'
 os.environ['GH_TOKEN'] = '${{ secrets.GITHUB_TOKEN }}'
 
@@ -43,70 +44,56 @@ with sync_playwright() as p:
     time.sleep(5)
     
     is_live = is_live_page(page)
-    log(f'直播间直播状态: {\"ONAIR\" if is_live else \"OFF\"}')
+    log('直播间直播状态: ' + ('ONAIR' if is_live else 'OFF'))
     
     if is_live:
-        # 获取流地址
         page.reload(wait_until='domcontentloaded', timeout=30000)
         time.sleep(5)
         for attempt in range(8):
             quality, url = get_stream_url(page, room_id)
             if url: break
-            log(f'等待推流地址... ({attempt+1}/8)'); time.sleep(3)
+            log('等待推流地址... (' + str(attempt+1) + '/8)')
+            time.sleep(3)
         
         if url:
             proc, outfile, audio_proc, audiofile = start_recording(url, quality, room_id, 'test')
-            log(f'开始录制60秒...')
+            log('开始录制60秒...')
             time.sleep(60)
             
-            # 停止
             stop_proc(proc)
             stop_proc(audio_proc)
             
             vsize = os.path.getsize(outfile) if os.path.exists(outfile) else 0
             asize = os.path.getsize(audiofile) if os.path.exists(audiofile) else 0
-            log(f'录制完成: 视频 {vsize/1024/1024:.1f}MB, 音频 {asize/1024/1024:.1f}MB')
+            log('录制完成: 视频 ' + str(vsize/1024/1024) + 'MB, 音频 ' + str(asize/1024/1024) + 'MB')
             
-            # 上传视频和音频
-            import subprocess as sp
-            for f in [outfile, audiofile]:
-                if os.path.exists(f):
-                    sp.run(['gh','api','-X','POST',f'/repos/${{ github.repository }}/actions/artifacts',
-                           '-f',f'name=test-recordings','-f',f'path={f}'],
-                          capture_output=True, timeout=60,
-                          env={**os.environ, 'GITHUB_TOKEN': os.environ.get('GH_TOKEN','')})
-                    log(f'上传: {os.path.basename(f)}')
-            
-            # 设置环境变量给下一步
             with open('/tmp/audio_path.txt', 'w') as f:
                 f.write(audiofile)
         else:
             log('获取推流地址失败')
             open('/tmp/audio_path.txt', 'w').write('')
     else:
-        log('当前不在直播，跳过录制')
+        log('当前不在直播')
         open('/tmp/audio_path.txt', 'w').write('')
     
     browser.close()
-"
+
+EOF
 
       - name: 执行转写
         run: |
           AUDIO_PATH=$(cat /tmp/audio_path.txt)
           if [ -z "$AUDIO_PATH" ] || [ ! -f "$AUDIO_PATH" ]; then
-            echo "没有音频文件，跳过转写"
+            echo "无音频文件，跳过转写"
             exit 0
           fi
-          echo "音频文件: $AUDIO_PATH ($(du -h "$AUDIO_PATH" | cut -f1))"
-          python -u -c "
-import sys, os, json
+          echo "音频文件: $AUDIO_PATH ($(du -h $AUDIO_PATH | cut -f1))"
+          
+          python -u << 'EOF'
+import sys, os
 sys.path.insert(0, '.')
 from transcriber import transcribe, log
-os.environ['GH_REPO'] = '${{ github.repository }}'
-os.environ['GH_TOKEN'] = '${{ secrets.GITHUB_TOKEN }}'
 
-audio_path = '${{ steps.*.outputs.audio_path }}'
-# read from file
 with open('/tmp/audio_path.txt') as f:
     audio_path = f.read().strip()
 
@@ -114,16 +101,17 @@ if not audio_path or not os.path.exists(audio_path):
     log('无音频文件')
     exit(0)
 
-log(f'开始转写: {os.path.basename(audio_path)}')
+log('开始转写: ' + os.path.basename(audio_path))
 try:
     txt, srt = transcribe(audio_path)
-    log(f'转写结果:')
+    log('转写结果:')
     with open(txt, 'r', encoding='utf-8') as f:
         print(f.read())
+    log('SRT也同时生成: ' + os.path.basename(srt))
 except Exception as e:
-    log(f'转写出错: {e}')
+    log('转写出错: ' + str(e))
     import traceback; traceback.print_exc()
-"
+EOF
 
       - name: 上传转写结果
         if: always()
