@@ -258,6 +258,7 @@ def run_test():
                 # 转写
                 if os.path.exists(audiofile) and asize > 0:
                     log("=== 开始转写 ===")
+                    import traceback as tb
                     try:
                         txt, srt = transcribe(audiofile)
                         log("=== 转写结果 ===")
@@ -270,7 +271,9 @@ def run_test():
                         upload_now(srt, "test")
                     except Exception as e:
                         log(f"转写出错: {e}")
-                        import traceback; traceback.print_exc()
+                        tb.print_exc()
+                        # 转写出错也标记为失败
+                        sys.exit(1)
                 else:
                     log("音频文件不存在或为空，跳过转写")
             else:
