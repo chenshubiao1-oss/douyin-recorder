@@ -14,6 +14,33 @@ GH_TOKEN = os.environ.get("GH_TOKEN", "")
 recordings = {}
 _renew_triggered = False
 
+def load_rooms_from_github():
+    """从GitHub API拉取最新rooms.txt"""
+    if not GH_REPO or not GH_TOKEN:
+        return load_rooms()
+    try:
+        import urllib.request, base64
+        req = urllib.request.Request(f"https://api.github.com/repos/{GH_REPO}/contents/rooms.txt",
+            headers={"Authorization":f"Bearer {GH_TOKEN}","Accept":"application/vnd.github+json"})
+        resp = json.loads(urllib.request.urlopen(req).read())
+        content = base64.b64decode(resp["content"]).decode("utf-8")
+        rooms = []
+        for line in content.split("\n"):
+            line = line.strip()
+            if not line or line.startswith("#"): continue
+            if "=" in line:
+                parts = line.split("=", 1)
+                rid, name = parts[0].strip(), parts[1].strip()
+            else:
+                rid = line.split("#")[0].strip().split()[0]
+                name = rid
+            if rid.isdigit():
+                rooms.append({"id": rid, "name": name})
+        return rooms
+    except Exception as e:
+        log(f"从GitHub拉取rooms.txt失败: {e}，使用本地文件")
+        return load_rooms()
+
 def log(msg):
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {msg}", flush=True)
 
@@ -187,8 +214,8 @@ def run():
                 if elapsed > MAX_DURATION:
                     log(f"任务超时 ({elapsed/3600:.1f}h)，退出"); break
                 if now - last_refresh > 300:
-                    # 重新读取rooms.txt，支持动态加人
-                    new_rooms = load_rooms()
+                    # 从GitHub拉取最新rooms.txt，支持动态加人
+                    new_rooms = load_rooms_from_github()
                     for nr in new_rooms:
                         if nr["id"] not in pages:
                             # 新房间: 打开新页面
