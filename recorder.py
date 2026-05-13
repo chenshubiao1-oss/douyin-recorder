@@ -151,7 +151,14 @@ def get_anchor_name(page):
 def navigate_page(page, room_id):
     url = f"https://live.douyin.com/{room_id}"
     log(f"打开: {url}")
-    page.goto(url, wait_until="domcontentloaded", timeout=30000)
+    try:
+        page.goto(url, wait_until="domcontentloaded", timeout=60000)
+    except Exception as e:
+        log(f"页面加载超时({room_id}): {e}")
+        try:
+            page.goto(url, wait_until="domcontentloaded", timeout=30000)
+        except:
+            pass
     time.sleep(5)
 
 def start_recording(url, quality, room_id, anchor_name=""):
