@@ -3,8 +3,7 @@ name: 24h连续监控
 on:
   workflow_dispatch:
   schedule:
-    # 每天一次兜底，防止链断了
-    - cron: '0 1 * * *'  # 每天 UTC 01:00
+    - cron: '0 1 * * *'
 
 env:
   PYTHON_VERSION: '3.11'
@@ -21,26 +20,16 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
-
-      - name: 缓存 Playwright
-        uses: actions/cache@v4
-        id: playwright-cache
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('**/requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-playwright-
 
       - name: 安装依赖
         run: |
           sudo apt-get install -y -qq ffmpeg
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install playwright
           python -m playwright install chromium --with-deps
           mkdir -p /tmp/recordings
 
-      - name: 启动监控录制 (自续命链)
+      - name: 启动监控录制
         run: python recorder.py
         env:
           CHECK_INTERVAL: 15
