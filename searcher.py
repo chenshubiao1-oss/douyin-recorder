@@ -75,11 +75,14 @@ def search_keyword(context, keyword, min_watchers):
         page.goto(url, wait_until="domcontentloaded", timeout=60000)
         time.sleep(5)
         
-        # 提取房间链接
-        hrefs = page.evaluate("""() => {
-            const links = document.querySelectorAll('a[href*="live.douyin.com/"]');
-            return Array.from(new Set(Array.from(links).map(a => a.href)));
-        }""", timeout=15000)
+        # 提取房间链接（不传timeout参数，老版本playwright不支持）
+        try:
+            hrefs = page.evaluate("""() => {
+                const links = document.querySelectorAll('a[href*="live.douyin.com/"]');
+                return Array.from(new Set(Array.from(links).map(a => a.href)));
+            }""")
+        except:
+            hrefs = []
         
         results = []
         for href in hrefs:
@@ -89,17 +92,20 @@ def search_keyword(context, keyword, min_watchers):
             rid = match.group(1)
             
             # 从搜索卡片取主播名
-            anchor = page.evaluate(f"""() => {{
-                const cards = document.querySelectorAll('a[href*="{rid}"]');
-                for (const c of cards) {{
-                    const text = c.textContent || '';
-                    const match = text.match(/@([^\s]+)/);
-                    if (match) return match[1];
-                    const title = c.querySelector('[class*="title"]');
-                    if (title) return title.textContent.trim();
-                }}
-                return '';
-            }}""", timeout=10000)
+            try:
+                anchor = page.evaluate(f"""() => {{
+                    const cards = document.querySelectorAll('a[href*="{rid}"]');
+                    for (const c of cards) {{
+                        const text = c.textContent || '';
+                        const match = text.match(/@([^\s]+)/);
+                        if (match) return match[1];
+                        const title = c.querySelector('[class*="title"]');
+                        if (title) return title.textContent.trim();
+                    }}
+                    return '';
+                }}""")
+            except:
+                anchor = ""
             
             results.append((rid, anchor or rid))
         
