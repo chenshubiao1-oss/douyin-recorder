@@ -10,7 +10,7 @@ on:
       test_room:
         description: '测试房间ID'
         required: false
-        default: '344763580'
+        default: '198953345595'
 
   schedule:
     - cron: '0 1 * * *'
