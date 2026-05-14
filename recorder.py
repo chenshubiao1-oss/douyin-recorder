@@ -487,7 +487,13 @@ def run():
                                 proc, outfile, audio_proc, audiofile = start_recording(url, quality, rid, aname)
                                 recordings[rid] = {"proc":proc,"outfile":outfile,"audio_proc":audio_proc,"audiofile":audiofile,"start":now}
                             else: log(f"[{rid}] 获取推流地址失败")
-                        if rid in recordings and not live:
+                        # 对录制中的房间，用ffmpeg进程检查替代页面检测
+                        if rid in recordings:
+                            proc = recordings[rid].get("proc")
+                            if proc and proc.poll() is not None:
+                                log(f"[{room_names.get(rid,rid)}] ffmpeg进程已退出，触发下播处理")
+                                handle_room_end(rid, recordings, anchor_names, now, model_obj)
+                        elif rid in recordings and not live:
                             handle_room_end(rid, recordings, anchor_names, now, model_obj)
                     for rid in list(recordings.keys()):
                         if time.time()-recordings[rid]["start"] > MAX_DURATION:
