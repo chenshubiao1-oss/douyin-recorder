@@ -120,17 +120,15 @@ def get_stream_url(page, room_id):
     return (None, None)
 
 def is_live_page(page):
-    """Check if stream URL exists in page (quick page-only check)"""
     try:
-        return page.evaluate("""() => {
-            const s = document.querySelectorAll('script:not([src])');
-            for (const x of s) {
-                if ((x.textContent || '').includes('flv_pull_url')) return true;
-            }
-            return false;
-        }""")
-    except:
-        return False
+        if not page.evaluate("""() => {const s=document.querySelectorAll('script:not([src])');for(const x of s){if((x.textContent||'').includes('flv_pull_url'))return true}return false}"""):
+            return False
+        text = page.evaluate("document.body?.innerText?.slice(0,300)||''")
+        for w in ['直播已结束','主播暂时离开','下播了','主播不在','当前没有直播','主播正在赶来的路上']:
+            if w in text: return False
+        return page.evaluate("!!document.querySelector('video')")
+    except: return False
+
 def get_anchor_name(page):
     """从抖音直播页面获取主播真实昵称"""
     try:
@@ -273,105 +271,33 @@ def upload_now(filepath, room_name):
         log(f"上传异常: {e}")
 
 def handle_room_end(rid, recordings, room_names, now, model_obj=None):
-    """Stop recording, upload files, split WAV into 10min chunks for transcription, merge."""
-    rec = recordings.pop(rid, None)
-    if not rec: return
-    # Upload original files FIRST (before stopping processes, to survive cancel)
+    rec = recordings.pop(rid)
+    stop_proc(rec.get("proc"))
+    stop_proc(rec.get("audio_proc"))
     for key in ["outfile", "audiofile"]:
         f = rec.get(key)
         if f and os.path.exists(f):
-            try:
-                upload_now(f, room_names.get(rid, rid))
-            except Exception as e:
-                log(f"[{rid}] upload error: {e}")
-    # Then stop processes (with timeout)
-    try:
-        p = rec.get("proc")
-        if p: p.terminate(); p.wait(timeout=5)
-    except: pass
-    try:
-        ap = rec.get("audio_proc")
-        if ap: ap.terminate(); ap.wait(timeout=5)
-    except: pass
-    
-    # Split WAV into 10min chunks and transcribe
+            upload_now(f, room_names.get(rid, rid))
+    # 实时转录
     wav_file = rec.get("audiofile")
     if wav_file and os.path.exists(wav_file):
         try:
-            import shutil
-            base_name = os.path.splitext(os.path.basename(wav_file))[0]
-            chunk_dir = os.path.join(OUTPUT_DIR, base_name + "_chunks")
-            os.makedirs(chunk_dir, exist_ok=True)
-            
-            # Get WAV duration
-            dur_result = subprocess.run([FFMPEG.replace("ffmpeg","ffprobe"), "-v", "quiet",
-                "-show_entries", "format=duration", "-of", "csv=p=0", wav_file],
-                capture_output=True, text=True, timeout=15)
-            total_dur = float(dur_result.stdout.strip()) if dur_result.stdout.strip() else 0
-            
-            CHUNK_SEC = 600
-            chunk_files = []
-            if total_dur > 0:
-                for start in range(0, int(total_dur), CHUNK_SEC):
-                    chunk_name = "%s_part%02d.wav" % (base_name, start // CHUNK_SEC)
-                    chunk_path = os.path.join(chunk_dir, chunk_name)
-                    subprocess.run([FFMPEG, "-y", "-loglevel", "warning", "-i", wav_file,
-                        "-ss", str(start), "-t", str(CHUNK_SEC),
-                        "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1", chunk_path],
-                        capture_output=True, timeout=120)
-                    if os.path.exists(chunk_path):
-                        chunk_files.append(chunk_path)
-                        log(f"[{room_names.get(rid,rid)}] chunk: {chunk_name}")
-            else:
-                chunk_files = [wav_file]
-            
-            # Transcribe each chunk
-            all_txt = []
-            all_srt_lines = []
-            for cf in chunk_files:
-                try:
-                    from transcriber import transcribe
-                    txt_path, srt_path = transcribe(cf, model=model_obj)
-                    if txt_path and os.path.exists(txt_path):
-                        with open(txt_path, 'r', encoding='utf-8') as f:
-                            ct = f.read()
-                        if ct.strip():
-                            all_txt.append("== %s part %02d ==" % (base_name, chunk_files.index(cf)))
-                            all_txt.append(ct)
-                    if srt_path and os.path.exists(srt_path):
-                        with open(srt_path, 'r', encoding='utf-8') as f:
-                            all_srt_lines.append(f.read())
-                except Exception as e:
-                    log(f"[{rid}] chunk transcribe error: {e}")
-            
-            # Merge + upload
-            if all_txt:
-                merged_txt = os.path.join(OUTPUT_DIR, base_name + ".txt")
-                with open(merged_txt, 'w', encoding='utf-8') as f:
-                    f.write("\n".join(all_txt))
-                upload_now(merged_txt, room_names.get(rid, rid))
-                log(f"[{room_names.get(rid,rid)}] merged txt uploaded")
-            if all_srt_lines:
-                merged_srt = os.path.join(OUTPUT_DIR, base_name + ".srt")
-                with open(merged_srt, 'w', encoding='utf-8') as f:
-                    f.write("\n".join(all_srt_lines))
-                upload_now(merged_srt, room_names.get(rid, rid))
-                log(f"[{room_names.get(rid,rid)}] merged srt uploaded")
-            
-            try: shutil.rmtree(chunk_dir)
-            except: pass
+            from transcriber import transcribe
+            txt_path, srt_path = transcribe(wav_file, model=model_obj)
+            if txt_path and os.path.exists(txt_path):
+                upload_now(txt_path, room_names.get(rid, rid))
+            if srt_path and os.path.exists(srt_path):
+                upload_now(srt_path, room_names.get(rid, rid))
+            log(f"转录完成 [{room_names.get(rid,rid)}]")
         except Exception as e:
-            log(f"[{rid}] split-transcribe error: {e}")
-            try:
-                from transcriber import transcribe
-                txt_path, srt_path = transcribe(wav_file, model=model_obj)
-                if txt_path and os.path.exists(txt_path): upload_now(txt_path, room_names.get(rid, rid))
-                if srt_path and os.path.exists(srt_path): upload_now(srt_path, room_names.get(rid, rid))
-            except Exception as e2:
-                log(f"[{rid}] fallback transcribe error: {e2}")
-    
-    # Keep page open for re-detection (do NOT close it)
-    log(f"[{room_names.get(rid,rid)}] recording ended, page kept open for re-detection")
+            log(f"转录失败 [{rid}]: {e}")
+    # 关闭页面
+    if rid in pages:
+        try: pages[rid].close()
+        except: pass
+        del pages[rid]
+        log(f"[{room_names.get(rid,rid)}] 页面已关闭")
+
 def run_test():
     from transcriber import transcribe
     log(f"测试模式: 录制 {TEST_ROOM} {TEST_DURATION}秒后转写")
@@ -456,10 +382,10 @@ def run():
             start_time = last_refresh = time.time()
             while True:
                 try:
-                        loop_start = time.time()
-                        now = time.time()
-                        elapsed = now - start_time
-                        if elapsed > MAX_DURATION:
+                    loop_start = time.time()
+                    now = time.time()
+                    elapsed = now - start_time
+                    if elapsed > MAX_DURATION:
                         log(f"任务超时 ({elapsed/3600:.1f}h)，退出"); break
                     if now - last_refresh > 30:
                         new_rooms = load_rooms_from_github()
@@ -475,121 +401,103 @@ def run():
                                 log(f"  主播昵称: {aname}")
                                 try:
                                     new_live = is_live_page(new_page)
-                except Exception as _e:
-                    import traceback as _tb
-                    log(f"main loop crash: {_e}")
-                    log(_tb.format_exc())
-                    time.sleep(10)
+                                except:
+                                    new_live = False
+                                log(f"[{room_names.get(nr['id'],nr['id'])}] is_live={'ONAIR' if new_live else 'OFF'}")
+                                prev_live[nr['id']] = new_live
+                                if new_live:
+                                    log(f"[{room_names.get(nr['id'],nr['id'])}] 检测到开播!")
+                                    try: new_page.reload(wait_until="domcontentloaded",timeout=30000)
+                                    except: pass
+                                    time.sleep(3)
+                                    for attempt in range(8):
+                                        new_quality, new_url = get_stream_url(new_page, nr['id'])
+                                        if new_url: break
+                                        log(f"[{nr['id']}] 等待推流地址... ({attempt+1}/8)"); time.sleep(3)
+                                    if new_url:
+                                        new_name = anchor_names.get(nr['id'], room_names.get(nr['id'], nr['id']))
+                                        new_proc, new_outfile, new_audio_proc, new_audiofile = start_recording(new_url, new_quality, nr['id'], new_name)
+                                        recordings[nr['id']] = {"proc":new_proc,"outfile":new_outfile,"audio_proc":new_audio_proc,"audiofile":new_audiofile,"start":time.time()}
+                                    else: log(f"[{nr['id']}] 获取推流地址失败")
+                        new_ids = {r["id"] for r in new_rooms}
+                        for rid in list(pages.keys()):
+                            if rid not in new_ids:
+                                log(f"房间已移除: {room_names.get(rid,rid)}")
+                                if rid in recordings: handle_room_end(rid, recordings, anchor_names, now, model_obj)
+                                try: pages[rid].close()
+                                except: pass
+                                del pages[rid]
+                                room_names.pop(rid, None)
+                                anchor_names.pop(rid, None)
+                                prev_live.pop(rid, None)
+                        last_refresh = now
+                    # 重新打开已关闭的页面（下播后关闭的）
+                    for rid in list(prev_live.keys()):
+                        if rid not in pages:
+                            log(f"[{room_names.get(rid,rid)}] 重新打开页面检查...")
+                            try:
+                                new_p = context.new_page()
+                                navigate_page(new_p, rid)
+                                pages[rid] = new_p
                             except:
-                                new_live = False
-                            log(f"[{room_names.get(nr['id'],nr['id'])}] is_live={'ONAIR' if new_live else 'OFF'}")
-                            prev_live[nr['id']] = new_live
-                            if new_live:
-                                log(f"[{room_names.get(nr['id'],nr['id'])}] 检测到开播!")
-                                try: new_page.reload(wait_until="domcontentloaded",timeout=30000)
-                                except: pass
-                                time.sleep(3)
-                                for attempt in range(8):
-                                    new_quality, new_url = get_stream_url(new_page, nr['id'])
-                                    if new_url: break
-                                    log(f"[{nr['id']}] 等待推流地址... ({attempt+1}/8)"); time.sleep(3)
-                                if new_url:
-                                    new_name = anchor_names.get(nr['id'], room_names.get(nr['id'], nr['id']))
-                                    new_proc, new_outfile, new_audio_proc, new_audiofile = start_recording(new_url, new_quality, nr['id'], new_name)
-                                    recordings[nr['id']] = {"proc":new_proc,"outfile":new_outfile,"audio_proc":new_audio_proc,"audiofile":new_audiofile,"start":time.time()}
-                                else: log(f"[{nr['id']}] 获取推流地址失败")
-                    new_ids = {r["id"] for r in new_rooms}
-                    for rid in list(pages.keys()):
-                        if rid not in new_ids:
-                            log(f"房间已移除: {room_names.get(rid,rid)}")
-                            if rid in recordings: handle_room_end(rid, recordings, anchor_names, now, model_obj)
-                            try: pages[rid].close()
-                            except: pass
-                            del pages[rid]
-                            room_names.pop(rid, None)
-                            anchor_names.pop(rid, None)
-                            prev_live.pop(rid, None)
-                    last_refresh = now
-                # 重新打开已关闭的页面（下播后关闭的）
-                for rid in list(prev_live.keys()):
-                    if rid not in pages:
-                        log(f"[{room_names.get(rid,rid)}] 重新打开页面检查...")
-                        try:
-                            new_p = context.new_page()
-                            navigate_page(new_p, rid)
-                            pages[rid] = new_p
-                        except:
-                            log(f"[{room_names.get(rid,rid)}] 页面打开失败")
-                for rid, page in list(pages.items()):
-                    # If already recording: check ffmpeg process
-                    if rid in recordings:
-                        proc = recordings[rid].get("proc")
-                        if proc and proc.poll() is not None:
-                            log(f"[{anchor_names.get(rid,rid)}] ffmpeg process exited, stream ended")
+                                log(f"[{room_names.get(rid,rid)}] 页面打开失败")
+                    for rid, page in list(pages.items()):
+                        try: live = is_live_page(page)
+                        except: live = False
+                        prev = prev_live.get(rid)
+                        if prev is None or prev != live:
+                            log(f"[{room_names.get(rid,rid)}] is_live={'ONAIR' if live else 'OFF'}")
+                            prev_live[rid] = live
+                        if live and rid not in recordings:
+                            log(f"[{room_names.get(rid,rid)}] 检测到开播!")
+                            _safe_reload(page)
+                            time.sleep(5)
+                            for attempt in range(8):
+                                quality, url = get_stream_url(page, rid)
+                                if url: break
+                                log(f"[{rid}] 等待推流地址... ({attempt+1}/8)"); time.sleep(3)
+                            if url:
+                                aname = anchor_names.get(rid, room_names.get(rid, rid))
+                                proc, outfile, audio_proc, audiofile = start_recording(url, quality, rid, aname)
+                                recordings[rid] = {"proc":proc,"outfile":outfile,"audio_proc":audio_proc,"audiofile":audiofile,"start":now}
+                            else: log(f"[{rid}] 获取推流地址失败")
+                        if rid in recordings and not live:
                             handle_room_end(rid, recordings, anchor_names, now, model_obj)
-                            continue
-                        continue
-                    # Not recording: check page for stream
-                    try: live = is_live_page(page)
-                    except: live = False
-                    prev = prev_live.get(rid)
-                    if prev is None or prev != live:
-                        log(f"[{room_names.get(rid,rid)}] is_live={'ONAIR' if live else 'OFF'}")
-                        prev_live[rid] = live
-                    if live and rid not in recordings:
-                        log(f"[{room_names.get(rid,rid)}] detected ONAIR!")
-                        _safe_reload(page)
-                        time.sleep(5)
-                        for attempt in range(8):
-                            quality, url = get_stream_url(page, rid)
-                            if url: break
-                            log(f"[{rid}] waiting stream url ({attempt+1}/8)"); time.sleep(3)
-                        if url:
-                            aname = anchor_names.get(rid, room_names.get(rid, rid))
-                            if re.match(r'^\d+$', aname):
-                                try:
-                                    nn = get_anchor_name(page)
-                                    if nn: aname = nn
-                                except: pass
-
-                            recordings[rid] = {"proc":proc,"outfile":outfile,"audio_proc":audio_proc,"audiofile":audiofile,"start":now}
-                        else: log(f"[{rid}] failed to get stream url")
-                for rid in list(recordings.keys()):
-                    if time.time()-recordings[rid].get("start", 0) > MAX_DURATION:
-                        handle_room_end(rid, recordings, anchor_names, time.time(), model_obj)
-                if elapsed > 270*60 and not _renew_triggered:
-                    try:
-                        import urllib.request, json
-                        wf_id = os.environ.get("GH_RUN_ID", "")
-                        repo = os.environ.get("GH_REPO", "")
-                        token = os.environ.get("GH_TOKEN", "")
-                        if repo and token:
-                            req = urllib.request.Request(
-                                f"https://api.github.com/repos/{repo}/actions/workflows/275535928/dispatches",
-                                data=json.dumps({"ref":"main"}).encode(),
-                                headers={"Authorization":f"Bearer {token}","Content-Type":"application/json"},
-                                method="POST"
-                            )
-                            urllib.request.urlopen(req, timeout=30)
-                            log(f"续命成功: 触发新任务 (运行{elapsed/60:.0f}分)")
-                    except Exception as e:
-                        log(f"续命失败: {e}")
+                    for rid in list(recordings.keys()):
+                        if time.time()-recordings[rid]["start"] > MAX_DURATION:
+                            handle_room_end(rid, recordings, anchor_names, time.time(), model_obj)
+                    # 续命：运行270分钟（4.5小时）后触发下一轮
+                    if elapsed > 270*60 and not _renew_triggered:
+                        try:
+                            import urllib.request, json
+                            wf_id = os.environ.get("GH_RUN_ID", "")
+                            repo = os.environ.get("GH_REPO", "")
+                            token = os.environ.get("GH_TOKEN", "")
+                            if repo and token:
+                                req = urllib.request.Request(
+                                    f"https://api.github.com/repos/{repo}/actions/workflows/275535928/dispatches",
+                                    data=json.dumps({"ref":"main"}).encode(),
+                                    headers={"Authorization":f"Bearer {token}","Content-Type":"application/json"},
+                                    method="POST"
+                                )
+                                urllib.request.urlopen(req, timeout=30)
+                                log(f"续命成功: 触发新任务 (运行{elapsed/60:.0f}分)")
+                        except Exception as e:
+                            log(f"续命失败: {e}")
                         _renew_triggered = True
                     time.sleep(CHECK_INTERVAL)
+                    if time.time() - loop_start > WATCHDOG_TIMEOUT:
+                        log("看门狗触发：本轮执行超时，跳过进入下一轮")
                 except Exception as _e:
                     import traceback as _tb
-                    log(f'main loop except: {_e}')
+                    log(f'main loop crash: {_e}')
                     log(_tb.format_exc())
                     time.sleep(10)
-                if time.time() - loop_start > WATCHDOG_TIMEOUT:
-                    log("看门狗触发：本轮执行超时，跳过进入下一轮")
         except KeyboardInterrupt: log("用户中断")
         except: pass  # 其他异常
         finally:
             # 1. 正常结束当前录制任务
-            for rid in list(recordings.keys()):
-                # Stop + transcribe remaining recording
-                handle_room_end(rid, recordings, anchor_names, time.time(), model_obj)
+            for rid in list(recordings.keys()): handle_room_end(rid, recordings, anchor_names, time.time(), model_obj)
             # 2. 清理未结束的页面
             for p in pages.values():
                 try: p.close()
