@@ -1122,19 +1122,19 @@ function addRoom() {
     .then(function(data){
       var currentContent = '';
       try {
-        currentContent = _utf8_decode(atob(data.content.replace(/\\n/g,'')));
+        currentContent = _utf8_decode(atob(data.content.replace(/\n/g,'')));
       } catch(e) {
         currentContent = atob(data.content);
       }
-      var lines = currentContent.split('\\n');
+      var lines = currentContent.split('\n');
       for (var i = 0; i < lines.length; i++) {
         if (lines[i].trim() && !lines[i].startsWith('#') && lines[i].split('=')[0].trim() === rid) {
           status.textContent = '该房间已存在'; return;
         }
       }
       var line = rname && rname.trim() ? rid + '=' + rname.trim() : rid + '=' + rid;
-      if (currentContent.trim() && !currentContent.endsWith('\\n')) currentContent += '\\n';
-      currentContent += line + '\\n';
+      if (currentContent.trim() && !currentContent.endsWith('\n')) currentContent += '\n';
+      currentContent += line + '\n';
       var newContent = '';
       try {
         newContent = typeof _utf8_encode !== 'undefined' ? btoa(_utf8_encode(currentContent)) : btoa(unescape(encodeURIComponent(currentContent)));
