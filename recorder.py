@@ -145,9 +145,11 @@ def get_anchor_name(page):
             const scripts = document.querySelectorAll('script');
             for (const s of scripts) {
                 const t = s.textContent || '';
-                if (!t.includes('nickname')) continue;
-                const m = t.match(/"nickname"\s*:\s*"([^"]+)"/);
-                if (m && m[1].length < 30) return m[1];
+                const idx = t.indexOf('nickname');
+                if (idx < 0) continue;
+                const chunk = t.slice(idx, idx + 300);
+                const m = chunk.match(/"nickname"\s*:\s*"([^"]+)"/);
+                if (m && m[1].length < 40) return m[1];
             }
             return '';
         }"""
@@ -159,9 +161,11 @@ def get_anchor_name(page):
             const scripts = document.querySelectorAll('script');
             for (const s of scripts) {
                 const t = (s.textContent || '').replace(/\\u[0-9a-fA-F]{4}/g, function(m) { return String.fromCharCode(parseInt(m.slice(2), 16)); });
-                if (!t.includes('nickname')) continue;
-                const m = t.match(/"nickname"\s*:\s*"([^"]+)"/);
-                if (m && m[1].length < 30) return m[1];
+                const idx = t.indexOf('nickname');
+                if (idx < 0) continue;
+                const chunk = t.slice(idx, idx + 300);
+                const m = chunk.match(/"nickname"\s*:\s*"([^"]+)"/);
+                if (m && m[1].length < 40) return m[1];
             }
             return '';
         }"""
