@@ -3,6 +3,10 @@
 import os, sys, json, threading, time, subprocess, re
 from datetime import datetime
 
+WATCHDOG_TIMEOUT = 180  # 主循环看门狗（秒）超过则认为本轮卡死，跳过
+URLLIB_TIMEOUT = 30     # urllib 请求超时（秒）
+PAGE_EVAL_TIMEOUT = 30000  # page.evaluate 超时(ms)
+
 ROOMS_FILE = os.environ.get("ROOMS_FILE", "rooms.txt")
 CHECK_INTERVAL = int(os.environ.get("CHECK_INTERVAL", "15"))
 MAX_DURATION = int(os.environ.get("MAX_DURATION", str(5 * 3600)))
@@ -19,6 +23,26 @@ TEST_DURATION = int(os.environ.get("TEST_DURATION", "60"))
 recordings = {}
 _renew_triggered = False
 
+def _try_eval(page, js, default=None):
+    """安全的 page.evaluate，带 timeout，异常返回 default"""
+    try:
+        return page.evaluate(js, timeout=PAGE_EVAL_TIMEOUT)
+    except Exception:
+        return default
+
+def _safe_reload(page):
+    """线程安全 reload，35秒超时保护"""
+    def _reload():
+        try: page.reload(wait_until="domcontentloaded", timeout=30000)
+        except: pass
+    try:
+        t = threading.Thread(target=_reload)
+        t.daemon = True
+        t.start()
+        t.join(timeout=35)
+    except:
+        pass
+
 def load_rooms_from_github():
     if not GH_REPO or not GH_TOKEN:
         return load_rooms()
@@ -26,7 +50,7 @@ def load_rooms_from_github():
         import urllib.request, base64
         req = urllib.request.Request(f"https://api.github.com/repos/{GH_REPO}/contents/rooms.txt",
             headers={"Authorization":f"Bearer {GH_TOKEN}","Accept":"application/vnd.github+json"})
-        resp = json.loads(urllib.request.urlopen(req).read())
+        resp = json.loads(urllib.request.urlopen(req, timeout=URLLIB_TIMEOUT).read())
         content = base64.b64decode(resp["content"]).decode("utf-8")
         rooms = []
         for line in content.split("\n"):
@@ -91,7 +115,7 @@ def get_stream_url(page, room_id):
     }
     """
     try:
-        raw = page.evaluate(js)
+        raw = _try_eval(page, js, '')  # 用 _try_eval 代替 page.evaluate
         if raw:
             streams = json.loads(raw)
             priority = {"FULL_HD1": 4, "HD1": 3, "SD1": 2, "SD2": 1}
@@ -116,14 +140,11 @@ def is_live_page(page):
 def get_anchor_name(page):
     """从抖音直播间页面提取主播真实昵称"""
     try:
-        # 尝试从 title 提取 (格式: "主播名 正在直播")
         title = page.evaluate("document.title || ''")
         if title:
             name = title.replace(' 正在直播', '').replace(' 的直播间', '').replace(' - 抖音', '').strip()
             if name:
                 return name
-        
-        # 尝试从页面脚本数据提取 user.nickname
         js = """() => {
             const scripts = document.querySelectorAll('script:not([src])');
             for (const s of scripts) {
@@ -137,8 +158,6 @@ def get_anchor_name(page):
         name = page.evaluate(js)
         if name:
             return name
-            
-        # 从页面可见文本找主播名
         text = page.evaluate("document.body?.innerText?.slice(0,200) || ''")
         for line in text.split('\n'):
             line = line.strip()
@@ -164,7 +183,6 @@ def navigate_page(page, room_id):
 def start_recording(url, quality, room_id, anchor_name=""):
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    # 文件名用主播真实名称（去掉非法字符）
     safe_name = re.sub(r'[\\/:*?"<>|]', '_', anchor_name) if anchor_name else room_id
     base = f"{safe_name}_{quality}_{ts}"
     outfile = os.path.join(OUTPUT_DIR, f"{base}.mp4")
@@ -172,10 +190,8 @@ def start_recording(url, quality, room_id, anchor_name=""):
     with open(os.path.join(OUTPUT_DIR, f"{safe_name}_meta.json"), "w", encoding="utf-8") as f:
         json.dump({"room_id":room_id,"anchor_name":anchor_name,"filename":f"{base}.mp4","audio":f"{base}.wav","quality":quality}, f)
     log(f"开始录制: {anchor_name}/{base}.mp4 [{quality}]  + 同步抽音频")
-    # 视频 -c copy
     proc = subprocess.Popen([FFMPEG,"-y","-loglevel","warning","-i",url,"-c","copy","-movflags","+faststart+frag_keyframe+empty_moov","-f","mp4",outfile],
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    # 音频 - 16kHz mono pcm_s16le wav
     audio_proc = subprocess.Popen([FFMPEG,"-y","-loglevel","warning","-i",url,"-vn","-acodec","pcm_s16le","-ar","16000","-ac","1",audiofile],
                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return proc, outfile, audio_proc, audiofile
@@ -191,35 +207,28 @@ def upload_now(filepath, room_name):
     if not filepath or not os.path.exists(filepath): return
     fname = os.path.basename(filepath)
     fsize = os.path.getsize(filepath)
-    
-    # 用 Release API 上传 (永久存储，全部用 urllib，不依赖 gh cli)
     try:
         import urllib.request
         release_tag = f"rec-{datetime.now().strftime('%Y%m%d')}"
         headers = {"Authorization": f"Bearer {GH_TOKEN}", "Content-Type": "application/json"}
-        
-        # 1. 查找或创建 Release
         d = json.dumps({"tag_name": release_tag, "name": f"录制 {datetime.now().strftime('%Y-%m-%d')}",
                         "body": "自动上传", "target_commitish": "main"}).encode()
         req = urllib.request.Request(f"https://api.github.com/repos/{GH_REPO}/releases",
             data=d, headers=headers, method="POST")
         try:
-            resp = urllib.request.urlopen(req)
+            resp = urllib.request.urlopen(req, timeout=URLLIB_TIMEOUT)
             rel_data = json.loads(resp.read())
         except urllib.error.HTTPError as e2:
-            if e2.code == 422:  # already exists, fetch it
+            if e2.code == 422:
                 req2 = urllib.request.Request(f"https://api.github.com/repos/{GH_REPO}/releases/tags/{release_tag}", headers=headers)
-                rel_data = json.loads(urllib.request.urlopen(req2).read())
+                rel_data = json.loads(urllib.request.urlopen(req2, timeout=URLLIB_TIMEOUT).read())
             else:
                 log(f"创建Release失败: {e2.code} {e2.read().decode('utf-8')[:150]}")
                 return
-        
         upload_url_template = rel_data.get('upload_url', '')
         if not upload_url_template:
             log("Release创建成功但无upload_url")
             return
-        
-        # 2. 上传文件到 Release (需要替换 {?name,label})
         upload_url = upload_url_template.replace('{?name,label}', f'?name={fname}')
         with open(filepath, 'rb') as f:
             file_data = f.read()
@@ -233,19 +242,6 @@ def upload_now(filepath, room_name):
         log(f"实时上传成功: {room_name}/{fname} ({fsize/1024/1024:.1f}MB) -> Release")
     except Exception as e:
         log(f"上传异常: {e}")
-
-def trigger_renewal():
-    global _renew_triggered
-    if not GH_REPO or not GH_TOKEN or _renew_triggered: return
-    try:
-        import urllib.request
-        d = json.dumps({"ref":"main"}).encode()
-        req = urllib.request.Request(f"https://api.github.com/repos/{GH_REPO}/actions/workflows/continuous.yml/dispatches",
-            data=d, headers={"Authorization":f"Bearer {GH_TOKEN}","Content-Type":"application/json"}, method="POST")
-        urllib.request.urlopen(req)
-        log("续命: 已触发下一个workflow")
-    except Exception as e: log(f"续命失败: {e}")
-    _renew_triggered = True
 
 def handle_room_end(rid, recordings, room_names, now):
     """停止录制并上传视频+音频"""
@@ -261,7 +257,6 @@ def run_test():
     """测试模式: 录制 -> 转写 -> 退出"""
     from transcriber import transcribe
     log(f"测试模式: 录制 {TEST_ROOM} {TEST_DURATION}秒后转写")
-    
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True, args=["--no-sandbox","--disable-gpu","--disable-dev-shm-usage"])
         context = browser.new_context(user_agent="Mozilla/5.0", viewport={"width":1280,"height":720})
@@ -270,10 +265,8 @@ def run_test():
         time.sleep(5)
         test_anchor_name = get_anchor_name(page) or f"room_{TEST_ROOM}"
         log(f"主播昵称: {test_anchor_name}")
-        
         live = is_live_page(page)
         log(f"直播间: {'ONAIR' if live else 'OFF'}")
-        
         if live:
             try:
                 page.reload(wait_until="domcontentloaded", timeout=20000)
@@ -284,24 +277,17 @@ def run_test():
                 if url: break
                 log(f"等待推流... ({attempt+1}/8)")
                 time.sleep(3)
-            
             if url:
                 proc, outfile, audio_proc, audiofile = start_recording(url, quality, TEST_ROOM, test_anchor_name)
                 log(f"录制 {TEST_DURATION}秒...")
                 time.sleep(TEST_DURATION)
-                
                 stop_proc(proc)
                 stop_proc(audio_proc)
-                
                 vsize = os.path.getsize(outfile) if os.path.exists(outfile) else 0
                 asize = os.path.getsize(audiofile) if os.path.exists(audiofile) else 0
                 log(f"完成: 视频 {vsize/1024/1024:.1f}MB, 音频 {asize/1024/1024:.1f}MB")
-                
-                # 上传文件
                 upload_now(outfile, test_anchor_name)
                 upload_now(audiofile, test_anchor_name)
-                
-                # 转写
                 if os.path.exists(audiofile) and asize > 0:
                     log("=== 开始转写 ===")
                     import traceback as tb
@@ -312,13 +298,11 @@ def run_test():
                             for line in f:
                                 print(line, end="")
                         log(f"=== 字幕文件: {os.path.basename(srt)} ===")
-                        # 上传转写结果
                         upload_now(txt, test_anchor_name)
                         upload_now(srt, test_anchor_name)
                     except Exception as e:
                         log(f"转写出错: {e}")
                         tb.print_exc()
-                        # 转写出错也标记为失败
                         sys.exit(1)
                 else:
                     log("音频文件不存在或为空，跳过转写")
@@ -326,7 +310,6 @@ def run_test():
                 log("获取推流地址失败")
         else:
             log("当前不在直播")
-        
         browser.close()
     log("测试结束")
 
@@ -338,7 +321,6 @@ def run():
     for r in rooms: log(f"  {r['id']} = {r['name']}")
     log(f"检测间隔: {CHECK_INTERVAL}s | 任务最长: {MAX_DURATION//3600}h")
     if GH_REPO and GH_TOKEN: log("续命+实时上传: 开启")
-
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True, args=["--no-sandbox","--disable-gpu","--disable-dev-shm-usage"])
         context = browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36", viewport={"width":1280,"height":720})
@@ -349,16 +331,15 @@ def run():
                 page = context.new_page()
                 navigate_page(page, r["id"])
                 pages[r["id"]] = page
-                # 取主播真实昵称
                 aname = get_anchor_name(page)
                 if aname:
                     anchor_names[r["id"]] = aname
                     log(f"  主播昵称: {aname}")
             start_time = last_refresh = time.time()
             while True:
+                loop_start = time.time()
                 now = time.time()
                 elapsed = now - start_time
-                if elapsed > 350*60: trigger_renewal()
                 if elapsed > MAX_DURATION:
                     log(f"任务超时 ({elapsed/3600:.1f}h)，退出"); break
                 if now - last_refresh > 300:
@@ -397,8 +378,7 @@ def run():
                         prev_live[rid] = live
                     if live and rid not in recordings:
                         log(f"[{room_names.get(rid,rid)}] 检测到开播!")
-                        try: page.reload(wait_until="domcontentloaded",timeout=30000); time.sleep(5)
-                        except: pass
+                        _safe_reload(page)
                         for attempt in range(8):
                             quality, url = get_stream_url(page, rid)
                             if url: break
@@ -414,6 +394,9 @@ def run():
                     if time.time()-recordings[rid]["start"] > MAX_DURATION:
                         handle_room_end(rid, recordings, anchor_names, time.time())
                 time.sleep(CHECK_INTERVAL)
+                # 看门狗：如果本轮循环超过阈值，忽略剩余代码直接进入下一轮
+                if time.time() - loop_start > WATCHDOG_TIMEOUT:
+                    log("看门狗触发：本轮执行超时，跳过进入下一轮")
         except KeyboardInterrupt: log("用户中断")
         finally:
             for rid in list(recordings.keys()): handle_room_end(rid, recordings, anchor_names, time.time())
@@ -421,31 +404,6 @@ def run():
                 try: p.close()
                 except: pass
             browser.close()
-
-
-# ====== 防卡死机制 ======
-WATCHDOG_TIMEOUT = 180  # 秒，主循环最大执行时间
-PAGE_EVAL_TIMEOUT = 30000  # page.evaluate 超时(ms)
-
-def _try_eval(page, js, default=None):
-    """安全包装 page.evaluate，超时或异常返回默认值"""
-    try:
-        return page.evaluate(js, timeout=PAGE_EVAL_TIMEOUT)
-    except:
-        return default
-
-def _safe_reload(page):
-    """线程安全 reload，35s 超时"""
-    def _reload():
-        try: page.reload(wait_until="domcontentloaded", timeout=30000)
-        except: pass
-    try:
-        t = threading.Thread(target=_reload)
-        t.daemon = True
-        t.start()
-        t.join(timeout=35)
-    except:
-        pass
 
 if __name__ == "__main__":
     if TEST_MODE:
