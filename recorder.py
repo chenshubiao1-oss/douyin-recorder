@@ -22,6 +22,7 @@ TEST_DURATION = int(os.environ.get("TEST_DURATION", "60"))
 
 recordings = {}
 _renew_triggered = False
+_refresh_counter = 0  # 滚动刷新计数器
 
 def _try_eval(page, js, default=None):
     """安全的 page.evaluate，带 timeout，异常返回 default"""
@@ -384,8 +385,17 @@ def run():
                             anchor_names.pop(rid, None)
                             prev_live.pop(rid, None)
                     log(f"周期性刷新页面... ({len(pages)}个房间)")
-                    for rid, page in pages.items():
-                        _safe_reload(page)
+                    # 滚动刷新：每轮只刷新2个房间，分摊到多轮中避免全部卡死
+                    global _refresh_counter
+                    room_ids = list(pages.keys())
+                    batch = room_ids[_refresh_counter:_refresh_counter+2]
+                    if not batch:
+                        _refresh_counter = 0
+                        batch = room_ids[:2]
+                    for rid in batch:
+                        if rid in pages:
+                            _safe_reload(pages[rid])
+                    _refresh_counter = (_refresh_counter + 2) % max(len(room_ids), 1)
                     last_refresh = now
                 for rid, page in pages.items():
                     try: live = is_live_page(page)
