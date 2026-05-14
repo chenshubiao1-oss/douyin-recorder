@@ -302,12 +302,8 @@ def handle_room_end(rid, recordings, room_names, now, model_obj=None):
             log(f"转录完成 [{room_names.get(rid,rid)}]")
         except Exception as e:
             log(f"转录失败 [{rid}]: {e}")
-    # 关闭页面
-    if rid in pages:
-        try: pages[rid].close()
-        except: pass
-        del pages[rid]
-        log(f"[{room_names.get(rid,rid)}] 页面已关闭")
+    # Keep page open for re-detection (do NOT close)
+    log(f"[{room_names.get(rid,rid)}] recording ended, page kept open for re-detection")
 
 def run_test():
     from transcriber import transcribe
@@ -469,6 +465,11 @@ def run():
                                 log(f"[{rid}] 等待推流地址... ({attempt+1}/8)"); time.sleep(3)
                             if url:
                                 aname = anchor_names.get(rid, room_names.get(rid, rid))
+                                if re.match(r'^\d+$', aname):
+                                    try:
+                                        nn = get_anchor_name(page)
+                                        if nn: aname = nn
+                                    except: pass
                                 proc, outfile, audio_proc, audiofile = start_recording(url, quality, rid, aname)
                                 recordings[rid] = {"proc":proc,"outfile":outfile,"audio_proc":audio_proc,"audiofile":audiofile,"start":now}
                             else: log(f"[{rid}] 获取推流地址失败")
