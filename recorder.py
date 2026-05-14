@@ -117,21 +117,47 @@ def _try_eval(page, js, default=None):
         return default
 
 def is_live_page(page):
-    """判断直播间是否在直播。等待页面稳定后检测"直播已结束"关键词"""
+    """判断直播间是否在直播。组合判断：标题 + flv_pull_url + 结束关键词"""
     try:
-        # 等页面稳定后再检测，给"直播已结束"等文字足够的渲染时间
-        time.sleep(8)
+        # 先取标题检查是否包含"正在直播"
+        title = _try_eval(page, "document.title", "")
+        title_live = title and ("正在直播" in title or "的直播" in title)
+        
+        # 检查 flv_pull_url（搜所有script）
+        has_flv = _try_eval(page, """() => {
+            const allScripts = document.querySelectorAll('script');
+            for (const s of allScripts) {
+                if ((s.textContent||'').includes('flv_pull_url')) return true;
+            }
+            return document.documentElement.outerHTML.includes('flv_pull_url');
+        }""", False)
+        
+        # 检查结束关键词（等待页面渲染稳定）
+        time.sleep(1)
         text = _try_eval(page, "document.body?.innerText?.slice(0,500)||''", '')
+        offline_keywords = False
         if text:
             for w in ['直播已结束','主播暂时离开','下播了','主播不在','当前没有直播','主播正在赶来的路上']:
                 if w in text:
-                    return False
-        # 没有结束关键词 + 页面正常加载 = 直播中
-        return True
-    except:
+                    offline_keywords = True
+                    break
+        
+        # 结束关键词存在 -> 不在直播
+        if offline_keywords:
+            return False
+        
+        # 有 flv_pull_url -> 绝对在直播
+        if has_flv:
+            return True
+        
+        # 标题明确说在直播 -> 在直播
+        if title_live:
+            return True
+        
+        # 否则不确定，保守判断为不在直播
         return False
-
-def get_anchor_name(page):
+    except:
+        return Falsedef get_anchor_name(page):
     """从抖音直播间页面提取主播真实昵称"""
     try:
         # 尝试从 title 提取 (格式: "主播名 正在直播")
