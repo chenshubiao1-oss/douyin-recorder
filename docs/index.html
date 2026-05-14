@@ -675,41 +675,26 @@ function getIcon(type) {
 
 
 function extractNickname(name) {
-
-  var n = name.replace(/\.\w+$/, '');
-
-  n = n.replace(/_(FULL_HD\d?|HD\d?)/g, '');
-
-  n = n.replace(/_\d{8}_\d{6}$/, '');
-
-  n = n.replace(/的抖音直播间直播$/, '').replace(/的抖音直播间$/, '');
-
+  var n = name.replace(/\.\w+\$/, '').replace(/_(FULL_HD\\d?|HD\\d?)/g, '').replace(/_\\d{8}_\\d{6}\$/, '');
+  n = n.replace(/的抖音直播间直播\$/, '').replace(/的抖音直播间\$/, '');
   n = n.replace(/[（(].*?[）)]/g, '');
-
-  // If only digits remain, look up room name
-
-  if (/^\d+$/.test(n)) {
-
-    for (var i = 0; i < window.roomMap.length; i++) {
-
-      if (window.roomMap[i].id === n) {
-
-        return window.roomMap[i].name;
-
+  if (/^\\d+\$/.test(n)) {
+    if (!window.roomLookup) {
+      window.roomLookup = {};
+      for (var i = 0; i < window.roomMap.length; i++) {
+        window.roomLookup[window.roomMap[i].id] = window.roomMap[i].name;
       }
-
     }
-
+    if (window.roomLookup[n]) return window.roomLookup[n];
     return '房间 ' + n;
-
   }
-
-  n = n.replace(/^-\.?/, '');
-
-  n = n.trim();
-
+  for (var i = 0; i < window.roomMap.length; i++) {
+    if (n.indexOf(window.roomMap[i].id) === 0 || n.replace(/^-\.?/, '').indexOf(window.roomMap[i].id) === 0) {
+      return window.roomMap[i].name;
+    }
+  }
+  n = n.replace(/^-\.?/, '').trim();
   return n || name;
-
 }function toRawUrl(x) { return x; }
 
 
@@ -730,7 +715,8 @@ async function loadData() {
 
     var roomsData = await roomsResp.json();
 
-    var roomsText = atob(roomsData.content.replace(/\n/g, ''));
+    var roomsText = atob(roomsData.content.replace(/
+/g, ""));
 
     window.roomMap = []; rooms = roomsText.split('\n').filter(function(l) { return l.trim() && !l.startsWith('#'); }).map(function(l) {
 
