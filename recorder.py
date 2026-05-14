@@ -290,6 +290,7 @@ def handle_room_end(rid, recordings, room_names, now, model_obj=None):
         ap = rec.get("audio_proc")
         if ap: ap.terminate(); ap.wait(timeout=5)
     except: pass
+    recording_failed.pop(rid, None)
     # 实时转录
     wav_file = rec.get("audiofile")
     if wav_file and os.path.exists(wav_file):
