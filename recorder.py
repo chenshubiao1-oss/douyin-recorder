@@ -384,20 +384,21 @@ def run():
                             room_names.pop(rid, None)
                             anchor_names.pop(rid, None)
                             prev_live.pop(rid, None)
-                    log(f"周期性刷新页面... ({len(pages)}个房间)")
-                    # 滚动刷新：每轮只刷新2个房间，分摊到多轮中避免全部卡死
-                    global _refresh_counter
-                    room_ids = list(pages.keys())
-                    batch = room_ids[_refresh_counter:_refresh_counter+2]
-                    if not batch:
-                        _refresh_counter = 0
-                        batch = room_ids[:2]
-                    for rid in batch:
-                        if rid in pages:
-                            _safe_reload(pages[rid])
-                    _refresh_counter = (_refresh_counter + 2) % max(len(room_ids), 1)
+                    # 不再周期性刷新页面——下播页面已关闭，下次自动重新打开
+                    # 已开播的房间页面保持常开，每15秒evaluate检测状态
+                    # 房间增删仍然检测（rooms.txt变化时处理）
                     last_refresh = now
-                for rid, page in pages.items():
+                # 检查下播后关闭的页面是否需要重新打开（每轮都检查已关闭的房间）
+                for rid in list(prev_live.keys()):
+                    if rid not in pages:
+                        log(f"[{room_names.get(rid,rid)}] 重新打开页面检查...")
+                        try:
+                            new_p = context.new_page()
+                            navigate_page(new_p, rid)
+                            pages[rid] = new_p
+                        except:
+                            log(f"[{room_names.get(rid,rid)}] 页面打开失败")
+                for rid, page in list(pages.items()):
                     try: live = is_live_page(page)
                     except: live = False
                     prev = prev_live.get(rid)
@@ -419,6 +420,12 @@ def run():
                         else: log(f"[{rid}] 获取推流地址失败")
                     if rid in recordings and not live:
                         handle_room_end(rid, recordings, anchor_names, now)
+                        # 下播后关闭页面
+                        if rid in pages:
+                            try: pages[rid].close()
+                            except: pass
+                            del pages[rid]
+                            log(f"[{anchor_names.get(rid,rid)}] 页面已关闭")
                 for rid in list(recordings.keys()):
                     if time.time()-recordings[rid]["start"] > MAX_DURATION:
                         handle_room_end(rid, recordings, anchor_names, time.time())
