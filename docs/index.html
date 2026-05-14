@@ -807,24 +807,7 @@ async function loadData() {
 
     var roomsData = await roomsResp.json();
 
-    function _utf8_decode(s) {
-  return decodeURIComponent(Array.prototype.map.call(s, function(c) {
-    return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-  }).join(''));
-}
-    var roomsText = _utf8_decode(atob(roomsData.content.replace(/\n/g, "")));
-
-    window.roomMap = []; rooms = roomsText.split('\n').filter(function(l) { return l.trim() && !l.startsWith('#'); }).map(function(l) {
-
-      var parts = l.split('=');
-
-      var r = { id: parts[0].trim(), name: parts[1] ? parts[1].trim() : parts[0].trim() };
-
-      window.roomMap.push(r);
-
-      return r;
-
-    });
+        // _utf8_decode is global, called above);
 
 
 
@@ -1141,64 +1124,7 @@ loadData();
 
 
 
-
-function addRoom() {
-  var rid = document.getElementById('newRoomId').value.trim();
-  var rname = document.getElementById('newRoomName').value.trim();
-  var status = document.getElementById('addRoomStatus');
-  if (!rid) { status.textContent = '请输入房间ID'; return; }
-  status.textContent = '提交中...';
-  var getUrl = API + '/repos/' + REPO + '/contents/rooms.txt';
-  var ghHeaders = {'Accept': 'application/vnd.github.v3+json', 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + 'ghp_tMiOuO6Ankr' + 'PemPZiOmm908eIww65j0Xmlp7'};
-  fetch(getUrl, { headers: ghHeaders })
-    .then(function(r){ return r.json(); })
-    .then(function(data){
-      var currentContent = '';
-      try {
-        currentContent = _utf8_decode(atob(data.content.replace(/\n/g,'')));
-      } catch(e) {
-        currentContent = atob(data.content);
-      }
-      var lines = currentContent.split('\n');
-      for (var i = 0; i < lines.length; i++) {
-        if (lines[i].trim() && !lines[i].startsWith('#') && lines[i].split('=')[0].trim() === rid) {
-          status.textContent = '该房间已存在'; return;
-        }
-      }
-      var line = rname && rname.trim() ? rid + '=' + rname.trim() : rid + '=' + rid;
-      if (currentContent.trim() && !currentContent.endsWith('\n')) currentContent += '\n';
-      currentContent += line + '\n';
-      var newContent = '';
-      try {
-        newContent = typeof _utf8_encode !== 'undefined' ? btoa(_utf8_encode(currentContent)) : btoa(unescape(encodeURIComponent(currentContent)));
-      } catch(e) {
-        newContent = btoa(currentContent);
-      }
-      fetch(getUrl, {
-        method: 'PUT',
-        headers: ghHeaders,
-        body: JSON.stringify({
-          message: 'add room ' + rid + ' from frontend',
-          content: newContent,
-          sha: data.sha
-        })
-      }).then(function(r){ return r.json(); }).then(function(d){
-        if (d && d.content) {
-          status.innerHTML = '<span style=\"color:#4caf50\">✓ 已添加</span>';
-          setTimeout(function(){ status.textContent = ''; }, 3000);
-        } else {
-          status.textContent = '失败: ' + (d && d.message || '未知错误');
-        }
-      }).catch(function(e){
-        status.textContent = '错误: ' + e.message;
-      });
-    }).catch(function(e){
-      status.textContent = '获取房间列表失败: ' + e.message;
-    });
-}
-
-
-
+// Removed old addRoom, use addRoomViaMgr instead
 // === Room Manager Functions ===
 window.roomList = [];
 
