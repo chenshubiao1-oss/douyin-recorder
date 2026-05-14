@@ -16,7 +16,6 @@ on:
         required: false
         default: '60'
   schedule:
-    - cron: '45 7 * * *'   # TH_14:45 = UTC 07:45
     - cron: '0 22 * * *'  # 泰国05:00 = UTC 22:00
     - cron: '30 2 * * *'  # 泰国09:30 = UTC 02:30
     - cron: '0 7 * * *'   # 泰国14:00 = UTC 07:00
@@ -113,8 +112,8 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - name: Cache
-        uses: actions/cache@v4
+      - name: Restore cache (record job may still be running)
+        uses: actions/cache/restore@v4
         with:
           path: |
             ~/.cache/pip
@@ -128,6 +127,8 @@ jobs:
             deps-
             dep-
             de
+          fail-on-cache-miss: false
+          lookup-only: false
       - name: Install deps
         run: |
           sudo apt-get update -qq
