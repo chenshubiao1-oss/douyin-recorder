@@ -389,7 +389,7 @@ def run():
                     continue
                 last_watchdog = now
                 
-                if elapsed > 350*60: trigger_renewal()
+                if elapsed > 280*60: trigger_renewal()
                 if elapsed > MAX_DURATION:
                     log(f"任务超时 ({elapsed/3600:.1f}h)，退出"); break
                 if now - last_refresh > 300:
