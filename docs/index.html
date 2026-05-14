@@ -1320,13 +1320,39 @@ function addRoomViaMgr() {
   window.roomList.push({ rid: rid, name: name });
   document.getElementById('newRoomId').value = '';
   document.getElementById('newRoomName').value = '';
-  document.getElementById('saveRoomsBtn').disabled = false;
-  document.getElementById('saveStatus').textContent = '⚠️ 有未保存的更改';
-  document.getElementById('saveStatus').className = 'status';
   renderRoomTable();
-  showToast('✅ 已添加 ' + rid);
+  saveRoomsDirect();
+  showToast('✅ 已添加并保存 ' + rid);
 }
 
+
+function saveRoomsDirect() {
+  // Build rooms.txt content
+  var text = '';
+  window.roomList.forEach(function(r) {
+    if (r.name) {
+      text += r.rid + '=' + r.name + '\n';
+    } else {
+      text += r.rid + '\n';
+    }
+  });
+  
+  // Get current SHA
+  var xhr1 = new XMLHttpRequest();
+  xhr1.open('GET', API + '/repos/' + REPO + '/contents/rooms.txt', false);
+  xhr1.setRequestHeader('Accept', 'application/vnd.github.v3+json');
+  xhr1.send();
+  
+  if (xhr1.status !== 200) return;
+  var data = JSON.parse(xhr1.responseText);
+  var b64 = btoa(text);
+  
+  var xhr2 = new XMLHttpRequest();
+  xhr2.open('PUT', API + '/repos/' + REPO + '/contents/rooms.txt', false);
+  xhr2.setRequestHeader('Content-Type', 'application/json');
+  xhr2.setRequestHeader('Authorization', TOKEN_PART1 + TOKEN_PART2);
+  xhr2.send(JSON.stringify({ message: 'add room from frontend', content: b64, sha: data.sha }));
+}
 function saveRooms() {
   var btn = document.getElementById('saveRoomsBtn');
   var status = document.getElementById('saveStatus');
@@ -1368,23 +1394,13 @@ function saveRooms() {
   xhr2.setRequestHeader('Authorization', TOKEN_PART1 + TOKEN_PART2);
   xhr2.onload = function() {
     if (xhr2.status === 200 || xhr2.status === 201) {
-      status.textContent = '✅ 已保存！触发 workflow 中...';
+      status.textContent = '✅ 已保存';
       status.className = 'status ok';
-      // Trigger workflow dispatch
-      var xhr3 = new XMLHttpRequest();
-      xhr3.open('POST', API + '/repos/' + REPO + '/actions/workflows/continuous.yml/dispatches', true);
-      xhr3.setRequestHeader('Content-Type', 'application/json');
-      xhr3.setRequestHeader('Authorization', TOKEN_PART1 + TOKEN_PART2);
-      xhr3.send(JSON.stringify({ ref: 'main' }));
-      setTimeout(function() {
-        status.textContent = '✅ 已保存，workflow 已触发';
-        status.className = 'status ok';
-        btn.disabled = false;
-        // Refresh room map for browse panel
-        window.roomMap = window.roomList.map(function(r) { return { id: r.rid, name: r.name || r.rid }; });
-        window.roomLookup = {};
-        window.roomMap.forEach(function(r) { window.roomLookup[r.id] = r.name; });
-      }, 1000);
+      btn.disabled = false;
+      // Refresh room map for browse panel
+      window.roomMap = window.roomList.map(function(r) { return { id: r.rid, name: r.name || r.rid }; });
+      window.roomLookup = {};
+      window.roomMap.forEach(function(r) { window.roomLookup[r.id] = r.name; });
     } else {
       status.textContent = '❌ 保存失败: ' + xhr2.status;
       status.className = 'status err';
