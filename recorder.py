@@ -28,7 +28,6 @@ def _try_eval(page, js, default=None):
     """安全包装 page.evaluate，超时或异常返回默认值"""
     try:
         return page.evaluate(js, timeout=PAGE_EVAL_TIMEOUT)
-    except:
         return default
 
 
@@ -170,7 +169,6 @@ def navigate_page(page, room_id):
         log(f"页面加载超时({room_id}): {e}")
         try:
             page.goto(url, wait_until="domcontentloaded", timeout=30000)
-        except:
             pass
     time.sleep(5)
 
@@ -289,7 +287,6 @@ def run_test():
         
         if live:
             _safe_reload(page)
-        except:
                 log("reload超时，继续使用当前页面状态")
             for attempt in range(8):
                 quality, url = get_stream_url(page, TEST_ROOM)
