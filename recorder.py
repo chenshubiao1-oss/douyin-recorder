@@ -260,7 +260,7 @@ def upload_now(filepath, room_name):
     except Exception as e:
         log(f"上传异常: {e}")
 
-def handle_room_end(rid, recordings, room_names, now):
+def handle_room_end(rid, recordings, room_names, now, model_obj=None):
     """Stop recording, upload files, split WAV into 10min chunks for transcription, merge."""
     rec = recordings.pop(rid, None)
     if not rec: return
@@ -475,7 +475,7 @@ def run():
                     for rid in list(pages.keys()):
                         if rid not in new_ids:
                             log(f"房间已移除: {room_names.get(rid,rid)}")
-                            if rid in recordings: handle_room_end(rid, recordings, anchor_names, now)
+                            if rid in recordings: handle_room_end(rid, recordings, anchor_names, now, model_obj)
                             try: pages[rid].close()
                             except: pass
                             del pages[rid]
@@ -499,7 +499,7 @@ def run():
                         proc = recordings[rid].get("proc")
                         if proc and proc.poll() is not None:
                             log(f"[{anchor_names.get(rid,rid)}] ffmpeg process exited, stream ended")
-                            handle_room_end(rid, recordings, anchor_names, now)
+                            handle_room_end(rid, recordings, anchor_names, now, model_obj)
                             continue
                         continue
                     # Not recording: check page for stream
@@ -529,7 +529,7 @@ def run():
                         else: log(f"[{rid}] failed to get stream url")
                 for rid in list(recordings.keys()):
                     if time.time()-recordings[rid].get("start", 0) > MAX_DURATION:
-                        handle_room_end(rid, recordings, anchor_names, time.time())
+                        handle_room_end(rid, recordings, anchor_names, time.time(, model_obj))
                 if elapsed > 270*60 and not _renew_triggered:
                     try:
                         import urllib.request, json
@@ -557,7 +557,7 @@ def run():
             # 1. 正常结束当前录制任务
             for rid in list(recordings.keys()):
                 # Stop + transcribe remaining recording
-                handle_room_end(rid, recordings, anchor_names, time.time())
+                handle_room_end(rid, recordings, anchor_names, time.time(, model_obj))
             # 2. 清理未结束的页面
             for p in pages.values():
                 try: p.close()
