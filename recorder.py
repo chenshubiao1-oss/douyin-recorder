@@ -319,7 +319,7 @@ def handle_room_end(rid, recordings, room_names, now, model_obj=None):
             for cf in chunk_files:
                 try:
                     from transcriber import transcribe
-                    txt_path, srt_path = transcribe(cf)
+                    txt_path, srt_path = transcribe(cf, model=model_obj)
                     if txt_path and os.path.exists(txt_path):
                         with open(txt_path, 'r', encoding='utf-8') as f:
                             ct = f.read()
@@ -352,7 +352,7 @@ def handle_room_end(rid, recordings, room_names, now, model_obj=None):
             log(f"[{rid}] split-transcribe error: {e}")
             try:
                 from transcriber import transcribe
-                txt_path, srt_path = transcribe(wav_file)
+                txt_path, srt_path = transcribe(wav_file, model=model_obj)
                 if txt_path and os.path.exists(txt_path): upload_now(txt_path, room_names.get(rid, rid))
                 if srt_path and os.path.exists(srt_path): upload_now(srt_path, room_names.get(rid, rid))
             except Exception as e2:
