@@ -548,6 +548,35 @@ body {
 
 
 
+</div>
+
+<!-- Tab Bar -->
+<div class="tab-bar" style="max-width:1200px;margin:0 auto;padding:0 24px;">
+  <button class="tab-btn active" onclick="switchTab('browse')" id="tabBrowse">📂 浏览文件</button>
+  <button class="tab-btn" onclick="switchTab('rooms')" id="tabRooms">📋 管理房间</button>
+</div>
+
+<!-- Room Manager Panel -->
+<div id="roomMgr" class="room-mgr" style="max-width:1200px;margin:0 auto;padding:0 24px;">
+  <div class="toolbar">
+    <input type="text" id="newRoomId" placeholder="房间 ID" style="flex:0 0 180px;">
+    <input type="text" id="newRoomName" placeholder="主播昵称（可选）" style="flex:0 0 200px;">
+    <button onclick="addRoomViaMgr()">➕ 添加</button>
+    <button class="secondary" onclick="refreshRoomTable()">🔄 刷新</button>
+    <span id="roomCount" style="color:var(--text-dim);font-size:13px;margin-left:auto;"></span>
+  </div>
+  <div style="overflow-x:auto;">
+    <table class="room-table" id="roomTable">
+      <thead><tr><th style="width:40px">#</th><th style="width:60px">排序</th><th>房间 ID</th><th>主播昵称</th><th style="width:40px">删除</th></tr></thead>
+      <tbody id="roomTableBody"></tbody>
+    </table>
+  </div>
+  <div class="save-bar">
+    <button id="saveRoomsBtn" onclick="saveRooms()">💾 保存到 GitHub</button>
+    <span id="saveStatus" class="status"></span>
+  </div>
+</div>
+
 <div id="browsePanel"><div class="container">
 
   <div class="filters">
