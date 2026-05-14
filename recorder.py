@@ -76,37 +76,30 @@ def load_rooms():
 from playwright.sync_api import sync_playwright
 
 def get_stream_url(page, room_id):
-    js = r"""
-    () => {
-        const scripts = document.querySelectorAll('script');
-        for (const s of scripts) {
-            const t = s.textContent || '';
-            if (!t.includes('flv_pull_url')) continue;
-            let decoded = t.replace(/\\"/g, '"').replace(/\\n/g, '').replace(/\\t/g, '');
-            const regex = /"(FULL_HD1|HD1|SD1|SD2)"\s*:\s*"((?:[^"\\]|\\.)*)"/g;
-            const seen = new Set(); const results = [];
-            let m;
-            while ((m = regex.exec(decoded)) !== null) {
-                let u = m[2].replace(/\\\//g, '/').replace(/\\u0026/g, '&').replace(/\\u003d/g, '=');
-                const base = u.split('?')[0];
-                if (!seen.has(base)) { seen.add(base); results.push({q: m[1], url: u}); }
-            }
-            if (results.length) return JSON.stringify(results);
-        }
-        return '';
-    }
-    """
+    """直接从页面HTML中用 Python re 提取 FLV URL（更可靠）"""
     try:
-        raw = page.evaluate(js, timeout=PAGE_EVAL_TIMEOUT)
-        if raw:
-            streams = json.loads(raw)
+        html = page.content()
+        import re
+        # 找 flv_pull_url 后面的 JSON 数据
+        idx = html.find("flv_pull_url")
+        if idx < 0:
+            return (None, None)
+        # 提取包含 flv_pull_url 数据的区域
+        chunk = html[idx:idx+3000]
+        results = []
+        for q in ["FULL_HD1", "HD1", "SD1", "SD2"]:
+            # 匹配 "FULL_HD1":"http://..." 或 'FULL_HD1':'http://...'
+            m = re.search(r"""['"]""" + q + r"""['"]\s*:\s*['"](http[^'"]+\.flv[^'""]*)['"]""", chunk)
+            if m:
+                url = m.group(1).replace("\\u0026", "&").replace("\\u003d", "=").replace("\\/", "/").replace("\u0026", "&").replace("\u003d", "=").replace("\/", "/")
+                results.append((q, url))
+        if results:
             priority = {"FULL_HD1": 4, "HD1": 3, "SD1": 2, "SD2": 1}
-            flvs = [s for s in streams if 'm3u8' not in s['url']] or streams
-            if flvs:
-                best = max(flvs, key=lambda s: priority.get(s['q'], 0))
-                return (best['q'], best['url'])
+            best = max(results, key=lambda s: priority.get(s[0], 0))
+            log(f"[{room_id}] FLV: {best[0]}")
+            return best
     except Exception as e:
-        log(f"JS eval error: {e}")
+        log(f"get_stream_url error: {e}")
     return (None, None)
 
 def _try_eval(page, js, default=None):
