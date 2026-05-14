@@ -198,8 +198,7 @@ def navigate_page(page, room_id):
 def start_recording(url, quality, room_id, anchor_name=""):
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    safe_name = re.sub(r'[\\/:*?"<>|]', '_', anchor_name) if anchor_name else room_id
-    base = f"{safe_name}_{quality}_{ts}"
+    base = f"{room_id}_{quality}_{ts}"
     outfile = os.path.join(OUTPUT_DIR, f"{base}.mp4")
     audiofile = os.path.join(OUTPUT_DIR, f"{base}.wav")
     with open(os.path.join(OUTPUT_DIR, f"{safe_name}_meta.json"), "w", encoding="utf-8") as f:
@@ -221,6 +220,7 @@ def stop_proc(proc):
 def upload_now(filepath, room_name):
     if not filepath or not os.path.exists(filepath): return
     fname = os.path.basename(filepath)
+    import re
     fsize = os.path.getsize(filepath)
     try:
         import urllib.request, urllib.parse
@@ -245,7 +245,7 @@ def upload_now(filepath, room_name):
         if not upload_url_template:
             log("Release创建成功但无upload_url")
             return
-        safe_fname = urllib.parse.quote(fname.encode('utf-8'))
+        safe_fname = re.sub(r'[^a-zA-Z0-9._-]', '_', fname)
         upload_url = upload_url_template.replace('{?name,label}', f'?name={safe_fname}')
         with open(filepath, 'rb') as f:
             file_data = f.read()
@@ -256,7 +256,19 @@ def upload_now(filepath, room_name):
         }
         upload_req = urllib.request.Request(upload_url, data=file_data, headers=upload_headers, method="POST")
         upload_resp = urllib.request.urlopen(upload_req, timeout=300)
-        log(f"实时上传成功: {room_name}/{fname} ({fsize/1024/1024:.1f}MB) -> Release")
+        try:
+            old_body = rel_data.get('body', '')
+            cn_entry = '\n' + room_name + '/' + fname
+            if cn_entry not in old_body:
+                new_body = old_body + cn_entry if old_body != 'auto upload' else 'auto upload' + cn_entry
+                patch_hdrs = {'Authorization': f'Bearer {GH_TOKEN}', 'Content-Type': 'application/json'}
+                patch_req = urllib.request.Request(upload_url_template.split('{')[0],
+                    data=json.dumps({'body': new_body}).encode(),
+                    headers=patch_hdrs, method='PATCH')
+                urllib.request.urlopen(patch_req, timeout=URLLIB_TIMEOUT)
+        except Exception as _eb:
+            log(f"body update failed: {_eb}")
+        log(f"upload OK: {room_name}/{fname} -> [{safe_fname}] ({fsize/1024/1024:.1f}MB)")
     except Exception as e:
         log(f"上传异常: {e}")
 
