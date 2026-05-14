@@ -835,12 +835,22 @@ async function loadData() {
     var roomsResp = await fetch(API + '/repos/' + REPO + '/contents/rooms.txt');
 
     var roomsData = await roomsResp.json();
+        var roomsText = _utf8_decode(atob(roomsData.content.replace(/\n/g, '')));
 
-        // _utf8_decode is global, called above);
+        window.roomMap = []; rooms = roomsText.split('\n').filter(function(l) { return l.trim() && !l.startsWith('#'); }).map(function(l) {
+
+          var parts = l.split('=');
+
+          var r = { id: parts[0].trim(), name: parts[1] ? parts[1].trim() : parts[0].trim() };
+
+          window.roomMap.push(r);
+
+          return r;
+
+        });
 
 
-
-    var page = 1, all = [];
+        var page = 1, all = []var page = 1, all = [];
 
     while (true) {
 
