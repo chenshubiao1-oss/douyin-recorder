@@ -351,6 +351,27 @@ def run():
                             anchor_names[nr["id"]] = aname if aname else nr["name"]
                             room_names[nr["id"]] = nr["name"]
                             log(f"  主播昵称: {aname}")
+                            # 新房间立即检测是否在直播
+                            try:
+                                new_live = is_live_page(new_page)
+                            except:
+                                new_live = False
+                            log(f"[{room_names.get(nr['id'],nr['id'])}] is_live={'ONAIR' if new_live else 'OFF'}")
+                            prev_live[nr['id']] = new_live
+                            if new_live:
+                                log(f"[{room_names.get(nr['id'],nr['id'])}] 检测到开播!")
+                                try: new_page.reload(wait_until="domcontentloaded",timeout=30000)
+                                except: pass
+                                time.sleep(3)
+                                for attempt in range(8):
+                                    new_quality, new_url = get_stream_url(new_page, nr['id'])
+                                    if new_url: break
+                                    log(f"[{nr['id']}] 等待推流地址... ({attempt+1}/8)"); time.sleep(3)
+                                if new_url:
+                                    new_name = anchor_names.get(nr['id'], room_names.get(nr['id'], nr['id']))
+                                    new_proc, new_outfile, new_audio_proc, new_audiofile = start_recording(new_url, new_quality, nr['id'], new_name)
+                                    recordings[nr['id']] = {"proc":new_proc,"outfile":new_outfile,"audio_proc":new_audio_proc,"audiofile":new_audiofile,"start":time.time()}
+                                else: log(f"[{nr['id']}] 获取推流地址失败")
                     new_ids = {r["id"] for r in new_rooms}
                     for rid in list(pages.keys()):
                         if rid not in new_ids:
