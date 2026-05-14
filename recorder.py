@@ -1,4 +1,29 @@
 #!/usr/bin/env python3
+
+# ====== 防卡死机制 ======
+import threading
+WATCHDOG_TIMEOUT = 180  # 秒，主循环最大执行时间
+PAGE_EVAL_TIMEOUT = 30000  # page.evaluate 超时(ms)
+
+def _try_eval(page, js, default=None):
+    """安全包装 page.evaluate，超时或异常返回默认值"""
+    try:
+        return page.evaluate(js, timeout=PAGE_EVAL_TIMEOUT)
+    except:
+        return default
+
+def _safe_reload(page):
+    """线程安全 reload，35s 超时"""
+    def _reload():
+                    _safe_reload(page)
+    try:
+        t = threading.Thread(target=_reload)
+        t.daemon = True
+        t.start()
+        t.join(timeout=35)
+    except:
+        pass
+
 """抖音直播监控录制器 - 多房间同时录制 + 录制完成即实时上传 + 同步抽音频(用于转写)"""
 import os, sys, json, time, subprocess, re
 from datetime import datetime
@@ -18,18 +43,6 @@ TEST_DURATION = int(os.environ.get("TEST_DURATION", "60"))
 
 recordings = {}
 _renew_triggered = False
-
-# 防卡死机制
-WATCHDOG_TIMEOUT = 180  # 秒，循环最大执行时间，超时跳过当前轮
-PAGE_EVAL_TIMEOUT = 30000  # page.evaluate 超时(ms)
-
-
-def _try_eval(page, js, default=None):
-    """安全包装 page.evaluate，超时或异常返回默认值"""
-    try:
-        return page.evaluate(js, timeout=PAGE_EVAL_TIMEOUT)
-        return default
-
 
 def load_rooms_from_github():
     if not GH_REPO or not GH_TOKEN:
@@ -169,6 +182,7 @@ def navigate_page(page, room_id):
         log(f"页面加载超时({room_id}): {e}")
         try:
             page.goto(url, wait_until="domcontentloaded", timeout=30000)
+        except:
             pass
     time.sleep(5)
 
@@ -286,7 +300,9 @@ def run_test():
         log(f"直播间: {'ONAIR' if live else 'OFF'}")
         
         if live:
-            _safe_reload(page)
+            try:
+                page.reload(wait_until="domcontentloaded", timeout=20000)
+            except:
                 log("reload超时，继续使用当前页面状态")
             for attempt in range(8):
                 quality, url = get_stream_url(page, TEST_ROOM)
@@ -395,8 +411,7 @@ def run():
                             prev_live.pop(rid, None)
                     log(f"周期性刷新页面... ({len(pages)}个房间)")
                     for rid, page in pages.items():
-            _safe_reload(page)
-                        except: pass
+                                    _safe_reload(page)
                     last_refresh = now
                 for rid, page in pages.items():
                     try: live = is_live_page(page)
@@ -407,8 +422,7 @@ def run():
                         prev_live[rid] = live
                     if live and rid not in recordings:
                         log(f"[{room_names.get(rid,rid)}] 检测到开播!")
-            _safe_reload(page)
-                        except: pass
+                                    _safe_reload(page)
                         for attempt in range(8):
                             quality, url = get_stream_url(page, rid)
                             if url: break
