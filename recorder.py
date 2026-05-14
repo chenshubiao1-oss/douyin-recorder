@@ -140,17 +140,37 @@ def get_anchor_name(page):
                 name = title.replace(' 正在直播', '').replace(' 的直播间', '').replace(' - 抖音', '').strip()
                 if name:
                     return name
+        # 先尝试从 title 取（有些页面 title 是主播名+直播中）
+        if not name and '正在直播' in title:
+            m_name = title.replace(' 正在直播', '').strip()
+            if m_name and '抖音' not in m_name:
+                return m_name
+        # 从页面所有 script 搜 nickname（含 src 脚本）
         js = """() => {
-            const scripts = document.querySelectorAll('script:not([src])');
+            const scripts = document.querySelectorAll('script');
             for (const s of scripts) {
                 const t = s.textContent || '';
                 if (!t.includes('nickname')) continue;
                 const m = t.match(/"nickname"\s*:\s*"([^"]+)"/);
-                if (m) return m[1];
+                if (m && m[1].length < 30) return m[1];
             }
             return '';
         }"""
         name = page.evaluate(js)
+        if name:
+            return name
+        # 尝试从页面 JSON 数据块提取
+        js2 = """() => {
+            const scripts = document.querySelectorAll('script');
+            for (const s of scripts) {
+                const t = (s.textContent || '').replace(/\\u[0-9a-fA-F]{4}/g, function(m) { return String.fromCharCode(parseInt(m.slice(2), 16)); });
+                if (!t.includes('nickname')) continue;
+                const m = t.match(/"nickname"\s*:\s*"([^"]+)"/);
+                if (m && m[1].length < 30) return m[1];
+            }
+            return '';
+        }"""
+        name = page.evaluate(js2)
         if name:
             return name
         text = page.evaluate("document.body?.innerText?.slice(0,200) || ''")
