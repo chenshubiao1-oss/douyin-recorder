@@ -455,7 +455,8 @@ def run():
                     log(f"  主播昵称: {aname}")
             start_time = last_refresh = time.time()
             while True:
-                loop_start = time.time()
+                try:
+                    loop_start = time.time()
                 now = time.time()
                 elapsed = now - start_time
                 if elapsed > MAX_DURATION:
@@ -568,8 +569,13 @@ def run():
                             log(f"续命成功: 触发新任务 (运行{elapsed/60:.0f}分)")
                     except Exception as e:
                         log(f"续命失败: {e}")
-                    _renew_triggered = True
-                time.sleep(CHECK_INTERVAL)
+                        _renew_triggered = True
+                    time.sleep(CHECK_INTERVAL)
+                except Exception as _e:
+                    import traceback as _tb
+                    log(f'main loop except: {_e}')
+                    log(_tb.format_exc())
+                    time.sleep(10)
                 if time.time() - loop_start > WATCHDOG_TIMEOUT:
                     log("看门狗触发：本轮执行超时，跳过进入下一轮")
         except KeyboardInterrupt: log("用户中断")
