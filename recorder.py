@@ -261,7 +261,7 @@ def upload_now(filepath, room_name):
         log(f"上传异常: {e}")
 
 def handle_room_end(rid, recordings, room_names, now):
-    """Stop recording, split WAV into 10min chunks, transcribe each, merge, upload."""
+    """Stop recording, upload files, split WAV into 10min chunks for transcription, merge."""
     rec = recordings.pop(rid, None)
     if not rec: return
     stop_proc(rec.get("proc"))
@@ -277,17 +277,18 @@ def handle_room_end(rid, recordings, room_names, now):
     wav_file = rec.get("audiofile")
     if wav_file and os.path.exists(wav_file):
         try:
-            import subprocess
+            import shutil
             base_name = os.path.splitext(os.path.basename(wav_file))[0]
             chunk_dir = os.path.join(OUTPUT_DIR, base_name + "_chunks")
             os.makedirs(chunk_dir, exist_ok=True)
             
-            # Get WAV duration with ffprobe
-            dur_proc = subprocess.run([FFMPEG.replace("ffmpeg","ffprobe"), "-v", "quiet", "-show_entries", "format=duration",
-                "-of", "csv=p=0", wav_file], capture_output=True, text=True, timeout=15)
-            total_dur = float(dur_proc.stdout.strip()) if dur_proc.stdout.strip() else 0
+            # Get WAV duration
+            dur_result = subprocess.run([FFMPEG.replace("ffmpeg","ffprobe"), "-v", "quiet",
+                "-show_entries", "format=duration", "-of", "csv=p=0", wav_file],
+                capture_output=True, text=True, timeout=15)
+            total_dur = float(dur_result.stdout.strip()) if dur_result.stdout.strip() else 0
             
-            CHUNK_SEC = 600  # 10 min chunks
+            CHUNK_SEC = 600
             chunk_files = []
             if total_dur > 0:
                 for start in range(0, int(total_dur), CHUNK_SEC):
@@ -296,74 +297,60 @@ def handle_room_end(rid, recordings, room_names, now):
                     subprocess.run([FFMPEG, "-y", "-loglevel", "warning", "-i", wav_file,
                         "-ss", str(start), "-t", str(CHUNK_SEC),
                         "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1", chunk_path],
-                        capture_output=True, timeout=60)
+                        capture_output=True, timeout=120)
                     if os.path.exists(chunk_path):
                         chunk_files.append(chunk_path)
                         log(f"[{room_names.get(rid,rid)}] chunk: {chunk_name}")
             else:
-                # ffprobe failed, use the whole file
                 chunk_files = [wav_file]
             
             # Transcribe each chunk
             all_txt = []
             all_srt_lines = []
-            seg_idx = 0
             for cf in chunk_files:
                 try:
                     from transcriber import transcribe
                     txt_path, srt_path = transcribe(cf)
                     if txt_path and os.path.exists(txt_path):
                         with open(txt_path, 'r', encoding='utf-8') as f:
-                            chunk_text = f.read()
-                        if chunk_text.strip():
-                            all_txt.append("== %s part %s ==" % (base_name, chunk_files.index(cf)))
-                            all_txt.append(chunk_text)
+                            ct = f.read()
+                        if ct.strip():
+                            all_txt.append("== %s part %02d ==" % (base_name, chunk_files.index(cf)))
+                            all_txt.append(ct)
                     if srt_path and os.path.exists(srt_path):
                         with open(srt_path, 'r', encoding='utf-8') as f:
                             all_srt_lines.append(f.read())
                 except Exception as e:
                     log(f"[{rid}] chunk transcribe error: {e}")
             
-            # Merge and upload
+            # Merge + upload
             if all_txt:
                 merged_txt = os.path.join(OUTPUT_DIR, base_name + ".txt")
                 with open(merged_txt, 'w', encoding='utf-8') as f:
-                    f.write("
-".join(all_txt))
+                    f.write("\n".join(all_txt))
                 upload_now(merged_txt, room_names.get(rid, rid))
                 log(f"[{room_names.get(rid,rid)}] merged txt uploaded")
             if all_srt_lines:
                 merged_srt = os.path.join(OUTPUT_DIR, base_name + ".srt")
                 with open(merged_srt, 'w', encoding='utf-8') as f:
-                    f.write("
-".join(all_srt_lines))
+                    f.write("\n".join(all_srt_lines))
                 upload_now(merged_srt, room_names.get(rid, rid))
                 log(f"[{room_names.get(rid,rid)}] merged srt uploaded")
             
-            # Cleanup chunks
-            import shutil
             try: shutil.rmtree(chunk_dir)
             except: pass
-            
         except Exception as e:
             log(f"[{rid}] split-transcribe error: {e}")
-            # Fallback: try transcribe full WAV
             try:
                 from transcriber import transcribe
                 txt_path, srt_path = transcribe(wav_file)
-                if txt_path and os.path.exists(txt_path):
-                    upload_now(txt_path, room_names.get(rid, rid))
-                if srt_path and os.path.exists(srt_path):
-                    upload_now(srt_path, room_names.get(rid, rid))
+                if txt_path and os.path.exists(txt_path): upload_now(txt_path, room_names.get(rid, rid))
+                if srt_path and os.path.exists(srt_path): upload_now(srt_path, room_names.get(rid, rid))
             except Exception as e2:
                 log(f"[{rid}] fallback transcribe error: {e2}")
     
-    # Close page
-    if rid in pages:
-        try: pages[rid].close()
-        except: pass
-        del pages[rid]
-        log(f"[{room_names.get(rid,rid)}] page closed")
+    # Keep page open for re-detection (do NOT close it)
+    log(f"[{room_names.get(rid,rid)}] recording ended, page kept open for re-detection")
 def run_test():
     from transcriber import transcribe
     log(f"测试模式: 录制 {TEST_ROOM} {TEST_DURATION}秒后转写")
@@ -533,7 +520,7 @@ def run():
                         if url:
                             aname = anchor_names.get(rid, room_names.get(rid, rid))
                             proc, outfile, audio_proc, audiofile = start_recording(url, quality, rid, aname)
-                            recordings[rid] = {"proc":proc,"outfile":outfile,"audio_proc":audio_proc,"audiofile":audiofile,"start":now,"segment_start":now}
+                            recordings[rid] = {"proc":proc,"outfile":outfile,"audio_proc":audio_proc,"audiofile":audiofile,"start":now}
                         else: log(f"[{rid}] failed to get stream url")
                 for rid in list(recordings.keys()):
                     if time.time()-recordings[rid].get("start", 0) > MAX_DURATION:
@@ -564,6 +551,7 @@ def run():
         finally:
             # 1. 正常结束当前录制任务
             for rid in list(recordings.keys()):
+                # Stop + transcribe remaining recording
                 handle_room_end(rid, recordings, anchor_names, time.time())
             # 2. 清理未结束的页面
             for p in pages.values():
