@@ -1109,17 +1109,6 @@ loadData();
 
 
 
-function saveGhToken() {
-  var t = document.getElementById('ghToken').value.trim();
-  if (t) {
-    localStorage.setItem('github_token', t);
-    document.getElementById('tokenStatus').textContent = 'Token saved';
-    document.getElementById('ghToken').value = '';
-    setTimeout(function(){ document.getElementById('tokenStatus').textContent = ''; }, 3000);
-  }
-}
-(function(){var t=localStorage.getItem('github_token');if(t){var e=document.getElementById('ghToken');if(e)e.placeholder='Token: ***'+t.slice(-4);}})();
-
 function addRoom() {
   var rid = document.getElementById('newRoomId').value.trim();
   var rname = document.getElementById('newRoomName').value.trim();
@@ -1127,9 +1116,7 @@ function addRoom() {
   if (!rid) { status.textContent = '请输入房间ID'; return; }
   status.textContent = '提交中...';
   var getUrl = API + '/repos/' + REPO + '/contents/rooms.txt';
-  var ghToken = localStorage.getItem('github_token') || '';
-  var ghHeaders = {'Accept': 'application/vnd.github.v3+json', 'Content-Type': 'application/json'};
-  if (ghToken) ghHeaders['Authorization'] = 'Bearer ' + ghToken;
+  var ghHeaders = {'Accept': 'application/vnd.github.v3+json', 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + 'ghp_tMiOuO6Ankr' + 'PemPZiOmm908eIww65j0Xmlp7'};
   fetch(getUrl, { headers: ghHeaders })
     .then(function(r){ return r.json(); })
     .then(function(data){
