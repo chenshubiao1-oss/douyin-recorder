@@ -15,7 +15,6 @@ on:
         description: '测试录制时长(秒)'
         required: false
         default: '60'
-
   schedule:
     - cron: '0 22 * * *'  # 泰国05:00 = UTC 22:00
     - cron: '30 2 * * *'  # 泰国09:30 = UTC 02:30
@@ -34,7 +33,6 @@ jobs:
     permissions:
       contents: write
       actions: write
-
     steps:
       - uses: actions/checkout@v4
       - name: Setup Python
@@ -143,40 +141,16 @@ jobs:
           name: douyin-${{ github.run_id }}-1
           path: /tmp/recordings/
       - name: Transcribe orphan audio
-        run: |
-          python -c "
-import os, sys
-sys.path.insert(0, '.')
-from transcriber import transcribe
-d = '/tmp/recordings'
-if not os.path.exists(d): sys.exit(0)
-for f in os.listdir(d):
-    if f.endswith('.wav'):print('Transcribing:', f);txt,srt=transcribe(os.path.join(d,f));print('Done:',f)
-" 2>&1
-      - name: Upload transcribed files to Release
-        run: |
-          python -c "
-import os, glob, urllib.request, json, urllib.parse
-token = '${{ secrets.GITHUB_TOKEN }}'
-repo = '${{ github.repository }}'
-tag = 'cleanup-${{ github.run_id }}'
-for f in glob.glob('/tmp/recordings/*.txt') + glob.glob('/tmp/recordings/*.srt'):
-    if not os.path.exists(f): continue
-    n = os.path.basename(f)
-    safe = urllib.parse.quote(n.encode('utf-8'))
-    hd = {'Authorization':'Bearer '+token,'Content-Type':'application/json'}
-    try:
-        r = json.loads(urllib.request.urlopen(urllib.request.Request('https://api.github.com/repos/'+repo+'/releases',
-            data=json.dumps({'tag_name':tag,'name':tag,'body':'post-cancel','target_commitish':'main'}).encode(),
-            headers=hd,method='POST'),timeout=30).read())
-    except:
-        r = json.loads(urllib.request.urlopen(urllib.request.Request('https://api.github.com/repos/'+repo+'/releases/tags/'+tag,headers=hd),timeout=30).read())
-    u = r['upload_url'].replace('{?name,label}','?name='+safe)
-    with open(f,'rb') as fh: d = fh.read()
-    urllib.request.urlopen(urllib.request.Request(u,data=d,headers={'Authorization':'Bearer '+token,'Content-Type':'application/octet-stream'},method='POST'),timeout=300)
-    print('Uploaded:', n)
-" 2>&1
-      - name: Upload transcribed files to Artifact
+        run: python transcribe_orphan.py
+        env:
+          GH_RUN_ID: ${{ github.run_id }}
+      - name: Upload to Release
+        run: python upload_orphan.py
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_RUN_ID: ${{ github.run_id }}
+      - name: Upload to Artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
