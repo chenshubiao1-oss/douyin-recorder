@@ -10,7 +10,7 @@ WATCHDOG_TIMEOUT = 180  # 主循环看门狗（秒）超过则认为本轮卡死
 
 ROOMS_FILE = os.environ.get("ROOMS_FILE", "rooms.txt")
 CHECK_INTERVAL = int(os.environ.get("CHECK_INTERVAL", "15"))
-MAX_DURATION = int(os.environ.get("MAX_DURATION", str(4 * 3600)))
+MAX_DURATION = int(os.environ.get("MAX_DURATION", str(5 * 3600)))
 OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "/tmp/recordings")
 FFMPEG = os.environ.get("FFMPEG", "ffmpeg")
 GH_REPO = os.environ.get("GH_REPO", "")
