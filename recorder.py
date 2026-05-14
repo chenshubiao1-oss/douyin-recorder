@@ -431,9 +431,8 @@ def run():
                             if rid not in new_ids:
                                 log(f"房间已移除: {room_names.get(rid,rid)}")
                                 if rid in recordings: handle_room_end(rid, recordings, anchor_names, now, model_obj)
-                                try: pages[rid].close()
-                                except: pass
-                                del pages[rid]
+                                if rid in pages:
+                                    del pages[rid]
                                 room_names.pop(rid, None)
                                 anchor_names.pop(rid, None)
                                 prev_live.pop(rid, None)
