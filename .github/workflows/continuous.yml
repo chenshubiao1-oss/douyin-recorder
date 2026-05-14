@@ -111,3 +111,117 @@ jobs:
           path: /tmp/transcripts/
           retention-days: 90
           if-no-files-found: ignore
+
+  cleanup:
+    runs-on: ubuntu-latest
+    needs: record
+    if: always() && needs.record.result == 'cancelled'
+    permissions:
+      contents: write
+      actions: write
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: 安装Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: 缓存恢复+模型
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.cache/torch
+            ~/.cache/modelscope
+            ~/.cache/huggingface
+          key: deps-v3-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            deps-v3-${{ runner.os }}-
+            deps-v3-
+            deps-
+            dep-
+            de
+
+      - name: 安装依赖
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
+          pip install --timeout 120 torch --index-url https://download.pytorch.org/whl/cpu
+          pip install --timeout 120 torchaudio --index-url https://download.pytorch.org/whl/cpu
+          pip install --timeout 120 funasr
+          pip install --timeout 120 requests
+
+      - name: 下载已录制音频
+        uses: actions/download-artifact@v4
+        with:
+          name: douyin-${{ github.run_id }}-1
+          path: /tmp/recordings/
+
+      - name: 转录未处理音频
+        run: |
+          python -c "
+import os, sys
+sys.path.insert(0, '.')
+from transcriber import transcribe
+audio_dir = '/tmp/recordings'
+if not os.path.exists(audio_dir):
+    print('没有录制文件')
+    sys.exit(0)
+for f in os.listdir(audio_dir):
+    if f.endswith('.wav'):
+        wav_path = os.path.join(audio_dir, f)
+        base = f[:-4]
+        srt_path = os.path.join(audio_dir, base + '.srt')
+        if os.path.exists(srt_path):
+            continue
+        print('转录:', f)
+        try:
+            txt_path, srt_path = transcribe(wav_path)
+            if txt_path and os.path.exists(txt_path):
+                import shutil
+                shutil.copy(txt_path, os.path.join(audio_dir, os.path.basename(txt_path)))
+                shutil.copy(srt_path, os.path.join(audio_dir, os.path.basename(srt_path)))
+            print('转录完成:', f)
+        except Exception as e:
+            print('转录失败:', e)
+"
+
+      - name: 上传转录文件到Release
+        run: |
+          python -c "
+import os, glob, urllib.request, json
+token = '${{ secrets.GITHUB_TOKEN }}'
+repo = '${{ github.repository }}'
+date = '${{ github.run_id }}'
+for f in glob.glob('/tmp/recordings/*.txt') + glob.glob('/tmp/recordings/*.srt'):
+    if not os.path.exists(f): continue
+    fsize = os.path.getsize(f)
+    fname = os.path.basename(f)
+    import urllib.parse
+    safe_fname = urllib.parse.quote(fname.encode('utf-8'))
+    tag = 'cleanup-' + date
+    headers = {'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json'}
+    d = json.dumps({'tag_name': tag, 'name': tag, 'body': 'post-cancel transcription', 'target_commitish': 'main'}).encode()
+    try:
+        req = urllib.request.Request('https://api.github.com/repos/' + repo + '/releases', data=d, headers=headers, method='POST')
+        rel = json.loads(urllib.request.urlopen(req, timeout=30).read())
+    except:
+        req = urllib.request.Request('https://api.github.com/repos/' + repo + '/releases/tags/' + tag, headers=headers)
+        rel = json.loads(urllib.request.urlopen(req, timeout=30).read())
+    upload_url = rel['upload_url'].replace('{?name,label}', '?name=' + safe_fname)
+    with open(f, 'rb') as fh:
+        data = fh.read()
+    uh = {'Authorization': 'Bearer ' + token, 'Content-Type': 'application/octet-stream', 'Content-Length': str(len(data))}
+    urllib.request.urlopen(urllib.request.Request(upload_url, data=data, headers=uh, method='POST'), timeout=300)
+    print('Uploaded:', fname, fsize)
+"
+
+      - name: 上传转录文件到Artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cleanup-transcripts-${{ github.run_id }}
+          path: /tmp/recordings/*.txt /tmp/recordings/*.srt
+          retention-days: 90
+          if-no-files-found: ignore
