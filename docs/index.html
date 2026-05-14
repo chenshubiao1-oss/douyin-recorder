@@ -675,26 +675,38 @@ function getIcon(type) {
 
 
 function extractNickname(name) {
-  var n = name.replace(/\.\w+\$/, '').replace(/_(FULL_HD\\d?|HD\\d?)/g, '').replace(/_\\d{8}_\\d{6}\$/, '');
-  n = n.replace(/的抖音直播间直播\$/, '').replace(/的抖音直播间\$/, '');
-  n = n.replace(/[（(].*?[）)]/g, '');
-  if (/^\\d+\$/.test(n)) {
-    if (!window.roomLookup) {
-      window.roomLookup = {};
-      for (var i = 0; i < window.roomMap.length; i++) {
-        window.roomLookup[window.roomMap[i].id] = window.roomMap[i].name;
+  // Extract room_id from filename (leading digits before _FULL_HD or _HD)
+  var m = name.match(/^([0-9]+)_/);
+  var roomId = m ? m[1] : null;
+  
+  // Look up in roomMap
+  if (roomId && window.roomMap) {
+    for (var i = 0; i < window.roomMap.length; i++) {
+      if (window.roomMap[i].id === roomId || window.roomMap[i].id === roomId.replace(/^0+/, '')) {
+        var n = window.roomMap[i].name;
+        // If name is just a number (unmapped room), return "未分类"
+        if (/^[0-9]+$/.test(n)) return '未分类';
+        return n;
       }
     }
-    if (window.roomLookup[n]) return window.roomLookup[n];
-    return '房间 ' + n;
   }
-  for (var i = 0; i < window.roomMap.length; i++) {
-    if (n.indexOf(window.roomMap[i].id) === 0 || n.replace(/^-\.?/, '').indexOf(window.roomMap[i].id) === 0) {
-      return window.roomMap[i].name;
+  
+  // Try matching from roomMap by substring (for names that start with roomId)
+  if (roomId && window.roomMap) {
+    for (var i = 0; i < window.roomMap.length; i++) {
+      var rn = window.roomMap[i].name;
+      if (rn && !/^[0-9]+$/.test(rn)) return rn;
     }
   }
-  n = n.replace(/^-\.?/, '').trim();
-  return n || name;
+  
+  return '未分类';
+}
+
+function toRawUrl(bwUrl) {
+  // For video/audio preview, we need a URL that browsers can play.
+  // GitHub release download URLs redirect, which most browsers handle fine.
+  // If issues persist, we can switch to jsdelivr CDN proxy.
+  return bwUrl;
 }function toRawUrl(x) { return x; }
 
 
@@ -982,7 +994,7 @@ function openPreview(bwLink, name, type) {
 
   } else if (type==='text') {
 
-    fetch(rawUrl).then(function(r) { if(!r.ok)throw new Error('HTTP '+r.status); return r.text(); }).then(function(txt) {
+    fetch(bwLink).then(function(r) { if(!r.ok)throw new Error('HTTP '+r.status); return r.text(); }).then(function(txt) {
 
       var h = '<div class="text-viewer">';
 
@@ -1002,7 +1014,7 @@ function openPreview(bwLink, name, type) {
 
   } else if (type==='srt') {
 
-    fetch(rawUrl).then(function(r) { if(!r.ok)throw new Error('HTTP '+r.status); return r.text(); }).then(function(txt) {
+    fetch(bwLink).then(function(r) { if(!r.ok)throw new Error('HTTP '+r.status); return r.text(); }).then(function(txt) {
 
       var h = '<div class="srt-viewer">';
 
