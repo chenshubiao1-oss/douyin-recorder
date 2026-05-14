@@ -130,22 +130,17 @@ def is_live_page(page):
     except: return False
 
 def get_anchor_name(page):
+    """从抖音直播页面获取主播真实昵称"""
     try:
         title = page.evaluate("document.title || ''")
         if title:
             # 跳过默认标题（页面未完全加载时的通用标题）
-            if '抖音直播' in title and ('电脑版' in title or '网页版' in title or '入口' in title):
-                pass  # 默认标题，跳过
-            else:
+            is_default = ('抖音直播' in title and '电脑版' in title)
+            if not is_default:
                 name = title.replace(' 正在直播', '').replace(' 的直播间', '').replace(' - 抖音', '').strip()
                 if name:
                     return name
-        # 先尝试从 title 取（有些页面 title 是主播名+直播中）
-        if not name and '正在直播' in title:
-            m_name = title.replace(' 正在直播', '').strip()
-            if m_name and '抖音' not in m_name:
-                return m_name
-        # 从页面所有 script 搜 nickname（含 src 脚本）
+        # 从页面所有 script 搜 nickname
         js = """() => {
             const scripts = document.querySelectorAll('script');
             for (const s of scripts) {
@@ -159,7 +154,7 @@ def get_anchor_name(page):
         name = page.evaluate(js)
         if name:
             return name
-        # 尝试从页面 JSON 数据块提取
+        # 尝试解码 \u 转义
         js2 = """() => {
             const scripts = document.querySelectorAll('script');
             for (const s of scripts) {
@@ -181,7 +176,6 @@ def get_anchor_name(page):
     except Exception as e:
         log(f"获取主播名失败: {e}")
     return ""
-
 def navigate_page(page, room_id):
     url = f"https://live.douyin.com/{room_id}"
     log(f"打开: {url}")
