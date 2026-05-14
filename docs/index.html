@@ -658,6 +658,14 @@ let anchors = new Set();
 
 
 
+
+// Global _utf8_decode for use by all functions
+function _utf8_decode(s) {
+  return decodeURIComponent(Array.prototype.map.call(s, function(c) {
+    return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+  }).join(''));
+}
+
 function fmtSize(bytes) {
 
   if (!bytes) return '-';
@@ -725,23 +733,6 @@ function getIcon(type) {
 }
 
 
-
-function extractNickname(name) {
-  // Extract room_id from filename (leading digits before _FULL_HD or _HD)
-  var m = name.match(/^([0-9]+)_/);
-  var roomId = m ? m[1] : null;
-  // Look up in roomMap from rooms.txt
-  if (roomId && window.roomMap) {
-    for (var i = 0; i < window.roomMap.length; i++) {
-      if (window.roomMap[i].id === roomId) {
-        var n = window.roomMap[i].name;
-        if (/^[0-9]+$/.test(n)) return '未分类'; // unmapped
-        return n;
-      }
-    }
-  }
-  return '未分类';
-}
 
 function toRawUrl(bwUrl) {
   if (bwUrl && (bwUrl.endsWith('.txt') || bwUrl.endsWith('.srt'))) {
@@ -1415,11 +1406,7 @@ function saveRooms() {
   xhr2.send(JSON.stringify({ message: 'Update rooms from frontend', content: b64, sha: sha }));
 }
 
-// Patch _utf8_decode to be globally accessible
-  return decodeURIComponent(Array.prototype.map.call(s, function(c) {
-    return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-  }).join(''));
-}
+// _utf8_decode defined inside loadData, used globally via var hoisting
 
 </script>
 
