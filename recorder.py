@@ -157,7 +157,10 @@ def is_live_page(page):
         # 否则不确定，保守判断为不在直播
         return False
     except:
-        return Falsedef get_anchor_name(page):
+        return False
+
+
+def get_anchor_name(page):
     """从抖音直播间页面提取主播真实昵称"""
     try:
         # 尝试从 title 提取 (格式: "主播名 正在直播")
