@@ -288,9 +288,7 @@ def run_test():
         log(f"直播间: {'ONAIR' if live else 'OFF'}")
         
         if live:
-            try:
-                page.reload(wait_until="domcontentloaded", timeout=20000)
-            except:
+            _safe_reload(page)except:
                 log("reload超时，继续使用当前页面状态")
             for attempt in range(8):
                 quality, url = get_stream_url(page, TEST_ROOM)
@@ -399,7 +397,7 @@ def run():
                             prev_live.pop(rid, None)
                     log(f"周期性刷新页面... ({len(pages)}个房间)")
                     for rid, page in pages.items():
-                        try: page.reload(wait_until="domcontentloaded",timeout=30000); time.sleep(3)
+            _safe_reload(page)
                         except: pass
                     last_refresh = now
                 for rid, page in pages.items():
@@ -411,7 +409,7 @@ def run():
                         prev_live[rid] = live
                     if live and rid not in recordings:
                         log(f"[{room_names.get(rid,rid)}] 检测到开播!")
-                        try: page.reload(wait_until="domcontentloaded",timeout=30000); time.sleep(5)
+            _safe_reload(page)
                         except: pass
                         for attempt in range(8):
                             quality, url = get_stream_url(page, rid)
