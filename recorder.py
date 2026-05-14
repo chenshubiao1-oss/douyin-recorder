@@ -453,6 +453,25 @@ def run():
                 for rid in list(recordings.keys()):
                     if time.time()-recordings[rid]["start"] > MAX_DURATION:
                         handle_room_end(rid, recordings, anchor_names, time.time())
+                # 续命：运行270分钟（4.5小时）后触发下一轮
+                if elapsed > 270*60 and not _renew_triggered:
+                    try:
+                        import urllib.request, json
+                        wf_id = os.environ.get("GH_RUN_ID", "")
+                        repo = os.environ.get("GH_REPO", "")
+                        token = os.environ.get("GH_TOKEN", "")
+                        if repo and token:
+                            req = urllib.request.Request(
+                                f"https://api.github.com/repos/{repo}/actions/workflows/275535928/dispatches",
+                                data=json.dumps({"ref":"main"}).encode(),
+                                headers={"Authorization":f"Bearer {token}","Content-Type":"application/json"},
+                                method="POST"
+                            )
+                            urllib.request.urlopen(req, timeout=30)
+                            log(f"续命成功: 触发新任务 (运行{elapsed/60:.0f}分)")
+                    except Exception as e:
+                        log(f"续命失败: {e}")
+                    _renew_triggered = True
                 time.sleep(CHECK_INTERVAL)
                 if time.time() - loop_start > WATCHDOG_TIMEOUT:
                     log("看门狗触发：本轮执行超时，跳过进入下一轮")
