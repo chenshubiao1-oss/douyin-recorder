@@ -710,6 +710,49 @@ function getDateKey(iso) {
 
 
 
+
+// Parse release body to build name map: safe_filename -> anchor_name
+window.nameMap = {};
+function buildNameMap(releases) {
+  for (var ri = 0; ri < releases.length; ri++) {
+    var body = releases[ri].body || '';
+    // Lookup: anchor_name/basename (stored by upload_now)
+    var lines = body.split('\n');
+    for (var li = 1; li < lines.length; li++) {  // skip "auto upload"
+      var line = lines[li].trim();
+      if (!line) continue;
+      var slashIdx = line.indexOf('/');
+      if (slashIdx > 0 && slashIdx < line.length - 1) {
+        var anchorName = line.substring(0, slashIdx);
+        var safeName = line.substring(slashIdx + 1);
+        window.nameMap[safeName] = anchorName;
+      }
+    }
+  }
+}
+
+// Enhanced extractNickname: first try release body nameMap, then roomMap
+function extractNickname(name) {
+  // Try release body nameMap first
+  if (window.nameMap && window.nameMap[name]) {
+    return window.nameMap[name];
+  }
+  // Try room ID from filename prefix (new format: roomId_quality_ts.mp4)
+  var m = name.match(/^([0-9]+)_/);
+  var roomId = m ? m[1] : null;
+  if (roomId && window.roomMap) {
+    for (var i = 0; i < window.roomMap.length; i++) {
+      if (window.roomMap[i].id === roomId) {
+        var n = window.roomMap[i].name;
+        if (/^[0-9]+$/.test(n)) return '\u672a\u5206\u7c7b'; // unmapped
+        return n;
+      }
+    }
+  }
+  return '\u672a\u5206\u7c7b';
+}
+
+
 async function loadData() {
 
   try {
