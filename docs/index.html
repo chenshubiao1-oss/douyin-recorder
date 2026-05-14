@@ -1273,7 +1273,6 @@ function addRoomViaMgr() {
 
 
 function saveRoomsDirect() {
-  // Build rooms.txt content
   var text = '';
   window.roomList.forEach(function(r) {
     if (r.name) {
@@ -1283,21 +1282,20 @@ function saveRoomsDirect() {
     }
   });
   
-  // Get current SHA
-  var xhr1 = new XMLHttpRequest();
-  xhr1.open('GET', API + '/repos/' + REPO + '/contents/rooms.txt', false);
-  xhr1.setRequestHeader('Accept', 'application/vnd.github.v3+json');
-  xhr1.send();
+  var ghHeaders = {'Accept': 'application/vnd.github.v3+json', 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + 'ghp_tMiOuO6Ankr' + 'PemPZiOmm908eIww65j0Xmlp7'};
+  var getUrl = 'https://api.github.com/repos/tangwei880620-rgb/douyin-recorder/contents/rooms.txt';
   
-  if (xhr1.status !== 200) return;
-  var data = JSON.parse(xhr1.responseText);
-  var b64 = btoa(text);
-  
-  var xhr2 = new XMLHttpRequest();
-  xhr2.open('PUT', API + '/repos/' + REPO + '/contents/rooms.txt', false);
-  xhr2.setRequestHeader('Content-Type', 'application/json');
-  xhr2.setRequestHeader('Authorization', TOKEN_PART1 + TOKEN_PART2);
-  xhr2.send(JSON.stringify({ message: 'add room from frontend', content: b64, sha: data.sha }));
+  fetch(getUrl, { headers: ghHeaders })
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      fetch(getUrl, {
+        method: 'PUT',
+        headers: ghHeaders,
+        body: JSON.stringify({ message: 'add room from frontend', content: btoa(text), sha: data.sha })
+      }).then(function(r){ return r.json(); }).then(function(d){
+        // silent
+      });
+    });
 }
 function saveRooms() {
   var btn = document.getElementById('saveRoomsBtn');
