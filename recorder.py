@@ -105,13 +105,14 @@ def get_stream_url(page, room_id):
 
 def is_live_page(page):
     try:
-        if not page.evaluate("""() => {const s=document.querySelectorAll('script:not([src])');for(const x of s){if((x.textContent||'').includes('flv_pull_url'))return true}return false}"""):
+        if not page.evaluate("""() => {const s=document.querySelectorAll('script:not([src])');for(const x of s){if((x.textContent||'').includes('flv_pull_url'))return true}return false}""", timeout=30000):
             return False
-        text = page.evaluate("document.body?.innerText?.slice(0,300)||''")
+        text = page.evaluate("document.body?.innerText?.slice(0,300)||''", timeout=15000)
         for w in ['直播已结束','主播暂时离开','下播了','主播不在','当前没有直播','主播正在赶来的路上']:
             if w in text: return False
-        return page.evaluate("!!document.querySelector('video')")
-    except: return False
+        return page.evaluate("!!document.querySelector('video')", timeout=15000)
+    except:
+        return False
 
 def get_anchor_name(page):
     """从抖音直播间页面提取主播真实昵称"""
