@@ -389,7 +389,7 @@ def run():
                     continue
                 last_watchdog = now
                 
-                if elapsed > 210*60: trigger_renewal()  # 保险续接
+                # 不再自动续接，由 cron 调度保证
                 if elapsed > MAX_DURATION:
                     log(f"任务超时 ({elapsed/3600:.1f}h)，退出"); break
                 if now - last_refresh > 300:
