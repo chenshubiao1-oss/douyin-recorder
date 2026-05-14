@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>抖音录制文件浏览器</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&family=JetBrains+Mono:wght@500&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0a0a0f;
+  --surface: #12121a;
+  --surface2: #1a1a28;
+  --surface3: #242440;
+  --border: #2a2a45;
+  --text: #e0e0f0;
+  --text-dim: #8888aa;
+  --accent: #ff4d6a;
+  --accent2: #ffb347;
+  --accent3: #6c5ce7;
+  --accent4: #00d2ff;
+  --green: #00e676;
+  --radius: 12px;
+  --shadow: 0 8px 32px rgba(0,0,0,0.5);
+}
+
+body {
+  font-family: 'Noto Sans SC', -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Header */
+.header {
+  background: linear-gradient(135deg, #0a0a1a 0%, #1a0a2e 50%, #0a1a2e 100%);
+  border-bottom: 1px solid var(--border);
+  padding: 40px 24px 32px;
+  position: relative;
+  overflow: hidden;
+}
+.header::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle at 20% 50%, rgba(108,92,231,0.08) 0%, transparent 50%),
+              radial-gradient(circle at 80% 50%, rgba(255,77,106,0.06) 0%, transparent 50%);
+  pointer-events: none;
+}
+.header-content {
+  position: relative;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+.header h1 {
+  font-size: 28px;
+  font-weight: 900;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.header p {
+  color: var(--text-dim);
+  font-size: 14px;
+  margin-top: 6px;
+}
+.stats-bar {
+  display: flex;
+  gap: 24px;
+  margin-top: 20px;
+  flex-wrap: wrap;
+}
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+.stat-item .num {
+  color: var(--text);
+  font-weight: 700;
+  font-size: 16px;
+}
+
+/* Main */
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px;
+  width: 100%;
+  flex: 1;
+}
+
+/* Filters */
+.filters {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.filters input, .filters select {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 16px;
+  color: var(--text);
+  font-size: 14px;
+  font-family: 'Noto Sans SC', sans-serif;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.filters input:focus, .filters select:focus {
+  border-color: var(--accent);
+}
+.filters input::placeholder { color: var(--text-dim); }
+.filters .search-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 200px;
+}
+.filters .search-wrap input {
+  width: 100%;
+  padding-left: 40px;
+}
+.filters .search-wrap .icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-dim);
+  font-size: 16px;
+}
+
+/* Date Groups */
+.date-group {
+  margin-bottom: 32px;
+}
+.date-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.date-header h2 {
+  font-size: 16px;
+  font-weight: 700;
+}
+.date-header .count {
+  background: var(--surface2);
+  color: var(--text-dim);
+  padding: 2px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+}
+
+/* Asset Cards */
+.assets-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+}
+.asset-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  transition: all 0.25s ease;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+.asset-card:hover {
+  background: var(--surface2);
+  border-color: var(--accent3);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(108,92,231,0.15);
+}
+.asset-card .icon-area {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  margin-bottom: 10px;
+}
+.asset-card.icon-video .icon-area { background: rgba(255,77,106,0.15); }
+.asset-card.icon-audio .icon-area { background: rgba(108,92,231,0.15); }
+.asset-card.icon-text .icon-area { background: rgba(0,210,255,0.15); }
+.asset-card.icon-srt .icon-area { background: rgba(0,230,118,0.15); }
+.asset-card .name {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-all;
+}
+.asset-card .meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.asset-card .size {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+}
+.asset-card .dl-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--surface3);
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  opacity: 0;
+  transition: all 0.2s;
+}
+.asset-card:hover .dl-btn { opacity: 1; }
+.asset-card .dl-btn:hover { background: var(--accent); color: #fff; }
+
+/* Type badge */
+.type-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.badge-video { background: rgba(255,77,106,0.2); color: var(--accent); }
+.badge-audio { background: rgba(108,92,231,0.2); color: var(--accent3); }
+.badge-text  { background: rgba(0,210,255,0.2); color: var(--accent4); }
+.badge-srt   { background: rgba(0,230,118,0.2); color: var(--green); }
+
+/* Release header in card */
+.release-header {
+  font-size: 12px;
+  color: var(--accent2);
+  font-weight: 500;
+  margin-bottom: 6px;
+}
+
+/* Loading */
+.loading {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--text-dim);
+}
+.loading .spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--surface2);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin: 0 auto 16px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Empty */
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--text-dim);
+}
+.empty-state .big-icon { font-size: 48px; margin-bottom: 12px; }
+
+/* Footer */
+.footer {
+  text-align: center;
+  padding: 24px;
+  color: var(--text-dim);
+  font-size: 12px;
+  border-top: 1px solid var(--border);
+}
+
+/* Modal */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  backdrop-filter: blur(8px);
+  z-index: 1000;
+  justify-content: center;
+  align-items: center;
+}
+.modal-overlay.show { display: flex; }
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  width: 90%;
+  max-width: 560px;
+  max-height: 80vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow);
+  animation: modalIn 0.2s ease;
+}
+@keyframes modalIn {
+  from { opacity: 0; transform: scale(0.95) translateY(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+.modal-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 20px;
+  border-bottom: 1px solid var(--border);
+}
+.modal-header .info { flex: 1; }
+.modal-header .info h3 {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.4;
+  margin-bottom: 4px;
+}
+.modal-header .info .sub {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.modal-header .close {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--surface2);
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.modal-header .close:hover { background: var(--surface3); color: var(--text); }
+.modal-body {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+.modal-body .file-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--surface2);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  transition: background 0.2s;
+}
+.modal-body .file-row:hover { background: var(--surface3); }
+.modal-body .file-row .left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+.modal-body .file-row .left .fname {
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.modal-body .file-row .left .fsize {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-family: 'JetBrains Mono', monospace;
+  flex-shrink: 0;
+}
+.modal-body .file-row a {
+  background: var(--accent3);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-family: 'Noto Sans SC', sans-serif;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+.modal-body .file-row a:hover { background: #5a4bd1; }
+
+/* Toast */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--green);
+  color: #000;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  z-index: 2000;
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+}
+.toast.show { opacity: 1; }
+
+@media (max-width: 640px) {
+  .header { padding: 24px 16px 20px; }
+  .container { padding: 16px; }
+  .assets-grid { grid-template-columns: 1fr; }
+  .filters { flex-direction: column; }
+  .filters .search-wrap { min-width: 100%; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-content">
+    <h1>🎬 抖音录制文件浏览器</h1>
+    <p>直播间录制 / 音频 / 转录文字 — 实时浏览与下载</p>
+    <div class="stats-bar">
+      <div class="stat-item"><span class="num" id="stat-releases">-</span> Release</div>
+      <div class="stat-item"><span class="num" id="stat-files">-</span> 文件</div>
+      <div class="stat-item"><span class="num" id="stat-rooms">-</span> 主播</div>
+      <div class="stat-item"><span class="num" id="stat-days">-</span> 天记录</div>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+  <div class="filters">
+    <div class="search-wrap">
+      <span class="icon">🔍</span>
+      <input type="text" id="searchInput" placeholder="搜索主播名、文件名..." oninput="renderAssets()">
+    </div>
+    <select id="typeFilter" onchange="renderAssets()">
+      <option value="all">全部类型</option>
+      <option value="video">🎬 视频</option>
+      <option value="audio">🎵 音频</option>
+      <option value="text">📄 文字</option>
+      <option value="srt">💬 SRT</option>
+    </select>
+    <select id="anchorFilter" onchange="renderAssets()">
+      <option value="all">全部主播</option>
+    </select>
+    <select id="dateFilter" onchange="renderAssets()">
+      <option value="all">全部日期</option>
+    </select>
+  </div>
+
+  <div id="content">
+    <div class="loading">
+      <div class="spinner"></div>
+      <p>加载中，正在查询 GitHub API...</p>
+    </div>
+  </div>
+</div>
+
+<div class="footer">
+  douyin-recorder · <span id="update-time"></span>
+</div>
+
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="info">
+        <h3 id="modal-title"></h3>
+        <div class="sub" id="modal-sub"></div>
+      </div>
+      <button class="close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const REPO = 'tangwei880620-rgb/douyin-recorder';
+const API = 'https://api.github.com';
+let allAssets = [];
+let allReleases = [];
+let rooms = [];
+let anchors = new Set();
+
+function fmtSize(bytes) {
+  if (!bytes) return '-';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+  if (bytes < 1073741824) return (bytes / 1048576).toFixed(1) + ' MB';
+  return (bytes / 1073741824).toFixed(2) + ' GB';
+}
+
+function fmtDate(iso) {
+  const d = new Date(iso);
+  return d.toLocaleDateString('zh-CN', { year:'numeric', month:'2-digit', day:'2-digit' });
+}
+
+function fmtDateTime(iso) {
+  const d = new Date(iso);
+  return d.toLocaleString('zh-CN', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' });
+}
+
+function getType(filename) {
+  const f = filename.toLowerCase();
+  if (f.endsWith('.mp4') || f.endsWith('.flv') || f.endsWith('.webm') || f.endsWith('.mkv')) return 'video';
+  if (f.endsWith('.wav') || f.endsWith('.mp3') || f.endsWith('.aac') || f.endsWith('.ogg')) return 'audio';
+  if (f.endsWith('.srt')) return 'srt';
+  return 'text';
+}
+
+function getTypeBadge(type) {
+  const map = { video: 'badge-video', audio: 'badge-audio', text: 'badge-text', srt: 'badge-srt' };
+  const labels = { video: '🎬 视频', audio: '🎵 音频', text: '📄 TXT', srt: '💬 SRT' };
+  return `<span class="type-badge ${map[type] || 'badge-text'}">${labels[type] || '📄'}</span>`;
+}
+
+function getIcon(type) {
+  const map = { video: '🎬', audio: '🎵', text: '📄', srt: '💬' };
+  return map[type] || '📄';
+}
+
+function extractAnchor(name) {
+  // Extract anchor name from filename
+  let n = name.replace(/_FULL_HD\d?/g, '').replace(/\.\w+$/, '');
+  // Remove known suffixes
+  n = n.replace(/[（(]珍[）)]/, '').replace(/的抖音直播间直播$/, '').replace(/的抖音直播间$/, '');
+  // Remove date-time suffix
+  n = n.replace(/_\d{8}_\d{6}$/, '');
+  return n;
+}
+
+function getDateKey(iso) {
+  return new Date(iso).toISOString().slice(0, 10);
+}
+
+function getAnchorFromName(name) {
+  // Try to find anchor name in release tag or asset name
+  let n = name.replace(/_FULL_HD\d?/g, '').replace(/\.\w+$/, '');
+  // Remove timestamp
+  n = n.replace(/_\d{8}_\d{6}$/, '');
+  return n;
+}
+
+async function loadData() {
+  try {
+    // Fetch rooms.txt first
+    const roomsResp = await fetch(`${API}/repos/${REPO}/contents/rooms.txt`);
+    const roomsData = await roomsResp.json();
+    const roomsText = atob(roomsData.content.replace(/\n/g, ''));
+    rooms = roomsText.split('\n').filter(l => l.trim() && !l.startsWith('#')).map(l => {
+      const parts = l.split('=');
+      return { id: parts[0].trim(), name: parts[1] ? parts[1].trim() : parts[0].trim() };
+    });
+
+    // Fetch all releases
+    let page = 1;
+    let all = [];
+    while (true) {
+      const resp = await fetch(`${API}/repos/${REPO}/releases?per_page=100&page=${page}`);
+      if (!resp.ok) break;
+      const data = await resp.json();
+      if (data.length === 0) break;
+      all = all.concat(data);
+      page++;
+    }
+    allReleases = all.filter(r => r.assets && r.assets.length > 0);
+
+    allAssets = [];
+    for (const rel of allReleases) {
+      for (const asset of rel.assets) {
+        const type = getType(asset.name);
+        const anchor = extractAnchor(asset.name);
+        anchors.add(anchor);
+        allAssets.push({
+          id: asset.id,
+          name: asset.name,
+          size: asset.size,
+          browser_download_url: asset.browser_download_url,
+          created_at: asset.created_at || rel.created_at,
+          type,
+          anchor,
+          release_tag: rel.tag_name,
+          release_name: rel.name || rel.tag_name,
+          release_url: rel.html_url,
+        });
+      }
+    }
+
+    // Sort by date descending
+    allAssets.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+    // Populate filters
+    populateFilters();
+    renderAssets();
+  } catch (e) {
+    document.getElementById('content').innerHTML = `<div class="empty-state"><div class="big-icon">❌</div><p>加载失败: ${e.message}</p></div>`;
+  }
+}
+
+function populateFilters() {
+  // Anchor filter
+  const selAnchor = document.getElementById('anchorFilter');
+  const sorted = [...anchors].sort();
+  sorted.forEach(a => {
+    if (!a) return;
+    const opt = document.createElement('option');
+    opt.value = a;
+    opt.textContent = a;
+    selAnchor.appendChild(opt);
+  });
+
+  // Date filter
+  const dates = [...new Set(allAssets.map(a => fmtDate(a.created_at)))].sort().reverse();
+  const selDate = document.getElementById('dateFilter');
+  dates.forEach(d => {
+    const opt = document.createElement('option');
+    opt.value = d;
+    opt.textContent = d;
+    selDate.appendChild(opt);
+  });
+
+  // Stats
+  document.getElementById('stat-releases').textContent = allReleases.length;
+  document.getElementById('stat-files').textContent = allAssets.length;
+  document.getElementById('stat-rooms').textContent = rooms.length;
+  const days = new Set(allAssets.map(a => getDateKey(a.created_at))).size;
+  document.getElementById('stat-days').textContent = days + ' 天';
+  document.getElementById('update-time').textContent = '上次更新: ' + new Date().toLocaleString('zh-CN');
+}
+
+function renderAssets() {
+  const search = document.getElementById('searchInput').value.toLowerCase();
+  const typeFilter = document.getElementById('typeFilter').value;
+  const anchorFilter = document.getElementById('anchorFilter').value;
+  const dateFilter = document.getElementById('dateFilter').value;
+
+  let filtered = allAssets.filter(a => {
+    if (typeFilter !== 'all' && a.type !== typeFilter) return false;
+    if (anchorFilter !== 'all' && a.anchor !== anchorFilter) return false;
+    if (dateFilter !== 'all' && fmtDate(a.created_at) !== dateFilter) return false;
+    if (search && !a.name.toLowerCase().includes(search) && !a.anchor.toLowerCase().includes(search)) return false;
+    return true;
+  });
+
+  // Group by release tag
+  const groups = {};
+  filtered.forEach(a => {
+    if (!groups[a.release_tag]) {
+      groups[a.release_tag] = { tag: a.release_tag, name: a.release_name, url: a.release_url, created_at: a.created_at, items: [] };
+    }
+    groups[a.release_tag].items.push(a);
+  });
+
+  const sortedGroups = Object.values(groups).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+  const content = document.getElementById('content');
+
+  if (sortedGroups.length === 0) {
+    content.innerHTML = `<div class="empty-state"><div class="big-icon">📭</div><p>没有找到匹配的文件</p></div>`;
+    return;
+  }
+
+  let html = '';
+  sortedGroups.forEach(g => {
+    // Group items by anchor name
+    const anchorGroups = {};
+    g.items.forEach(item => {
+      const key = item.anchor || '其他';
+      if (!anchorGroups[key]) anchorGroups[key] = [];
+      anchorGroups[key].push(item);
+    });
+
+    html += `<div class="date-group">
+      <div class="date-header">
+        <h2>🏷 ${g.tag}</h2>
+        <span class="count">${g.items.length} 个文件</span>
+        <span style="font-size:12px;color:var(--text-dim)">${fmtDateTime(g.created_at)}</span>
+        <a href="${g.url}" target="_blank" style="font-size:12px;color:var(--accent4);margin-left:auto;text-decoration:none;">查看 Release →</a>
+      </div>`;
+
+    Object.entries(anchorGroups).forEach(([anchor, items]) => {
+      // Sort items: video/audio first, then text/srt
+      items.sort((a, b) => {
+        const order = { video: 0, audio: 1, text: 2, srt: 3 };
+        return (order[a.type] || 99) - (order[b.type] || 99);
+      });
+
+      html += `<div style="margin-bottom:8px;">
+        <div style="font-size:13px;font-weight:700;color:var(--accent2);margin-bottom:6px;padding-left:4px;">${getTypeBadge('text')} ${anchor}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;">`;
+
+      items.forEach(item => {
+        html += `<div class="asset-card icon-${item.type}" onclick="openModal('${item.release_tag}')" title="${item.name}">
+          <div class="icon-area">${getIcon(item.type)}</div>
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+            <span class="type-badge badge-${item.type}">${item.type.toUpperCase()}</span>
+            <span style="font-size:11px;color:var(--text-dim);font-family:'JetBrains Mono',monospace;">${fmtSize(item.size)}</span>
+          </div>
+          <div class="name">${item.name}</div>
+          <div class="meta">
+            <span>${fmtDateTime(item.created_at)}</span>
+          </div>
+          <a class="dl-btn" href="${item.browser_download_url}" target="_blank" download onclick="event.stopPropagation();showToast('⚡ 正在下载...')">⬇</a>
+        </div>`;
+      });
+
+      html += `</div></div>`;
+    });
+
+    html += `</div>`;
+  });
+
+  content.innerHTML = html;
+}
+
+function openModal(tag) {
+  const rel = allReleases.find(r => r.tag_name === tag);
+  if (!rel) return;
+  document.getElementById('modal-title').textContent = '🏷 ' + rel.tag_name;
+  document.getElementById('modal-sub').textContent = rel.published_at ? fmtDateTime(rel.published_at) + ' · ' + rel.assets.length + ' 个文件' : '';
+  let body = '';
+  rel.assets.forEach(a => {
+    const type = getType(a.name);
+    body += `<div class="file-row">
+      <div class="left">
+        <span>${getIcon(type)}</span>
+        <span class="fname">${a.name}</span>
+        <span class="fsize">${fmtSize(a.size)}</span>
+      </div>
+      <a href="${a.browser_download_url}" target="_blank" onclick="showToast('⚡ 开始下载')">下载</a>
+    </div>`;
+  });
+  document.getElementById('modal-body').innerHTML = body || '<p style="color:var(--text-dim)">无文件</p>';
+  document.getElementById('modal').classList.add('show');
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('show');
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2000);
+}
+
+// Close modal on overlay click
+document.getElementById('modal').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+
+// Keyboard shortcut
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeModal();
+});
+
+loadData();
+</script>
+</body>
+</html>
