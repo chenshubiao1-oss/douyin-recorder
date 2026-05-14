@@ -269,7 +269,7 @@ def trigger_renewal():
     _renew_triggered = True
 
 def handle_room_end(rid, recordings, room_names, now):
-    """停止录制并上传视频+音频"""
+    """停止录制并上传视频+音频+转录"""
     rec = recordings.pop(rid)
     stop_proc(rec.get("proc"))
     stop_proc(rec.get("audio_proc"))
@@ -277,7 +277,18 @@ def handle_room_end(rid, recordings, room_names, now):
         f = rec.get(key)
         if f and os.path.exists(f):
             upload_now(f, room_names.get(rid, rid))
-
+    # 录制结束后立即转录
+    wav_file = rec.get("audiofile")
+    if wav_file and os.path.exists(wav_file):
+        try:
+            from transcriber import transcribe
+            txt_path, srt_path = transcribe(wav_file)
+            if txt_path and os.path.exists(txt_path):
+                upload_now(txt_path, room_names.get(rid, rid))
+            if srt_path and os.path.exists(srt_path):
+                upload_now(srt_path, room_names.get(rid, rid))
+        except Exception as e:
+            log(f"转录失败 [{rid}]: {e}")
 
 def run_test():
     """测试模式: 录制 -> 转写 -> 退出"""
