@@ -117,15 +117,28 @@ def _try_eval(page, js, default=None):
         return default
 
 def is_live_page(page):
+    """安全检测：直接用 Python 搜索页面 HTML，不走 JS evaluate（避免超时/异常问题）"""
     try:
-        if not _try_eval(page, """() => {const s=document.querySelectorAll('script:not([src])');for(const x of s){if((x.textContent||'').includes('flv_pull_url'))return true}return false}""", False):
-            return False
-        text = _try_eval(page, "document.body?.innerText?.slice(0,300)||''", '')
+        # 从页面原始 HTML 中搜索 flv_pull_url
+        html = page.content()
+        has_flv = "flv_pull_url" in html
+        
+        # 从页面文本中搜索结束关键词
+        text = page.evaluate("document.body?.innerText?.slice(0,500)||''", timeout=15000)
+        offline = False
         if text:
             for w in ['直播已结束','主播暂时离开','下播了','主播不在','当前没有直播','主播正在赶来的路上']:
-                if w in text: return False
-        return True
+                if w in text:
+                    offline = True
+                    break
+        
+        if offline:
+            return False
+        if has_flv:
+            return True
+        return False
     except:
+        # 任何异常都保守判断为不在直播
         return False
 
 def get_anchor_name(page):
