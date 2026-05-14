@@ -271,13 +271,25 @@ def upload_now(filepath, room_name):
         log(f"上传异常: {e}")
 
 def handle_room_end(rid, recordings, room_names, now, model_obj=None):
-    rec = recordings.pop(rid)
-    stop_proc(rec.get("proc"))
-    stop_proc(rec.get("audio_proc"))
+    rec = recordings.pop(rid, None)
+    if not rec: return
+    # Upload original files FIRST (before stopping processes, to survive cancel)
     for key in ["outfile", "audiofile"]:
         f = rec.get(key)
         if f and os.path.exists(f):
-            upload_now(f, room_names.get(rid, rid))
+            try:
+                upload_now(f, room_names.get(rid, rid))
+            except Exception as e:
+                log(f"[{rid}] upload error: {e}")
+    # Then stop processes (with timeout)
+    try:
+        p = rec.get("proc")
+        if p: p.terminate(); p.wait(timeout=5)
+    except: pass
+    try:
+        ap = rec.get("audio_proc")
+        if ap: ap.terminate(); ap.wait(timeout=5)
+    except: pass
     # 实时转录
     wav_file = rec.get("audiofile")
     if wav_file and os.path.exists(wav_file):
@@ -291,12 +303,8 @@ def handle_room_end(rid, recordings, room_names, now, model_obj=None):
             log(f"转录完成 [{room_names.get(rid,rid)}]")
         except Exception as e:
             log(f"转录失败 [{rid}]: {e}")
-    # 关闭页面
-    if rid in pages:
-        try: pages[rid].close()
-        except: pass
-        del pages[rid]
-        log(f"[{room_names.get(rid,rid)}] 页面已关闭")
+    # Keep page open for re-detection (do NOT close it)
+    log(f"[{room_names.get(rid,rid)}] recording ended, page kept open for re-detection")
 
 def run_test():
     from transcriber import transcribe
@@ -458,6 +466,11 @@ def run():
                                 log(f"[{rid}] 等待推流地址... ({attempt+1}/8)"); time.sleep(3)
                             if url:
                                 aname = anchor_names.get(rid, room_names.get(rid, rid))
+                                if re.match(r'^\d+$', aname):
+                                    try:
+                                        nn = get_anchor_name(page)
+                                        if nn: aname = nn
+                                    except: pass
                                 proc, outfile, audio_proc, audiofile = start_recording(url, quality, rid, aname)
                                 recordings[rid] = {"proc":proc,"outfile":outfile,"audio_proc":audio_proc,"audiofile":audiofile,"start":now}
                             else: log(f"[{rid}] 获取推流地址失败")
