@@ -19,6 +19,19 @@ TEST_DURATION = int(os.environ.get("TEST_DURATION", "60"))
 recordings = {}
 _renew_triggered = False
 
+# 防卡死机制
+WATCHDOG_TIMEOUT = 180  # 秒，循环最大执行时间，超时跳过当前轮
+PAGE_EVAL_TIMEOUT = 30000  # page.evaluate 超时(ms)
+
+
+def _try_eval(page, js, default=None):
+    """安全包装 page.evaluate，超时或异常返回默认值"""
+    try:
+        return page.evaluate(js, timeout=PAGE_EVAL_TIMEOUT)
+    except:
+        return default
+
+
 def load_rooms_from_github():
     if not GH_REPO or not GH_TOKEN:
         return load_rooms()
@@ -105,14 +118,13 @@ def get_stream_url(page, room_id):
 
 def is_live_page(page):
     try:
-        if not page.evaluate("""() => {const s=document.querySelectorAll('script:not([src])');for(const x of s){if((x.textContent||'').includes('flv_pull_url'))return true}return false}""", timeout=30000):
+        if not page.evaluate("""() => {const s=document.querySelectorAll('script:not([src])');for(const x of s){if((x.textContent||'').includes('flv_pull_url'))return true}return false}"""):
             return False
-        text = page.evaluate("document.body?.innerText?.slice(0,300)||''", timeout=15000)
+        text = page.evaluate("document.body?.innerText?.slice(0,300)||''")
         for w in ['直播已结束','主播暂时离开','下播了','主播不在','当前没有直播','主播正在赶来的路上']:
             if w in text: return False
-        return page.evaluate("!!document.querySelector('video')", timeout=15000)
-    except:
-        return False
+        return page.evaluate("!!document.querySelector('video')")
+    except: return False
 
 def get_anchor_name(page):
     """从抖音直播间页面提取主播真实昵称"""
