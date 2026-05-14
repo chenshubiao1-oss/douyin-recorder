@@ -702,13 +702,16 @@ function extractNickname(name) {
 }
 
 function toRawUrl(bwUrl) {
+  if (bwUrl && (bwUrl.endsWith('.txt') || bwUrl.endsWith('.srt'))) {
+    try {
+      var parts = bwUrl.replace('https://github.com/', '').split('/download/');
+      if (parts.length === 2) {
+        return 'https://raw.githubusercontent.com/' + parts[0] + '/' + parts[1];
+      }
+    } catch(e) {}
+  }
   return bwUrl;
-}function toRawUrl(bwUrl) {
-  // For video/audio preview, we need a URL that browsers can play.
-  // GitHub release download URLs redirect, which most browsers handle fine.
-  // If issues persist, we can switch to jsdelivr CDN proxy.
-  return bwUrl;
-}function toRawUrl(x) { return x; }
+}
 
 
 
@@ -1105,6 +1108,18 @@ loadData();
 
 
 
+
+function saveGhToken() {
+  var t = document.getElementById('ghToken').value.trim();
+  if (t) {
+    localStorage.setItem('github_token', t);
+    document.getElementById('tokenStatus').textContent = 'Token saved';
+    document.getElementById('ghToken').value = '';
+    setTimeout(function(){ document.getElementById('tokenStatus').textContent = ''; }, 3000);
+  }
+}
+(function(){var t=localStorage.getItem('github_token');if(t){var e=document.getElementById('ghToken');if(e)e.placeholder='Token: ***'+t.slice(-4);}})();
+
 function addRoom() {
   var rid = document.getElementById('newRoomId').value.trim();
   var rname = document.getElementById('newRoomName').value.trim();
@@ -1112,7 +1127,10 @@ function addRoom() {
   if (!rid) { status.textContent = '请输入房间ID'; return; }
   status.textContent = '提交中...';
   var getUrl = API + '/repos/' + REPO + '/contents/rooms.txt';
-  fetch(getUrl, { headers: {'Accept': 'application/vnd.github.v3+json'} })
+  var ghToken = localStorage.getItem('github_token') || '';
+  var ghHeaders = {'Accept': 'application/vnd.github.v3+json', 'Content-Type': 'application/json'};
+  if (ghToken) ghHeaders['Authorization'] = 'Bearer ' + ghToken;
+  fetch(getUrl, { headers: ghHeaders })
     .then(function(r){ return r.json(); })
     .then(function(data){
       var currentContent = '';
@@ -1138,7 +1156,7 @@ function addRoom() {
       }
       fetch(getUrl, {
         method: 'PUT',
-        headers: {'Accept': 'application/vnd.github.v3+json', 'Content-Type': 'application/json'},
+        headers: ghHeaders,
         body: JSON.stringify({
           message: 'add room ' + rid + ' from frontend',
           content: newContent,
