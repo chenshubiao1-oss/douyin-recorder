@@ -120,49 +120,16 @@ def get_stream_url(page, room_id):
     return (None, None)
 
 def is_live_page(page):
-    """Check if stream is live by:
-    1. Finding flv_pull_url in page scripts
-    2. Quick probe the stream URL with ffprobe (timeout 3s)
-    """
+    """Check if stream URL exists in page (quick page-only check)"""
     try:
-        # Step 1: get stream URL from page
-        url = page.evaluate("""() => {
-            const scripts = document.querySelectorAll('script:not([src])');
-            for (const s of scripts) {
-                const t = s.textContent || '';
-                if (t.includes('flv_pull_url')) {
-                    try {
-                        const m = t.match(/flv_pull_url[^}]+FULL_HD1["\\']:["\\']([^"\\']+)/);
-                        if (m) return m[1];
-                    } catch(e) {}
-                }
+        return page.evaluate("""() => {
+            const s = document.querySelectorAll('script:not([src])');
+            for (const x of s) {
+                if ((x.textContent || '').includes('flv_pull_url')) return true;
             }
-            return null;
+            return false;
         }""")
-        
-        if not url:
-            return False
-            
-        # Step 2: probe the stream URL (quick check, 3s timeout)
-        import subprocess
-        result = subprocess.run(
-            ['ffprobe', '-v', 'quiet', '-timeout', '3000000', '-rw_timeout', '3000000',
-             '-print_format', 'json', '-show_streams', url],
-            capture_output=True, timeout=5)
-        
-        if result.returncode != 0:
-            return False
-            
-        # Has at least one stream = still live
-        import json as _json
-        data = _json.loads(result.stdout)
-        if data.get('streams') and len(data['streams']) > 0:
-            return True
-            
-        return False
-    except subprocess.TimeoutExpired:
-        return False
-    except Exception:
+    except:
         return False
 def get_anchor_name(page):
     """从抖音直播页面获取主播真实昵称"""
