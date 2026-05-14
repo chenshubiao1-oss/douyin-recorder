@@ -1132,7 +1132,7 @@ function addRoom() {
       currentContent += line + '\\n';
       var newContent = '';
       try {
-        newContent = _utf8_encode ? btoa(_utf8_encode(currentContent)) : btoa(currentContent);
+        newContent = typeof _utf8_encode !== 'undefined' ? btoa(_utf8_encode(currentContent)) : btoa(unescape(encodeURIComponent(currentContent)));
       } catch(e) {
         newContent = btoa(currentContent);
       }
@@ -1146,7 +1146,7 @@ function addRoom() {
         })
       }).then(function(r){ return r.json(); }).then(function(d){
         if (d && d.content) {
-          status.innerHTML = '<span style="color:#4caf50">✓ 已添加</span>';
+          status.innerHTML = '<span style=\"color:#4caf50\">✓ 已添加</span>';
           setTimeout(function(){ status.textContent = ''; }, 3000);
         } else {
           status.textContent = '失败: ' + (d && d.message || '未知错误');
@@ -1158,3 +1158,10 @@ function addRoom() {
       status.textContent = '获取房间列表失败: ' + e.message;
     });
 }
+
+</script>
+
+</body>
+
+</html>
+
