@@ -589,10 +589,4 @@ if __name__ == "__main__":
     if TEST_MODE:
         run_test()
     else:
-        run()new_name = anchor_names.get(nr["id"], room_names.get(nr["id"], nr["id"]))
-                            if re.match(r'^\d+$', new_name):
-                                try:
-                                    nn = get_anchor_name(new_page)
-                                    if nn: new_name = nn
-                                except: pass
-
+        run(
