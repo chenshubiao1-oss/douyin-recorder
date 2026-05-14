@@ -121,10 +121,12 @@ def is_live_page(page):
         if not _try_eval(page, """() => {const s=document.querySelectorAll('script:not([src])');for(const x of s){if((x.textContent||'').includes('flv_pull_url'))return true}return false}""", False):
             return False
         text = _try_eval(page, "document.body?.innerText?.slice(0,300)||''", '')
-        for w in ['直播已结束','主播暂时离开','下播了','主播不在','当前没有直播','主播正在赶来的路上']:
-            if w in text: return False
-        return _try_eval(page, "!!document.querySelector('video')", False)
-    except: return False
+        if text:
+            for w in ['直播已结束','主播暂时离开','下播了','主播不在','当前没有直播','主播正在赶来的路上']:
+                if w in text: return False
+        return True
+    except:
+        return False
 
 def get_anchor_name(page):
     """从抖音直播间页面提取主播真实昵称"""
