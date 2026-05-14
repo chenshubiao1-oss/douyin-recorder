@@ -1,4 +1,5 @@
-import os, sys, urllib.request, json, urllib.parse, glob, traceback
+import os
+import re, sys, urllib.request, json, urllib.parse, glob, traceback
 
 token = os.environ.get("GH_TOKEN", "")
 repo = os.environ.get("GH_REPO", "")
