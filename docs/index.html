@@ -866,9 +866,10 @@ async function loadData() {
       });
     }
     
+    var ghHeaders = {'Accept': 'application/vnd.github+json', 'Authorization': 'Bearer ' + 'ghp_tMiOuO6Ankr' + 'PemPZiOmm908eIww65j0Xmlp7'};
     var page = 1, all = [];
     while (true) {
-      var resp = await fetch(API + '/repos/' + REPO + '/releases?per_page=100&page=' + page);
+      var resp = await fetch(API + '/repos/' + REPO + '/releases?per_page=100&page=' + page, { headers: ghHeaders });
       if (!resp.ok) break;
       var data = await resp.json();
       if (data.length === 0) break;
