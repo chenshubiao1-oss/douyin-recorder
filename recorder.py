@@ -156,7 +156,7 @@ def get_anchor_name(page):
         text = page.evaluate("document.body?.innerText?.slice(0,200) || ''")
         for line in text.split('\n'):
             line = line.strip()
-            if line and len(line) < 20 and not any(kw in line for kw in ['直播','抖音','关注','粉丝','点赞']):
+            if line and len(line) < 20 and line != '开启读屏标签' and not any(kw in line for kw in ['直播','抖音','关注','粉丝','点赞','读屏']):
                 return line
     except Exception as e:
         log(f"获取主播名失败: {e}")
