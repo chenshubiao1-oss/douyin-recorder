@@ -456,25 +456,30 @@ def run():
             start_time = last_refresh = time.time()
             while True:
                 try:
-                    loop_start = time.time()
-                now = time.time()
-                elapsed = now - start_time
-                if elapsed > MAX_DURATION:
-                    log(f"任务超时 ({elapsed/3600:.1f}h)，退出"); break
-                if now - last_refresh > 30:
-                    new_rooms = load_rooms_from_github()
-                    for nr in new_rooms:
-                        if nr["id"] not in pages:
-                            log(f"检测到新房间: {nr['id']} = {nr['name']}，动态添加")
-                            new_page = context.new_page()
-                            navigate_page(new_page, nr["id"])
-                            pages[nr["id"]] = new_page
-                            aname = get_anchor_name(new_page)
-                            anchor_names[nr["id"]] = aname if aname else nr["name"]
-                            room_names[nr["id"]] = nr["name"]
-                            log(f"  主播昵称: {aname}")
-                            try:
-                                new_live = is_live_page(new_page)
+                        loop_start = time.time()
+                        now = time.time()
+                        elapsed = now - start_time
+                        if elapsed > MAX_DURATION:
+                        log(f"任务超时 ({elapsed/3600:.1f}h)，退出"); break
+                    if now - last_refresh > 30:
+                        new_rooms = load_rooms_from_github()
+                        for nr in new_rooms:
+                            if nr["id"] not in pages:
+                                log(f"检测到新房间: {nr['id']} = {nr['name']}，动态添加")
+                                new_page = context.new_page()
+                                navigate_page(new_page, nr["id"])
+                                pages[nr["id"]] = new_page
+                                aname = get_anchor_name(new_page)
+                                anchor_names[nr["id"]] = aname if aname else nr["name"]
+                                room_names[nr["id"]] = nr["name"]
+                                log(f"  主播昵称: {aname}")
+                                try:
+                                    new_live = is_live_page(new_page)
+                except Exception as _e:
+                    import traceback as _tb
+                    log(f"main loop crash: {_e}")
+                    log(_tb.format_exc())
+                    time.sleep(10)
                             except:
                                 new_live = False
                             log(f"[{room_names.get(nr['id'],nr['id'])}] is_live={'ONAIR' if new_live else 'OFF'}")
