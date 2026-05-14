@@ -678,31 +678,22 @@ function extractNickname(name) {
   // Extract room_id from filename (leading digits before _FULL_HD or _HD)
   var m = name.match(/^([0-9]+)_/);
   var roomId = m ? m[1] : null;
-  
-  // Look up in roomMap
+  // Look up in roomMap from rooms.txt
   if (roomId && window.roomMap) {
     for (var i = 0; i < window.roomMap.length; i++) {
-      if (window.roomMap[i].id === roomId || window.roomMap[i].id === roomId.replace(/^0+/, '')) {
+      if (window.roomMap[i].id === roomId) {
         var n = window.roomMap[i].name;
-        // If name is just a number (unmapped room), return "未分类"
-        if (/^[0-9]+$/.test(n)) return '未分类';
+        if (/^[0-9]+$/.test(n)) return '未分类'; // unmapped
         return n;
       }
     }
   }
-  
-  // Try matching from roomMap by substring (for names that start with roomId)
-  if (roomId && window.roomMap) {
-    for (var i = 0; i < window.roomMap.length; i++) {
-      var rn = window.roomMap[i].name;
-      if (rn && !/^[0-9]+$/.test(rn)) return rn;
-    }
-  }
-  
   return '未分类';
 }
 
 function toRawUrl(bwUrl) {
+  return bwUrl;
+}function toRawUrl(bwUrl) {
   // For video/audio preview, we need a URL that browsers can play.
   // GitHub release download URLs redirect, which most browsers handle fine.
   // If issues persist, we can switch to jsdelivr CDN proxy.
@@ -969,76 +960,38 @@ function renderAssets() {
 // Preview
 
 function openPreview(bwLink, name, type) {
-
   var modal = document.getElementById('previewModal');
-
   var body = document.getElementById('previewBody');
-
   document.getElementById('previewTitle').textContent = name;
-
-  body.innerHTML = '<div class="preview-loading"><div class="spinner"></div><p>加载中...</p></div>';
-
+  body.innerHTML = '<div class="preview-loading"><div class="spinner"></div><p>\u52a0\u8f7d\u4e2d...</p></div>';
   modal.classList.add('show');
-
   document.body.style.overflow = 'hidden';
-
-
-
   if (type==='video') {
-
-    body.innerHTML = '<div style="padding:0;"><div class="video-player-wrap"><video controls autoplay preload="auto" playsinline onerror="this.parentElement.innerHTML=\'<div class=preview-error>❌ 视频加载失败</div>\'"><source src="' + escAttr(bwLink) + '" type="video/mp4></video></div></div>';
-
+    body.innerHTML = '<div style="padding:0;"><div class="video-player-wrap"><video controls preload="metadata" playsinline onerror="this.innerHTML=\'<div class=preview-error>\u89c6\u9891\u65e0\u6cd5\u64ad\u653e\uff0c\u8bf7\u70b9\u51fb\u4e0b\u8f7d\u6309\u94ae</div>\'"><source src="' + escAttr(bwLink) + '" type="video/mp4"></video></div></div>';
   } else if (type==='audio') {
-
-    body.innerHTML = '<div class="audio-player-wrap"><div class="big-icon">🎵</div><audio controls autoplay preload="auto" style="width:100%" onerror="this.parentElement.innerHTML=\'<div class=preview-error>❌ 音频加载失败</div>\'"><source src="' + escAttr(bwLink) + '" type="audio/wav></audio></div>';
-
+    body.innerHTML = '<div class="audio-player-wrap"><div class="big-icon">\ud83c\udfb5</div><audio controls preload="metadata" style="width:100%" onerror="this.innerHTML=\'<div class=preview-error>\u97f3\u9891\u65e0\u6cd5\u64ad\u653e\uff0c\u8bf7\u70b9\u51fb\u4e0b\u8f7d\u6309\u94ae</div>\'"><source src="' + escAttr(bwLink) + '" type="audio/wav"></audio></div>';
   } else if (type==='text') {
-
-    fetch(bwLink).then(function(r) { if(!r.ok)throw new Error('HTTP '+r.status); return r.text(); }).then(function(txt) {
-
+    fetch(bwLink, { mode: 'cors' }).then(function(r) { if(!r.ok) throw new Error('HTTP '+r.status); return r.text(); }).then(function(txt) {
       var h = '<div class="text-viewer">';
-
       txt.split('\n').forEach(function(line) {
-
         var t = line.trim();
-
         if (!t) { h+= '<div class="line sep"></div>'; return; }
-
         h+= '<div class="line' + (/^\[\d{2}:\d{2}:\d{2}/.test(t) ? ' timestamp' : '') + '">' + escHtml(line) + '</div>';
-
       });
-
       body.innerHTML = h + '</div>';
-
-    }).catch(function(e) { body.innerHTML = '<div class="preview-error">❌ ' + e.message + '</div>'; });
-
+    }).catch(function(e) { body.innerHTML = '<div class="preview-error">\u274c ' + e.message + '<br><span style=font-size:13px>\u8bf7\u70b9\u51fb\u4e0b\u8f7d\u76f4\u63a5\u67e5\u770b</span></div>'; });
   } else if (type==='srt') {
-
-    fetch(bwLink).then(function(r) { if(!r.ok)throw new Error('HTTP '+r.status); return r.text(); }).then(function(txt) {
-
+    fetch(bwLink, { mode: 'cors' }).then(function(r) { if(!r.ok) throw new Error('HTTP '+r.status); return r.text(); }).then(function(txt) {
       var h = '<div class="srt-viewer">';
-
       txt.split('\n\n').forEach(function(cue) {
-
         var lines = cue.split('\n').filter(function(l){return l.trim();});
-
-        if (lines.length<3) return;
-
+        if (lines.length < 3) return;
         h+= '<div class="cue"><div class="timecode">' + escHtml(lines[1]) + '</div><div class="text">' + escHtml(lines.slice(2).join('\n')) + '</div></div>';
-
       });
-
       body.innerHTML = h + '</div>';
-
-    }).catch(function(e) { body.innerHTML = '<div class="preview-error">❌ ' + e.message + '</div>'; });
-
+    }).catch(function(e) { body.innerHTML = '<div class="preview-error">\u274c ' + e.message + '</div>'; });
   }
-
-}
-
-
-
-function closePreview() {
+}function closePreview() {
 
   var body = document.getElementById('previewBody');
 
