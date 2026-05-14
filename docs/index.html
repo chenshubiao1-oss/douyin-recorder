@@ -831,19 +831,21 @@ function extractNickname(name) {
 async function loadData() {
   try {
     var roomsText = '';
-    // Try raw.githubusercontent.com first (avoids base64/atob issues)
+    // Use raw.githubusercontent.com - simple, no base64/atob needed
     try {
-      var simple = await fetch('https://raw.githubusercontent.com/' + REPO + '/main/rooms.txt');
-      if (simple.ok) {
-        roomsText = await simple.text();
+      var resp = await fetch('https://raw.githubusercontent.com/' + REPO + '/main/rooms.txt');
+      if (resp.ok) {
+        roomsText = await resp.text();
       }
-    } catch(e) {
-      // Fallback to GitHub API content method
+    } catch(e) { /* fallback to API */ }
+    
+    // Fallback: GitHub API content method
+    if (!roomsText) {
       try {
-        var roomsResp = await fetch(API + '/repos/' + REPO + '/contents/rooms.txt');
-        var roomsData = await roomsResp.json();
-        if (roomsData && roomsData.content) {
-          var raw64 = roomsData.content.replace(/\n/g, '');
+        var apiResp = await fetch(API + '/repos/' + REPO + '/contents/rooms.txt');
+        var apiData = await apiResp.json();
+        if (apiData && apiData.content) {
+          var raw64 = apiData.content.replace(/\\n/g, '');
           var rawStr = atob(raw64);
           var esc = '';
           for (var i = 0; i < rawStr.length; i++) {
@@ -853,19 +855,18 @@ async function loadData() {
         }
       } catch(e2) {}
     }
-
+    
     window.roomMap = [];
     if (roomsText) {
-      var rooms = roomsText.split('\n').filter(function(l) { return l.trim() && !l.startsWith('#'); }).map(function(l) {
+      var rooms = roomsText.split('\\n').filter(function(l) { return l.trim() && !l.startsWith('#'); }).map(function(l) {
         var parts = l.split('=');
         var r = { id: parts[0].trim(), name: parts[1] ? parts[1].trim() : parts[0].trim() };
         window.roomMap.push(r);
         return r;
       });
     }
-
+    
     var page = 1, all = [];
-
     while (true) {
       var resp = await fetch(API + '/repos/' + REPO + '/releases?per_page=100&page=' + page);
       if (!resp.ok) break;
@@ -875,7 +876,7 @@ async function loadData() {
       page++;
     }
     allReleases = all.filter(function(r) { return r.assets && r.assets.length > 0; });
-
+    
     allAssets = [];
     for (var ri = 0; ri < allReleases.length; ri++) {
       var rel = allReleases[ri];
@@ -894,12 +895,12 @@ async function loadData() {
         });
       }
     }
-
+    
     allAssets.sort(function(a,b){ return new Date(b.created_at)-new Date(a.created_at); });
     populateFilters();
     renderAssets();
   } catch (e) {
-    document.getElementById('content').innerHTML = '<div class="empty-state"><div class="big-icon">\u274c</div><p>\u52a0\u8f7d\u5931\u8d25: ' + e.message + '</p></div>';
+    document.getElementById('content').innerHTML = '<div class="empty-state"><div class="big-icon">\\u274c</div><p>\\u52a0\\u8f7d\\u5931\\u8d25: ' + e.message + '</p></div>';
   }
 }
 function populateFilters() {
