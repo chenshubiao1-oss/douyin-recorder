@@ -261,32 +261,46 @@ def upload_now(filepath, room_name):
         log(f"上传异常: {e}")
 
 def handle_room_end(rid, recordings, room_names, now):
-    rec = recordings.pop(rid)
+    """Stop recording, upload raw files. Transcription done by segmenter."""
+    rec = recordings.pop(rid, None)
+    if not rec: return
     stop_proc(rec.get("proc"))
     stop_proc(rec.get("audio_proc"))
     for key in ["outfile", "audiofile"]:
         f = rec.get(key)
         if f and os.path.exists(f):
             upload_now(f, room_names.get(rid, rid))
-    # 实时转录
-    wav_file = rec.get("audiofile")
-    if wav_file and os.path.exists(wav_file):
-        try:
-            from transcriber import transcribe
-            txt_path, srt_path = transcribe(wav_file)
-            if txt_path and os.path.exists(txt_path):
-                upload_now(txt_path, room_names.get(rid, rid))
-            if srt_path and os.path.exists(srt_path):
-                upload_now(srt_path, room_names.get(rid, rid))
-            log(f"转录完成 [{room_names.get(rid,rid)}]")
-        except Exception as e:
-            log(f"转录失败 [{rid}]: {e}")
-    # 关闭页面
     if rid in pages:
         try: pages[rid].close()
         except: pass
         del pages[rid]
-        log(f"[{room_names.get(rid,rid)}] 页面已关闭")
+        log(f"[{room_names.get(rid,rid)}] page closed")
+
+def segment_and_transcribe(rid, recordings, room_names):
+    """Stop current ffmpeg, transcribe wav, upload. Returns new segment_start timestamp or None if room done."""
+    rec = recordings.get(rid)
+    if not rec: return None
+    stop_proc(rec.get("proc"))
+    stop_proc(rec.get("audio_proc"))
+    base_name = room_names.get(rid, rid)
+    wav_file = rec.get("audiofile")
+    if wav_file and os.path.exists(wav_file):
+        try:
+            log(f"[{base_name}] transcribing segment: {os.path.basename(wav_file)}")
+            from transcriber import transcribe
+            txt_path, srt_path = transcribe(wav_file)
+            if txt_path and os.path.exists(txt_path):
+                upload_now(txt_path, base_name)
+            if srt_path and os.path.exists(srt_path):
+                upload_now(srt_path, base_name)
+            log(f"[{base_name}] segment transcribed")
+        except Exception as e:
+            log(f"[{rid}] transcribe error: {e}")
+    else:
+        mp4 = rec.get("outfile")
+        if mp4 and os.path.exists(mp4):
+            upload_now(mp4, base_name)
+    return None
 
 def run_test():
     from transcriber import transcribe
@@ -448,7 +462,7 @@ def run():
                         if url:
                             aname = anchor_names.get(rid, room_names.get(rid, rid))
                             proc, outfile, audio_proc, audiofile = start_recording(url, quality, rid, aname)
-                            recordings[rid] = {"proc":proc,"outfile":outfile,"audio_proc":audio_proc,"audiofile":audiofile,"start":now}
+                            recordings[rid] = {"proc":proc,"outfile":outfile,"audio_proc":audio_proc,"audiofile":audiofile,"start":now,"segment_start":now}
                         else: log(f"[{rid}] 获取推流地址失败")
                     if rid in recordings and not live:
                         handle_room_end(rid, recordings, anchor_names, now)
@@ -481,7 +495,11 @@ def run():
         except: pass  # 其他异常
         finally:
             # 1. 正常结束当前录制任务
-            for rid in list(recordings.keys()): handle_room_end(rid, recordings, anchor_names, time.time())
+            for rid in list(recordings.keys()):
+                # Transcribe last segment before ending
+                segment_and_transcribe(rid, recordings, anchor_names)
+                # Then clean up
+                handle_room_end(rid, recordings, anchor_names, time.time())
             # 2. 清理未结束的页面
             for p in pages.values():
                 try: p.close()
