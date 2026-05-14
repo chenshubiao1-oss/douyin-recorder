@@ -211,7 +211,7 @@ def upload_now(filepath, room_name):
     # 用 Release API 上传 (永久存储，全部用 urllib，不依赖 gh cli)
     try:
         import urllib.request
-        release_tag = f"rec-{datetime.now().strftime('%Y%m%d')}"
+        release_tag = "rec-" + datetime.now().strftime("%Y%m%d")
         headers = {"Authorization": f"Bearer {GH_TOKEN}", "Content-Type": "application/json"}
         
         # 1. 查找或创建 Release
