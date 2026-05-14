@@ -394,8 +394,8 @@ def run():
                     loop_start = time.time()
                     now = time.time()
                     elapsed = now - start_time
-                    if "failed" not in dir():
-                        failed = set()
+                    # recording_failed = {}  # defined at module level
+
                     if elapsed > MAX_DURATION:
                         log(f"任务超时 ({elapsed/3600:.1f}h)，退出"); break
                     if now - last_refresh > 30:
@@ -459,7 +459,10 @@ def run():
                         if prev is None or prev != live:
                             log(f"[{room_names.get(rid,rid)}] is_live={'ONAIR' if live else 'OFF'}")
                             prev_live[rid] = live
-                        if live and rid not in recordings and rid not in failed:
+                        if live and rid not in recordings:
+                            fail_time = recording_failed.get(rid, 0)
+                            if time.time() - fail_time < 60:
+                                continue
                             log(f"[{room_names.get(rid,rid)}] 检测到开播!")
                             _safe_reload(page)
                             time.sleep(5)
@@ -479,7 +482,7 @@ def run():
                                     recordings[rid] = {"proc":proc,"outfile":outfile,"audio_proc":audio_proc,"audiofile":audiofile,"start":now}
                                 except Exception as _se:
                                     log(f"[{rid}] start_recording failed: {_se}")
-                                    failed.add(rid)
+                                    recording_failed[rid] = time.time()
                             else: log(f"[{rid}] 获取推流地址失败")
                         if rid in recordings and not live:
                             handle_room_end(rid, recordings, anchor_names, now, model_obj)
