@@ -121,7 +121,7 @@ def is_live_page(page):
     try:
         # 先取标题检查是否包含"正在直播"
         title = _try_eval(page, "document.title", "")
-        title_live = title and ("正在直播" in title or "的直播" in title)
+        title_live = title and ("正在直播" in title or "的直播" in title or "抖音直播" in title or "直播间" in title)
         
         # 检查 flv_pull_url（搜所有script）
         has_flv = _try_eval(page, """() => {
