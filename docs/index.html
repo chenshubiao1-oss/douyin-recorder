@@ -715,7 +715,12 @@ async function loadData() {
 
     var roomsData = await roomsResp.json();
 
-    var roomsText = atob(roomsData.content.replace(/\n/g, ""));
+    function _utf8_decode(s) {
+  return decodeURIComponent(Array.prototype.map.call(s, function(c) {
+    return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+  }).join(''));
+}
+    var roomsText = _utf8_decode(atob(roomsData.content.replace(/\n/g, "")));
 
     window.roomMap = []; rooms = roomsText.split('\n').filter(function(l) { return l.trim() && !l.startsWith('#'); }).map(function(l) {
 
