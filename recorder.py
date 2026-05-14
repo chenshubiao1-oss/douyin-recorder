@@ -453,11 +453,35 @@ def run():
                 if time.time() - loop_start > WATCHDOG_TIMEOUT:
                     log("看门狗触发：本轮执行超时，跳过进入下一轮")
         except KeyboardInterrupt: log("用户中断")
+        except: pass  # 其他异常
         finally:
+            # 1. 正常结束当前录制任务
             for rid in list(recordings.keys()): handle_room_end(rid, recordings, anchor_names, time.time())
+            # 2. 清理未结束的页面
             for p in pages.values():
                 try: p.close()
                 except: pass
+            # 3. 强制取消后，扫描 OUTPUT_DIR 下未被转录的音频
+            if os.path.exists(OUTPUT_DIR):
+                for fname in os.listdir(OUTPUT_DIR):
+                    if fname.endswith('.wav'):
+                        wav_path = os.path.join(OUTPUT_DIR, fname)
+                        base = fname[:-4]
+                        # 检查是否已有同名字幕文件
+                        srt_path = os.path.join(OUTPUT_DIR, base + '.srt')
+                        if os.path.exists(srt_path):
+                            continue  # 已转录，跳过
+                        log(f"扫描到未转录音频: {fname}，开始转录...")
+                        try:
+                            from transcriber import transcribe
+                            txt_path, srt_path = transcribe(wav_path)
+                            if txt_path and os.path.exists(txt_path):
+                                upload_now(txt_path, base)
+                            if srt_path and os.path.exists(srt_path):
+                                upload_now(srt_path, base)
+                            log(f"转录完成: {fname}")
+                        except Exception as e:
+                            log(f"转录失败 {fname}: {e}")
             browser.close()
 
 if __name__ == "__main__":
