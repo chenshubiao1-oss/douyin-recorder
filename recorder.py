@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """抖音直播监控录制器 - 多房间同时录制 + 录制完成即实时上传 + 同步抽音频(用于转写)"""
-import os, sys, json, time, subprocess, re
+import os, sys, json, threading, time, subprocess, re
 from datetime import datetime
 
 ROOMS_FILE = os.environ.get("ROOMS_FILE", "rooms.txt")
