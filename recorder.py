@@ -31,15 +31,9 @@ def _try_eval(page, js, default=None):
         return default
 
 def _safe_reload(page):
-    """线程安全 reload，35秒超时保护"""
-    def _reload():
-        try: page.reload(wait_until="domcontentloaded", timeout=30000)
-        except: pass
+    """安全 reload（直接调用，无限等待但可捕获异常）"""
     try:
-        t = threading.Thread(target=_reload)
-        t.daemon = True
-        t.start()
-        t.join(timeout=35)
+        page.reload(wait_until="domcontentloaded", timeout=30000)
     except:
         pass
 
@@ -208,11 +202,12 @@ def upload_now(filepath, room_name):
     fname = os.path.basename(filepath)
     fsize = os.path.getsize(filepath)
     try:
-        import urllib.request
+        import urllib.request, urllib.parse
         release_tag = f"rec-{datetime.now().strftime('%Y%m%d')}"
         headers = {"Authorization": f"Bearer {GH_TOKEN}", "Content-Type": "application/json"}
-        d = json.dumps({"tag_name": release_tag, "name": f"录制 {datetime.now().strftime('%Y-%m-%d')}",
-                        "body": "自动上传", "target_commitish": "main"}).encode()
+        safe_tag = release_tag.encode('ascii', errors='replace').decode('ascii')
+        d = json.dumps({"tag_name": safe_tag, "name": safe_tag,
+                        "body": "auto upload", "target_commitish": "main"}).encode()
         req = urllib.request.Request(f"https://api.github.com/repos/{GH_REPO}/releases",
             data=d, headers=headers, method="POST")
         try:
@@ -220,16 +215,18 @@ def upload_now(filepath, room_name):
             rel_data = json.loads(resp.read())
         except urllib.error.HTTPError as e2:
             if e2.code == 422:
-                req2 = urllib.request.Request(f"https://api.github.com/repos/{GH_REPO}/releases/tags/{release_tag}", headers=headers)
+                req2 = urllib.request.Request(f"https://api.github.com/repos/{GH_REPO}/releases/tags/{safe_tag}", headers=headers)
                 rel_data = json.loads(urllib.request.urlopen(req2, timeout=URLLIB_TIMEOUT).read())
             else:
-                log(f"创建Release失败: {e2.code} {e2.read().decode('utf-8')[:150]}")
+                log(f"创建Release失败: {e2.code}")
                 return
         upload_url_template = rel_data.get('upload_url', '')
         if not upload_url_template:
             log("Release创建成功但无upload_url")
             return
-        upload_url = upload_url_template.replace('{?name,label}', f'?name={fname}')
+        # URL编码文件名（中文文件名需要编码）
+        safe_fname = urllib.parse.quote(fname.encode('utf-8'))
+        upload_url = upload_url_template.replace('{?name,label}', f'?name={safe_fname}')
         with open(filepath, 'rb') as f:
             file_data = f.read()
         upload_headers = {
