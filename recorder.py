@@ -124,7 +124,9 @@ def is_live_page(page):
         if text:
             for w in ['直播已结束','主播暂时离开','下播了','主播不在','当前没有直播','主播正在赶来的路上']:
                 if w in text: return False
-        return _try_eval(page, "!!document.querySelector('video')", False)
+        # 有些抖音直播间没有 <video> 标签（沉浸式UI/WebGL渲染）
+        # 已经通过 flv_pull_url 确认有流，所以直接返回 True
+        return True
     except:
         return False
 
