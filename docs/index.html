@@ -986,11 +986,11 @@ function openPreview(bwLink, name, type) {
 
   if (type==='video') {
 
-    body.innerHTML = '<div style="padding:0;"><div class="video-player-wrap"><video controls autoplay preload="auto" playsinline onerror="this.parentElement.innerHTML=\'<div class=preview-error>❌ 视频加载失败</div>\'"><source src="' + escAttr(rawUrl) + '" type="video/mp4"></video></div></div>';
+    body.innerHTML = '<div style="padding:0;"><div class="video-player-wrap"><video controls autoplay preload="auto" playsinline onerror="this.parentElement.innerHTML=\'<div class=preview-error>❌ 视频加载失败</div>\'"><source src="' + escAttr(bwLink) + '" type="video/mp4></video></div></div>';
 
   } else if (type==='audio') {
 
-    body.innerHTML = '<div class="audio-player-wrap"><div class="big-icon">🎵</div><audio controls autoplay preload="auto" style="width:100%" onerror="this.parentElement.innerHTML=\'<div class=preview-error>❌ 音频加载失败</div>\'"><source src="' + escAttr(rawUrl) + '" type="audio/wav"></audio></div>';
+    body.innerHTML = '<div class="audio-player-wrap"><div class="big-icon">🎵</div><audio controls autoplay preload="auto" style="width:100%" onerror="this.parentElement.innerHTML=\'<div class=preview-error>❌ 音频加载失败</div>\'"><source src="' + escAttr(bwLink) + '" type="audio/wav></audio></div>';
 
   } else if (type==='text') {
 
