@@ -519,7 +519,12 @@ def run():
                             log(f"[{rid}] waiting stream url ({attempt+1}/8)"); time.sleep(3)
                         if url:
                             aname = anchor_names.get(rid, room_names.get(rid, rid))
-                            proc, outfile, audio_proc, audiofile = start_recording(url, quality, rid, aname)
+                            if re.match(r'^\d+$', aname):
+                                try:
+                                    nn = get_anchor_name(page)
+                                    if nn: aname = nn
+                                except: pass
+
                             recordings[rid] = {"proc":proc,"outfile":outfile,"audio_proc":audio_proc,"audiofile":audiofile,"start":now}
                         else: log(f"[{rid}] failed to get stream url")
                 for rid in list(recordings.keys()):
@@ -584,4 +589,10 @@ if __name__ == "__main__":
     if TEST_MODE:
         run_test()
     else:
-        run()
+        run()new_name = anchor_names.get(nr["id"], room_names.get(nr["id"], nr["id"]))
+                            if re.match(r'^\d+$', new_name):
+                                try:
+                                    nn = get_anchor_name(new_page)
+                                    if nn: new_name = nn
+                                except: pass
+
