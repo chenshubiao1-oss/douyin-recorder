@@ -196,10 +196,11 @@ def navigate_page(page, room_id):
 def start_recording(url, quality, room_id, anchor_name=""):
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    base = f"{room_id}_{quality}_{ts}"
+    safe_name = re.sub(r'[\\/:*?"<>|]', '_', anchor_name) if anchor_name else room_id
+    base = f"{safe_name}_{quality}_{ts}"
     outfile = os.path.join(OUTPUT_DIR, f"{base}.mp4")
     audiofile = os.path.join(OUTPUT_DIR, f"{base}.wav")
-    with open(os.path.join(OUTPUT_DIR, f"{base}_meta.json"), "w", encoding="utf-8") as f:
+    with open(os.path.join(OUTPUT_DIR, f"{safe_name}_meta.json"), "w", encoding="utf-8") as f:
         json.dump({"room_id":room_id,"anchor_name":anchor_name,"filename":f"{base}.mp4","audio":f"{base}.wav","quality":quality}, f)
     log(f"开始录制: {anchor_name}/{base}.mp4 [{quality}] + 同步抽音频")
     proc = subprocess.Popen([FFMPEG,"-y","-loglevel","warning","-i",url,"-c","copy","-movflags","+faststart+frag_keyframe+empty_moov","-f","mp4",outfile],
@@ -218,7 +219,6 @@ def stop_proc(proc):
 def upload_now(filepath, room_name):
     if not filepath or not os.path.exists(filepath): return
     fname = os.path.basename(filepath)
-    import re
     fsize = os.path.getsize(filepath)
     try:
         import urllib.request, urllib.parse
@@ -243,7 +243,7 @@ def upload_now(filepath, room_name):
         if not upload_url_template:
             log("Release创建成功但无upload_url")
             return
-        safe_fname = re.sub(r'[^a-zA-Z0-9._-]', '_', fname)
+        safe_fname = urllib.parse.quote(fname.encode('utf-8'))
         upload_url = upload_url_template.replace('{?name,label}', f'?name={safe_fname}')
         with open(filepath, 'rb') as f:
             file_data = f.read()
@@ -254,49 +254,24 @@ def upload_now(filepath, room_name):
         }
         upload_req = urllib.request.Request(upload_url, data=file_data, headers=upload_headers, method="POST")
         upload_resp = urllib.request.urlopen(upload_req, timeout=300)
-        try:
-            old_body = rel_data.get('body', '')
-            cn_entry = '\n' + room_name + '/' + fname
-            if cn_entry not in old_body:
-                new_body = old_body + cn_entry if old_body != 'auto upload' else 'auto upload' + cn_entry
-                patch_hdrs = {'Authorization': f'Bearer {GH_TOKEN}', 'Content-Type': 'application/json'}
-                patch_req = urllib.request.Request(upload_url_template.split('{')[0],
-                    data=json.dumps({'body': new_body}).encode(),
-                    headers=patch_hdrs, method='PATCH')
-                urllib.request.urlopen(patch_req, timeout=URLLIB_TIMEOUT)
-        except Exception as _eb:
-            log(f"body update failed: {_eb}")
-        log(f"upload OK: {room_name}/{fname} -> [{safe_fname}] ({fsize/1024/1024:.1f}MB)")
+        log(f"实时上传成功: {room_name}/{fname} ({fsize/1024/1024:.1f}MB) -> Release")
     except Exception as e:
         log(f"上传异常: {e}")
 
-def handle_room_end(rid, recordings, room_names, now, model_obj=None):
-    rec = recordings.pop(rid, None)
-    if not rec: return
-    # Upload original files FIRST (before stopping processes, to survive cancel)
+def handle_room_end(rid, recordings, room_names, now):
+    rec = recordings.pop(rid)
+    stop_proc(rec.get("proc"))
+    stop_proc(rec.get("audio_proc"))
     for key in ["outfile", "audiofile"]:
         f = rec.get(key)
         if f and os.path.exists(f):
-            try:
-                upload_now(f, room_names.get(rid, rid))
-            except Exception as e:
-                log(f"[{rid}] upload error: {e}")
-    # Then stop processes (with timeout)
-    try:
-        p = rec.get("proc")
-        if p: p.terminate(); p.wait(timeout=5)
-    except: pass
-    try:
-        ap = rec.get("audio_proc")
-        if ap: ap.terminate(); ap.wait(timeout=5)
-    except: pass
-    recording_failed.pop(rid, None)
+            upload_now(f, room_names.get(rid, rid))
     # 实时转录
     wav_file = rec.get("audiofile")
     if wav_file and os.path.exists(wav_file):
         try:
             from transcriber import transcribe
-            txt_path, srt_path = transcribe(wav_file, model=model_obj)
+            txt_path, srt_path = transcribe(wav_file)
             if txt_path and os.path.exists(txt_path):
                 upload_now(txt_path, room_names.get(rid, rid))
             if srt_path and os.path.exists(srt_path):
@@ -304,8 +279,12 @@ def handle_room_end(rid, recordings, room_names, now, model_obj=None):
             log(f"转录完成 [{room_names.get(rid,rid)}]")
         except Exception as e:
             log(f"转录失败 [{rid}]: {e}")
-    # Keep page open for re-detection (do NOT close it)
-    log(f"[{room_names.get(rid,rid)}] recording ended, page kept open for re-detection")
+    # 关闭页面
+    if rid in pages:
+        try: pages[rid].close()
+        except: pass
+        del pages[rid]
+        log(f"[{room_names.get(rid,rid)}] 页面已关闭")
 
 def run_test():
     from transcriber import transcribe
@@ -394,8 +373,6 @@ def run():
                     loop_start = time.time()
                     now = time.time()
                     elapsed = now - start_time
-                    # recording_failed = {}  # defined at module level
-
                     if elapsed > MAX_DURATION:
                         log(f"任务超时 ({elapsed/3600:.1f}h)，退出"); break
                     if now - last_refresh > 30:
@@ -434,7 +411,7 @@ def run():
                         for rid in list(pages.keys()):
                             if rid not in new_ids:
                                 log(f"房间已移除: {room_names.get(rid,rid)}")
-                                if rid in recordings: handle_room_end(rid, recordings, anchor_names, now, model_obj)
+                                if rid in recordings: handle_room_end(rid, recordings, anchor_names, now)
                                 try: pages[rid].close()
                                 except: pass
                                 del pages[rid]
@@ -460,9 +437,6 @@ def run():
                             log(f"[{room_names.get(rid,rid)}] is_live={'ONAIR' if live else 'OFF'}")
                             prev_live[rid] = live
                         if live and rid not in recordings:
-                            fail_time = recording_failed.get(rid, 0)
-                            if time.time() - fail_time < 60:
-                                continue
                             log(f"[{room_names.get(rid,rid)}] 检测到开播!")
                             _safe_reload(page)
                             time.sleep(5)
@@ -472,23 +446,14 @@ def run():
                                 log(f"[{rid}] 等待推流地址... ({attempt+1}/8)"); time.sleep(3)
                             if url:
                                 aname = anchor_names.get(rid, room_names.get(rid, rid))
-                                if re.match(r'^\d+$', aname):
-                                    try:
-                                        nn = get_anchor_name(page)
-                                        if nn: aname = nn
-                                    except: pass
-                                try:
-                                    proc, outfile, audio_proc, audiofile = start_recording(url, quality, rid, aname)
-                                    recordings[rid] = {"proc":proc,"outfile":outfile,"audio_proc":audio_proc,"audiofile":audiofile,"start":now}
-                                except Exception as _se:
-                                    log(f"[{rid}] start_recording failed: {_se}")
-                                    recording_failed[rid] = time.time()
+                                proc, outfile, audio_proc, audiofile = start_recording(url, quality, rid, aname)
+                                recordings[rid] = {"proc":proc,"outfile":outfile,"audio_proc":audio_proc,"audiofile":audiofile,"start":now}
                             else: log(f"[{rid}] 获取推流地址失败")
                         if rid in recordings and not live:
-                            handle_room_end(rid, recordings, anchor_names, now, model_obj)
+                            handle_room_end(rid, recordings, anchor_names, now)
                     for rid in list(recordings.keys()):
                         if time.time()-recordings[rid]["start"] > MAX_DURATION:
-                            handle_room_end(rid, recordings, anchor_names, time.time(), model_obj)
+                            handle_room_end(rid, recordings, anchor_names, time.time())
                     # 续命：运行270分钟（4.5小时）后触发下一轮
                     if elapsed > 270*60 and not _renew_triggered:
                         try:
@@ -513,14 +478,14 @@ def run():
                         log("看门狗触发：本轮执行超时，跳过进入下一轮")
                 except Exception as _e:
                     import traceback as _tb
-                    log(f'main loop crash: {_e}')
+                    log(f"main loop crash: {_e}")
                     log(_tb.format_exc())
                     time.sleep(10)
         except KeyboardInterrupt: log("用户中断")
         except: pass  # 其他异常
         finally:
             # 1. 正常结束当前录制任务
-            for rid in list(recordings.keys()): handle_room_end(rid, recordings, anchor_names, time.time(), model_obj)
+            for rid in list(recordings.keys()): handle_room_end(rid, recordings, anchor_names, time.time())
             # 2. 清理未结束的页面
             for p in pages.values():
                 try: p.close()
