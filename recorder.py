@@ -3,7 +3,9 @@
 import os, sys, json, threading, time, subprocess, re
 from datetime import datetime
 
-WATCHDOG_TIMEOUT = 180  # 主循环看门狗（秒）超过则认为本轮卡死，跳过
+WATCHDOG_TIMEOUT = 180
+WATCHDOG_ITER_SEC = 120  # per-iteration hard limit
+_iter_watchdog = None  # 主循环看门狗（秒）超过则认为本轮卡死，跳过
 URLLIB_TIMEOUT = 30     # urllib 请求超时（秒）
 PAGE_EVAL_TIMEOUT = 30000  # page.evaluate 超时(ms)
 
@@ -28,6 +30,15 @@ def _try_eval(page, js, default=None):
         return page.evaluate(js, timeout=PAGE_EVAL_TIMEOUT)
     except Exception:
         return default
+
+def _iter_timeout_hard(pg):
+    """Thread watchdog: force close page when iteration timeout."""
+    try:
+        log(f"IWATCHDOG: iteration {WATCHDOG_ITER_SEC}s timeout - closing page")
+        pg.close()
+    except:
+        pass
+
 
 def _safe_reload(page):
     try:
@@ -387,9 +398,13 @@ def run():
                     anchor_names[r["id"]] = aname
                     log(f"  主播昵称: {aname}")
             start_time = last_refresh = time.time()
+            _iter_watchdog = None
             while True:
                 try:
                     loop_start = time.time()
+                    _iter_watchdog = threading.Timer(WATCHDOG_ITER_SEC, lambda pg=page: _iter_timeout_hard(pg))
+                    _iter_watchdog.daemon = True
+                    _iter_watchdog.start()
                     now = time.time()
                     elapsed = now - start_time
                     if elapsed > MAX_DURATION:
@@ -496,11 +511,13 @@ def run():
                         except Exception as e:
                             log(f"续命失败: {e}")
                         _renew_triggered = True
+                    if _iter_watchdog: _iter_watchdog.cancel(); _iter_watchdog = None
                     time.sleep(CHECK_INTERVAL)
                     if time.time() - loop_start > WATCHDOG_TIMEOUT:
                         log("看门狗触发：本轮执行超时，跳过进入下一轮")
                 except Exception as _e:
                     import traceback as _tb
+                    if _iter_watchdog: _iter_watchdog.cancel(); _iter_watchdog = None
                     log(f"main loop crash: {_e}")
                     log(_tb.format_exc())
                     time.sleep(10)
