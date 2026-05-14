@@ -1,29 +1,4 @@
 #!/usr/bin/env python3
-
-# ====== 防卡死机制 ======
-import threading
-WATCHDOG_TIMEOUT = 180  # 秒，主循环最大执行时间
-PAGE_EVAL_TIMEOUT = 30000  # page.evaluate 超时(ms)
-
-def _try_eval(page, js, default=None):
-    """安全包装 page.evaluate，超时或异常返回默认值"""
-    try:
-        return page.evaluate(js, timeout=PAGE_EVAL_TIMEOUT)
-    except:
-        return default
-
-def _safe_reload(page):
-    """线程安全 reload，35s 超时"""
-    def _reload():
-                    _safe_reload(page)
-    try:
-        t = threading.Thread(target=_reload)
-        t.daemon = True
-        t.start()
-        t.join(timeout=35)
-    except:
-        pass
-
 """抖音直播监控录制器 - 多房间同时录制 + 录制完成即实时上传 + 同步抽音频(用于转写)"""
 import os, sys, json, time, subprocess, re
 from datetime import datetime
@@ -411,7 +386,7 @@ def run():
                             prev_live.pop(rid, None)
                     log(f"周期性刷新页面... ({len(pages)}个房间)")
                     for rid, page in pages.items():
-                                    _safe_reload(page)
+                        _safe_reload(page)
                     last_refresh = now
                 for rid, page in pages.items():
                     try: live = is_live_page(page)
@@ -422,7 +397,8 @@ def run():
                         prev_live[rid] = live
                     if live and rid not in recordings:
                         log(f"[{room_names.get(rid,rid)}] 检测到开播!")
-                                    _safe_reload(page)
+                        try: page.reload(wait_until="domcontentloaded",timeout=30000); time.sleep(5)
+                        except: pass
                         for attempt in range(8):
                             quality, url = get_stream_url(page, rid)
                             if url: break
@@ -450,4 +426,20 @@ if __name__ == "__main__":
     if TEST_MODE:
         run_test()
     else:
-        run()
+        run()def _try_eval(page, js, default=None):
+    try:
+        return page.evaluate(js, timeout=PAGE_EVAL_TIMEOUT)
+    except:
+        return default
+
+def _safe_reload(page):
+    def _reload():
+        try: page.reload(wait_until="domcontentloaded", timeout=30000)
+        except: pass
+    try:
+        t = threading.Thread(target=_reload)
+        t.daemon = True; t.start(); t.join(timeout=35)
+    except:
+        pass
+
+
