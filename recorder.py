@@ -264,14 +264,23 @@ def handle_room_end(rid, recordings, room_names, now, model_obj=None):
     """Stop recording, upload files, split WAV into 10min chunks for transcription, merge."""
     rec = recordings.pop(rid, None)
     if not rec: return
-    stop_proc(rec.get("proc"))
-    stop_proc(rec.get("audio_proc"))
-    
-    # Upload original files
+    # Upload original files FIRST (before stopping processes, to survive cancel)
     for key in ["outfile", "audiofile"]:
         f = rec.get(key)
         if f and os.path.exists(f):
-            upload_now(f, room_names.get(rid, rid))
+            try:
+                upload_now(f, room_names.get(rid, rid))
+            except Exception as e:
+                log(f"[{rid}] upload error: {e}")
+    # Then stop processes (with timeout)
+    try:
+        p = rec.get("proc")
+        if p: p.terminate(); p.wait(timeout=5)
+    except: pass
+    try:
+        ap = rec.get("audio_proc")
+        if ap: ap.terminate(); ap.wait(timeout=5)
+    except: pass
     
     # Split WAV into 10min chunks and transcribe
     wav_file = rec.get("audiofile")
