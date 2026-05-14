@@ -117,8 +117,10 @@ def _try_eval(page, js, default=None):
         return default
 
 def is_live_page(page):
-    """判断直播间是否在直播。极简版：排除已结束关键词即视为直播中"""
+    """判断直播间是否在直播。等待页面稳定后检测"直播已结束"关键词"""
     try:
+        # 等页面稳定后再检测，给"直播已结束"等文字足够的渲染时间
+        time.sleep(8)
         text = _try_eval(page, "document.body?.innerText?.slice(0,500)||''", '')
         if text:
             for w in ['直播已结束','主播暂时离开','下播了','主播不在','当前没有直播','主播正在赶来的路上']:
