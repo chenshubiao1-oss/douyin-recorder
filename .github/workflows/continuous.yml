@@ -16,6 +16,7 @@ on:
         required: false
         default: '60'
   schedule:
+    - cron: '45 7 * * *'   # TH_14:45 = UTC 07:45
     - cron: '0 22 * * *'  # 泰国05:00 = UTC 22:00
     - cron: '30 2 * * *'  # 泰国09:30 = UTC 02:30
     - cron: '0 7 * * *'   # 泰国14:00 = UTC 07:00
