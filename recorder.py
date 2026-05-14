@@ -288,7 +288,8 @@ def run_test():
         log(f"直播间: {'ONAIR' if live else 'OFF'}")
         
         if live:
-            _safe_reload(page)except:
+            _safe_reload(page)
+        except:
                 log("reload超时，继续使用当前页面状态")
             for attempt in range(8):
                 quality, url = get_stream_url(page, TEST_ROOM)
