@@ -340,7 +340,7 @@ def run():
                 elapsed = now - start_time
                 if elapsed > MAX_DURATION:
                     log(f"任务超时 ({elapsed/3600:.1f}h)，退出"); break
-                if now - last_refresh > 300:
+                if now - last_refresh > 30:
                     new_rooms = load_rooms_from_github()
                     for nr in new_rooms:
                         if nr["id"] not in pages:
