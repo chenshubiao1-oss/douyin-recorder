@@ -33,6 +33,7 @@ body {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  overflow-x: hidden;
 }
 
 .header {
@@ -96,7 +97,7 @@ body {
 .file-row {
   display: flex; align-items: center; gap: 12px; padding: 10px 14px;
   background: var(--surface); border: 1px solid transparent; border-radius: 8px;
-  transition: all 0.2s; cursor: default;
+  transition: all 0.2s;
 }
 .file-row:hover { background: var(--surface2); border-color: var(--border); }
 .file-row .icon-badge {
@@ -111,12 +112,20 @@ body {
 .file-row .fmeta .fsub { font-size: 11px; color: var(--text-dim); margin-top: 2px; display: flex; align-items: center; gap: 8px; }
 .file-row .fmeta .fsub .fsize { font-family: 'JetBrains Mono', monospace; }
 .file-row .fmeta .fsub .release-tag { color: var(--accent2); }
-.file-row a.dl {
-  padding: 6px 14px; border-radius: 6px; background: var(--accent3); color: #fff; text-decoration: none;
-  font-size: 12px; font-weight: 500; transition: background 0.2s; flex-shrink: 0;
+.file-row .actions { display: flex; gap: 6px; flex-shrink: 0; }
+.file-row .actions button, .file-row .actions a {
+  padding: 6px 12px; border-radius: 6px; border: none; font-size: 12px; font-family: 'Noto Sans SC', sans-serif;
+  cursor: pointer; font-weight: 500; transition: all 0.15s; text-decoration: none; display: inline-block;
 }
-.file-row a.dl:hover { background: #5a4bd1; }
-.file-row a.dl:active { transform: scale(0.97); }
+.file-row .actions .preview-btn {
+  background: var(--surface3); color: var(--text);
+}
+.file-row .actions .preview-btn:hover { background: var(--accent3); color: #fff; }
+.file-row .actions .dl-btn {
+  background: var(--accent3); color: #fff;
+}
+.file-row .actions .dl-btn:hover { background: #5a4bd1; }
+.file-row .actions .dl-btn:active { transform: scale(0.97); }
 
 .loading { text-align: center; padding: 60px 20px; color: var(--text-dim); }
 .loading .spinner {
@@ -137,11 +146,95 @@ body {
 }
 .toast.show { opacity: 1; }
 
+/* Modal */
+.modal-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85);
+  backdrop-filter: blur(12px); z-index: 3000; justify-content: center; align-items: center;
+}
+.modal-overlay.show { display: flex; }
+.modal {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+  width: 92%; max-width: 900px; max-height: 90vh; overflow: hidden;
+  display: flex; flex-direction: column; box-shadow: 0 24px 80px rgba(0,0,0,0.7);
+  animation: modalIn 0.25s ease;
+}
+@keyframes modalIn {
+  from { opacity: 0; transform: scale(0.95) translateY(16px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+.modal-top {
+  display: flex; align-items: center; gap: 12px; padding: 16px 20px;
+  border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.modal-top .back {
+  width: 32px; height: 32px; border-radius: 8px; background: var(--surface2); border: none;
+  color: var(--text-dim); cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center;
+}
+.modal-top .back:hover { background: var(--surface3); color: var(--text); }
+.modal-top .mtitle { flex: 1; font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.modal-top .close {
+  width: 32px; height: 32px; border-radius: 8px; background: transparent; border: none;
+  color: var(--text-dim); cursor: pointer; font-size: 20px; display: flex; align-items: center; justify-content: center;
+}
+.modal-top .close:hover { color: var(--text); }
+
+/* Modal body — scrollable content */
+.modal-scroll {
+  overflow-y: auto; flex: 1; padding: 20px;
+}
+
+/* Player styles */
+.video-player-wrap {
+  position: relative; width: 100%; background: #000; border-radius: 8px; overflow: hidden;
+}
+.video-player-wrap video {
+  width: 100%; display: block; max-height: 60vh;
+}
+.audio-player-wrap {
+  padding: 20px; text-align: center;
+}
+.audio-player-wrap .big-icon { font-size: 64px; margin-bottom: 16px; }
+.audio-player-wrap audio { width: 100%; }
+
+.text-viewer {
+  padding: 0; white-space: pre-wrap; font-family: 'Noto Sans SC', sans-serif;
+  font-size: 14px; line-height: 1.8; color: var(--text);
+}
+.text-viewer .line { padding: 2px 0; }
+.text-viewer .line.timestamp { color: var(--accent4); font-size: 12px; }
+.text-viewer .line.timestamp::before { content: '⏱ '; }
+.text-viewer .line.sep { height: 4px; }
+
+/* SRT viewer */
+.srt-viewer { font-family: 'Noto Sans SC', sans-serif; }
+.srt-viewer .cue {
+  padding: 8px 12px; margin-bottom: 4px; border-radius: 6px;
+  background: var(--surface2); border-left: 3px solid var(--green);
+}
+.srt-viewer .cue .timecode {
+  font-size: 11px; color: var(--green); font-family: 'JetBrains Mono', monospace; margin-bottom: 4px;
+}
+.srt-viewer .cue .text {
+  font-size: 14px; line-height: 1.6;
+}
+
+/* Loading state in modal */
+.preview-loading { text-align: center; padding: 40px; color: var(--text-dim); }
+.preview-loading .spinner {
+  width: 32px; height: 32px; border: 3px solid var(--surface2); border-top-color: var(--accent);
+  border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 12px;
+}
+
+/* Error */
+.preview-error { text-align: center; padding: 40px; color: var(--accent); }
+
 @media (max-width: 640px) {
   .header { padding: 24px 16px 20px; }
   .container { padding: 16px; }
   .filters { flex-direction: column; }
   .filters .search-wrap { min-width: 100%; }
+  .modal { width: 100%; max-height: 100vh; border-radius: 0; }
+  .file-row .actions button, .file-row .actions a { padding: 4px 8px; font-size: 11px; }
 }
 </style>
 </head>
@@ -150,7 +243,7 @@ body {
 <div class="header">
   <div class="header-content">
     <h1>🎬 抖音录制文件浏览器</h1>
-    <p>直播间录制 / 音频 / 转录文字 — 按主播分组浏览</p>
+    <p>直播间录制 / 音频 / 转录文字 — 在线预览与下载</p>
     <div class="stats-bar">
       <div class="stat-item"><span class="num" id="stat-files">-</span> 文件</div>
       <div class="stat-item"><span class="num" id="stat-anchors">-</span> 主播</div>
@@ -186,9 +279,24 @@ body {
 
 <div class="toast" id="toast"></div>
 
+<!-- Preview Modal -->
+<div class="modal-overlay" id="previewModal">
+  <div class="modal">
+    <div class="modal-top">
+      <button class="back" onclick="closePreview()">←</button>
+      <div class="mtitle" id="previewTitle">预览</div>
+      <button class="close" onclick="closePreview()">✕</button>
+    </div>
+    <div class="modal-scroll" id="previewBody">
+      <div class="preview-loading"><div class="spinner"></div><p>加载中...</p></div>
+    </div>
+  </div>
+</div>
+
 <script>
 const REPO = 'tangwei880620-rgb/douyin-recorder';
 const API = 'https://api.github.com';
+const RAW = 'https://raw.githubusercontent.com';
 let allAssets = [];
 
 function fmtSize(bytes) {
@@ -204,22 +312,12 @@ function fmtDateTime(iso) {
   return d.toLocaleString('zh-CN', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' });
 }
 
-/** Extract anchor nickname from filename like:
- *  "越南女婿果子的抖音直播间直播_FULL_HD1_20260514_084451.mp4"
- *  "东哥闯越南-东阜的抖音直播间直播_FULL_HD1_20260514_084446.wav"
- *  "火火在越南88888（珍）的抖音直播间直播_FULL_HD1_20260514_080557.wav"
- */
 function extractNickname(name) {
-  let n = name.replace(/\.\w+$/, ''); // remove extension
-  // Remove FULL_HD suffix
+  let n = name.replace(/\.\w+$/, '');
   n = n.replace(/_(FULL_HD\d?|HD\d?)/g, '');
-  // Remove trailing datetime _YYYYMMDD_HHMMSS
   n = n.replace(/_\d{8}_\d{6}$/, '');
-  // Remove "的抖音直播间直播" or "的抖音直播间"
   n = n.replace(/的抖音直播间直播$/, '').replace(/的抖音直播间$/, '');
-  // Remove "（珍）" etc
   n = n.replace(/[（(].*?[）)]/g, '');
-  // Remove room id patterns (pure digits at end)
   n = n.replace(/\d{6,}$/, '');
   return n.trim() || name;
 }
@@ -236,8 +334,17 @@ function getIcon(type) {
   return { video: '🎬', audio: '🎵', text: '📄', srt: '💬' }[type] || '📄';
 }
 
+/** Convert GitHub browser download URL to raw URL */
+function toRawUrl(browserUrl) {
+  // https://github.com/owner/repo/releases/download/tag/file
+  const m = browserUrl.match(/github\.com\/([^\/]+)\/([^\/]+)\/releases\/download\/([^\/]+)\/(.+)/);
+  if (m) {
+    return `https://raw.githubusercontent.com/${m[1]}/${m[2]}/refs/tags/${m[3]}/${m[4]}`;
+  }
+  return browserUrl;
+}
+
 function getReleaseTag(name) {
-  // Try to extract date from filename for grouping by day
   const m = name.match(/_(\d{8})_/);
   return m ? m[1] : null;
 }
@@ -265,7 +372,8 @@ async function loadData() {
           id: asset.id,
           name: asset.name,
           size: asset.size,
-          url: asset.browser_download_url,
+          browserUrl: asset.browser_download_url,
+          rawUrl: toRawUrl(asset.browser_download_url),
           created_at: asset.created_at || rel.created_at,
           type,
           nickname,
@@ -275,7 +383,6 @@ async function loadData() {
       }
     }
 
-    // Sort by date descending
     allAssets.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
     document.getElementById('stat-files').textContent = allAssets.length;
@@ -299,28 +406,24 @@ function renderFiles() {
     return true;
   });
 
-  // Group by nickname
   const groups = {};
   filtered.forEach(a => {
-    const key = a.nickname;
-    if (!groups[key]) groups[key] = [];
-    groups[key].push(a);
+    if (!groups[a.nickname]) groups[a.nickname] = [];
+    groups[a.nickname].push(a);
   });
 
-  // Sort anchors by most recent file
   const sorted = Object.entries(groups).sort((a, b) => {
-    const latestA = Math.max(...a[1].map(x => new Date(x.created_at)));
-    const latestB = Math.max(...b[1].map(x => new Date(x.created_at)));
-    return latestB - latestA;
+    const la = Math.max(...a[1].map(x => new Date(x.created_at)));
+    const lb = Math.max(...b[1].map(x => new Date(x.created_at)));
+    return lb - la;
   });
 
   const content = document.getElementById('content');
   if (sorted.length === 0) {
-    content.innerHTML = `<div class="empty-state"><div class="big-icon">📭</div><p>没有找到匹配的文件</p></div>`;
+    content.innerHTML = `<div class="empty-state"><div class="big-icon">📭</div><p>没有找到匹配的�的$!{A}文件</p></div>`;
     return;
   }
 
-  // Assign avatar colors based on nickname hash
   function getAvatarColor(name) {
     const colors = ['#ff4d6a','#ffb347','#6c5ce7','#00d2ff','#00e676','#ff6b6b','#48dbfb','#f368e0','#ff9ff3','#54a0ff','#5f27cd','#01a3a4'];
     let hash = 0;
@@ -329,19 +432,16 @@ function renderFiles() {
   }
 
   function getInitials(name) {
-    // Take first Chinese character or first letter
     const m = name.match(/^([\u4e00-\u9fa5])/);
     return m ? m[1] : name.charAt(0);
   }
 
   let html = '';
   sorted.forEach(([nickname, items]) => {
-    // Group files by type within anchor
     const video = items.filter(i => i.type === 'video');
     const audio = items.filter(i => i.type === 'audio');
     const text  = items.filter(i => i.type === 'text');
     const srt   = items.filter(i => i.type === 'srt');
-
     const color = getAvatarColor(nickname);
     const initials = getInitials(nickname);
     const dates = [...new Set(items.map(i => i.date))].sort().reverse();
@@ -355,7 +455,7 @@ function renderFiles() {
       <div class="anchor-header">
         <div class="avatar" style="background:${color}20;color:${color}">${initials}</div>
         <div class="info">
-          <div class="name">${nickname}</div>
+          <div class="name">${escHtml(nickname)}</div>
           <div class="sub">${types.join(' · ')} · ${dates[0]}${dates.length > 1 ? ' ~ ' + dates[dates.length-1] : ''}</div>
         </div>
       </div>
@@ -363,18 +463,22 @@ function renderFiles() {
 
     const ordered = [...video, ...audio, ...text, ...srt];
     ordered.forEach(item => {
-      const dateStr = item.date.slice(0,4) + '-' + item.date.slice(4,6) + '-' + item.date.slice(6,8);
+      const dt = item.date.slice(0,4) + '-' + item.date.slice(4,6) + '-' + item.date.slice(6,8);
+      const canPreview = item.type === 'video' || item.type === 'audio' || item.type === 'text' || item.type === 'srt';
       html += `<div class="file-row icon-${item.type}">
         <div class="icon-badge">${getIcon(item.type)}</div>
         <div class="fmeta">
-          <div class="fname">${item.name}</div>
+          <div class="fname">${escHtml(item.name)}</div>
           <div class="fsub">
             <span class="fsize">${fmtSize(item.size)}</span>
-            <span>${dateStr}</span>
+            <span>${dt}</span>
             <span class="release-tag">${item.release_tag}</span>
           </div>
         </div>
-        <a class="dl" href="${item.url}" target="_blank" onclick="showToast('⚡ 开始下载')">下载</a>
+        <div class="actions">
+          <button class="preview-btn" onclick="previewFile('${escAttr(item.rawUrl)}','${escAttr(item.name)}','${item.type}')">预览</button>
+          <a class="dl-btn" href="${item.browserUrl}" target="_blank">下载</a>
+        </div>
       </div>`;
     });
 
@@ -384,12 +488,106 @@ function renderFiles() {
   content.innerHTML = html;
 }
 
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function escAttr(s) {
+  return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function closePreview() {
+  // Stop any playing media
+  const body = document.getElementById('previewBody');
+  const vids = body.querySelectorAll('video');
+  vids.forEach(v => { v.pause(); v.src = ''; });
+  const auds = body.querySelectorAll('audio');
+  auds.forEach(a => { a.pause(); a.src = ''; });
+  body.innerHTML = '';
+  document.getElementById('previewModal').classList.remove('show');
+  document.body.style.overflow = '';
+}
+
+async function previewFile(rawUrl, name, type) {
+  const modal = document.getElementById('previewModal');
+  const title = document.getElementById('previewTitle');
+  const body = document.getElementById('previewBody');
+  title.textContent = name;
+  body.innerHTML = `<div class="preview-loading"><div class="spinner"></div><p>加载中...</p></div>`;
+  modal.classList.add('show');
+  document.body.style.overflow = 'hidden';
+
+  try {
+    if (type === 'video') {
+      body.innerHTML = `<div style="padding:0;">
+        <div class="video-player-wrap">
+          <video controls autoplay preload="auto" playsinline
+            onerror="this.parentElement.innerHTML='<div class=preview-error>❌ 视频加载失败，请下载后播放</div>'">
+            <source src="${rawUrl}" type="video/mp4">
+            您的浏览器不支持视频播放
+          </video>
+        </div>
+      </div>`;
+    } else if (type === 'audio') {
+      body.innerHTML = `<div class="audio-player-wrap">
+        <div class="big-icon">🎵</div>
+        <audio controls autoplay preload="auto" style="width:100%"
+          onerror="this.parentElement.innerHTML='<div class=preview-error>❌ 音频加载失败，请下载后播放</div>'">
+          <source src="${rawUrl}" type="audio/wav">
+          您的浏览器不支持音频播放
+        </audio>
+      </div>`;
+    } else if (type === 'text') {
+      const resp = await fetch(rawUrl);
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const text = await resp.text();
+      let html = '<div class="text-viewer">';
+      text.split('\n').forEach(line => {
+        const trimmed = line.trim();
+        if (!trimmed) { html += '<div class="sep"></div>'; return; }
+        const isTime = /^\[\d{2}:\d{2}:\d{2}/.test(trimmed);
+        html += `<div class="line${isTime ? ' timestamp' : ''}">${escHtml(line)}</div>`;
+      });
+      html += '</div>';
+      body.innerHTML = html;
+    } else if (type === 'srt') {
+      const resp = await fetch(rawUrl);
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const text = await resp.text();
+      let html = '<div class="srt-viewer">';
+      const cues = text.split('\n\n');
+      cues.forEach(cue => {
+        const lines = cue.split('\n').filter(l => l.trim());
+        if (lines.length < 3) return;
+        // Index, timecode, rest is text
+        const timecode = lines[1];
+        const textLines = lines.slice(2).filter(l => l.trim());
+        html += `<div class="cue">
+          <div class="timecode">${escHtml(timecode)}</div>
+          <div class="text">${textLines.map(l => escHtml(l)).join('<br>')}</div>
+        </div>`;
+      });
+      html += '</div>';
+      body.innerHTML = html;
+    }
+  } catch (e) {
+    body.innerHTML = `<div class="preview-error">❌ 加载失败: ${e.message}</div>`;
+  }
+}
+
 function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), 2000);
 }
+
+// Close modal on overlay click + Escape key
+document.getElementById('previewModal').addEventListener('click', function(e) {
+  if (e.target === this) closePreview();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closePreview();
+});
 
 loadData();
 </script>
