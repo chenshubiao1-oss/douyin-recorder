@@ -1015,7 +1015,9 @@ function openPreview(bwLink, name, type) {
     body.innerHTML = '<div class="audio-player-wrap"><div class="big-icon">\ud83c\udfb5</div><audio controls preload="metadata" style="width:100%" onerror="this.innerHTML=\'<div class=preview-error>\u97f3\u9891\u65e0\u6cd5\u64ad\u653e\uff0c\u8bf7\u70b9\u51fb\u4e0b\u8f7d\u6309\u94ae</div>\'"><source src="' + escAttr(bwLink) + '" type="audio/wav"></audio></div>';
   } else if (type==='text') {
     // Use raw.githubusercontent.com for text/SRT (GitHub Release redirects break CORS)
-    var rawUrl = 'https://raw.githubusercontent.com/' + REPO + '/rec-' + new Date().toISOString().slice(0,10).replace(/-/g,'') + '/' + encodeURIComponent(name);
+    // Extract release tag from bwLink: https://github.com/REPO/releases/download/TAG/NAME
+    var tag = bwLink.split('/download/')[1].split('/')[0];
+    var rawUrl = 'https://raw.githubusercontent.com/' + REPO + '/' + tag + '/' + encodeURIComponent(name);
     fetch(rawUrl, { mode: 'cors' }).then(function(r) {
       if (!r.ok) {
         // Fallback: try the browser_download_url directly (for old files)
@@ -1032,7 +1034,8 @@ function openPreview(bwLink, name, type) {
       body.innerHTML = h + '</div>';
     }).catch(function(e) { body.innerHTML = '<div class="preview-error">\u274c ' + e.message + '<br><span style=font-size:13px>\u8bf7\u70b9\u51fb\u4e0b\u8f7d\u76f4\u63a5\u67e5\u770b</span></div>'; });
   } else if (type==='srt') {
-    var rawUrl2 = 'https://raw.githubusercontent.com/' + REPO + '/rec-' + new Date().toISOString().slice(0,10).replace(/-/g,'') + '/' + encodeURIComponent(name);
+    var tag2 = bwLink.split('/download/')[1].split('/')[0];
+    var rawUrl2 = 'https://raw.githubusercontent.com/' + REPO + '/' + tag2 + '/' + encodeURIComponent(name);
     fetch(rawUrl2, { mode: 'cors' }).then(function(r) {
       if (!r.ok) {
         return fetch(bwLink).then(function(r2) { return r2.text(); });
