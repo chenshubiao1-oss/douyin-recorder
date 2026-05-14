@@ -15,24 +15,21 @@ FFMPEG = os.environ.get("FFMPEG", "ffmpeg")
 GH_REPO = os.environ.get("GH_REPO", "")
 GH_TOKEN = os.environ.get("GH_TOKEN", "")
 
-# 测试模式: 录制指定房间60秒后立即转写并退出
 TEST_MODE = os.environ.get("TEST_MODE", "")
 TEST_ROOM = os.environ.get("TEST_ROOM", "344763580")
 TEST_DURATION = int(os.environ.get("TEST_DURATION", "60"))
 
 recordings = {}
 _renew_triggered = False
-_refresh_counter = 0  # 滚动刷新计数器
+_refresh_counter = 0
 
 def _try_eval(page, js, default=None):
-    """安全的 page.evaluate，带 timeout，异常返回 default"""
     try:
         return page.evaluate(js, timeout=PAGE_EVAL_TIMEOUT)
     except Exception:
         return default
 
 def _safe_reload(page):
-    """安全 reload（直接调用，无限等待但可捕获异常）"""
     try:
         page.reload(wait_until="domcontentloaded", timeout=30000)
     except:
@@ -133,7 +130,6 @@ def is_live_page(page):
     except: return False
 
 def get_anchor_name(page):
-    """从抖音直播间页面提取主播真实昵称"""
     try:
         title = page.evaluate("document.title || ''")
         if title:
@@ -184,7 +180,7 @@ def start_recording(url, quality, room_id, anchor_name=""):
     audiofile = os.path.join(OUTPUT_DIR, f"{base}.wav")
     with open(os.path.join(OUTPUT_DIR, f"{safe_name}_meta.json"), "w", encoding="utf-8") as f:
         json.dump({"room_id":room_id,"anchor_name":anchor_name,"filename":f"{base}.mp4","audio":f"{base}.wav","quality":quality}, f)
-    log(f"开始录制: {anchor_name}/{base}.mp4 [{quality}]  + 同步抽音频")
+    log(f"开始录制: {anchor_name}/{base}.mp4 [{quality}] + 同步抽音频")
     proc = subprocess.Popen([FFMPEG,"-y","-loglevel","warning","-i",url,"-c","copy","-movflags","+faststart+frag_keyframe+empty_moov","-f","mp4",outfile],
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     audio_proc = subprocess.Popen([FFMPEG,"-y","-loglevel","warning","-i",url,"-vn","-acodec","pcm_s16le","-ar","16000","-ac","1",audiofile],
@@ -225,7 +221,6 @@ def upload_now(filepath, room_name):
         if not upload_url_template:
             log("Release创建成功但无upload_url")
             return
-        # URL编码文件名（中文文件名需要编码）
         safe_fname = urllib.parse.quote(fname.encode('utf-8'))
         upload_url = upload_url_template.replace('{?name,label}', f'?name={safe_fname}')
         with open(filepath, 'rb') as f:
@@ -242,7 +237,6 @@ def upload_now(filepath, room_name):
         log(f"上传异常: {e}")
 
 def handle_room_end(rid, recordings, room_names, now):
-    """停止录制并上传视频+音频"""
     rec = recordings.pop(rid)
     stop_proc(rec.get("proc"))
     stop_proc(rec.get("audio_proc"))
@@ -250,9 +244,27 @@ def handle_room_end(rid, recordings, room_names, now):
         f = rec.get(key)
         if f and os.path.exists(f):
             upload_now(f, room_names.get(rid, rid))
+    # 实时转录
+    wav_file = rec.get("audiofile")
+    if wav_file and os.path.exists(wav_file):
+        try:
+            from transcriber import transcribe
+            txt_path, srt_path = transcribe(wav_file)
+            if txt_path and os.path.exists(txt_path):
+                upload_now(txt_path, room_names.get(rid, rid))
+            if srt_path and os.path.exists(srt_path):
+                upload_now(srt_path, room_names.get(rid, rid))
+            log(f"转录完成 [{room_names.get(rid,rid)}]")
+        except Exception as e:
+            log(f"转录失败 [{rid}]: {e}")
+    # 关闭页面
+    if rid in pages:
+        try: pages[rid].close()
+        except: pass
+        del pages[rid]
+        log(f"[{room_names.get(rid,rid)}] 页面已关闭")
 
 def run_test():
-    """测试模式: 录制 -> 转写 -> 退出"""
     from transcriber import transcribe
     log(f"测试模式: 录制 {TEST_ROOM} {TEST_DURATION}秒后转写")
     with sync_playwright() as p:
@@ -352,7 +364,6 @@ def run():
                             anchor_names[nr["id"]] = aname if aname else nr["name"]
                             room_names[nr["id"]] = nr["name"]
                             log(f"  主播昵称: {aname}")
-                            # 新房间立即检测是否在直播
                             try:
                                 new_live = is_live_page(new_page)
                             except:
@@ -384,11 +395,8 @@ def run():
                             room_names.pop(rid, None)
                             anchor_names.pop(rid, None)
                             prev_live.pop(rid, None)
-                    # 不再周期性刷新页面——下播页面已关闭，下次自动重新打开
-                    # 已开播的房间页面保持常开，每15秒evaluate检测状态
-                    # 房间增删仍然检测（rooms.txt变化时处理）
                     last_refresh = now
-                # 检查下播后关闭的页面是否需要重新打开（每轮都检查已关闭的房间）
+                # 重新打开已关闭的页面（下播后关闭的）
                 for rid in list(prev_live.keys()):
                     if rid not in pages:
                         log(f"[{room_names.get(rid,rid)}] 重新打开页面检查...")
@@ -420,17 +428,10 @@ def run():
                         else: log(f"[{rid}] 获取推流地址失败")
                     if rid in recordings and not live:
                         handle_room_end(rid, recordings, anchor_names, now)
-                        # 下播后关闭页面
-                        if rid in pages:
-                            try: pages[rid].close()
-                            except: pass
-                            del pages[rid]
-                            log(f"[{anchor_names.get(rid,rid)}] 页面已关闭")
                 for rid in list(recordings.keys()):
                     if time.time()-recordings[rid]["start"] > MAX_DURATION:
                         handle_room_end(rid, recordings, anchor_names, time.time())
                 time.sleep(CHECK_INTERVAL)
-                # 看门狗：如果本轮循环超过阈值，忽略剩余代码直接进入下一轮
                 if time.time() - loop_start > WATCHDOG_TIMEOUT:
                     log("看门狗触发：本轮执行超时，跳过进入下一轮")
         except KeyboardInterrupt: log("用户中断")
