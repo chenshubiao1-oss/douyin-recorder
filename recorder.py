@@ -78,7 +78,7 @@ from playwright.sync_api import sync_playwright
 def get_stream_url(page, room_id):
     js = r"""
     () => {
-        const scripts = document.querySelectorAll('script:not([src])');
+        const scripts = document.querySelectorAll('script');
         for (const s of scripts) {
             const t = s.textContent || '';
             if (!t.includes('flv_pull_url')) continue;
