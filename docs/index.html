@@ -829,103 +829,79 @@ function extractNickname(name) {
 
 
 async function loadData() {
-
   try {
+    var roomsText = '';
+    // Try raw.githubusercontent.com first (avoids base64/atob issues)
+    try {
+      var simple = await fetch('https://raw.githubusercontent.com/' + REPO + '/main/rooms.txt');
+      if (simple.ok) {
+        roomsText = await simple.text();
+      }
+    } catch(e) {
+      // Fallback to GitHub API content method
+      try {
+        var roomsResp = await fetch(API + '/repos/' + REPO + '/contents/rooms.txt');
+        var roomsData = await roomsResp.json();
+        if (roomsData && roomsData.content) {
+          var raw64 = roomsData.content.replace(/\n/g, '');
+          var rawStr = atob(raw64);
+          var esc = '';
+          for (var i = 0; i < rawStr.length; i++) {
+            esc += '%' + ('00' + rawStr.charCodeAt(i).toString(16)).slice(-2);
+          }
+          roomsText = decodeURIComponent(esc);
+        }
+      } catch(e2) {}
+    }
 
-    var roomsResp = await fetch(API + '/repos/' + REPO + '/contents/rooms.txt');
+    window.roomMap = [];
+    if (roomsText) {
+      var rooms = roomsText.split('\n').filter(function(l) { return l.trim() && !l.startsWith('#'); }).map(function(l) {
+        var parts = l.split('=');
+        var r = { id: parts[0].trim(), name: parts[1] ? parts[1].trim() : parts[0].trim() };
+        window.roomMap.push(r);
+        return r;
+      });
+    }
 
-    var roomsData = await roomsResp.json();
-        var roomsText = _utf8_decode(atob(roomsData.content.replace(/\n/g, '')));
-
-        window.roomMap = []; rooms = roomsText.split('\n').filter(function(l) { return l.trim() && !l.startsWith('#'); }).map(function(l) {
-
-          var parts = l.split('=');
-
-          var r = { id: parts[0].trim(), name: parts[1] ? parts[1].trim() : parts[0].trim() };
-
-          window.roomMap.push(r);
-
-          return r;
-
-        });
-
-
-        var page = 1, all = [];
+    var page = 1, all = [];
 
     while (true) {
-
       var resp = await fetch(API + '/repos/' + REPO + '/releases?per_page=100&page=' + page);
-
       if (!resp.ok) break;
-
       var data = await resp.json();
-
       if (data.length === 0) break;
-
       all = all.concat(data);
-
       page++;
-
     }
-
     allReleases = all.filter(function(r) { return r.assets && r.assets.length > 0; });
 
-
-
     allAssets = [];
-
     for (var ri = 0; ri < allReleases.length; ri++) {
-
       var rel = allReleases[ri];
-
       for (var ai = 0; ai < rel.assets.length; ai++) {
-
         var asset = rel.assets[ai];
-
         var type = getType(asset.name);
-
         var anchor = extractNickname(asset.name);
-
         anchors.add(anchor);
-
         allAssets.push({
-
           id: asset.id, name: asset.name, size: asset.size,
-
           browser_download_url: asset.browser_download_url,
-
           rawUrl: toRawUrl(asset.browser_download_url),
-
           created_at: asset.created_at || rel.created_at,
-
           type: type, anchor: anchor,
-
           release_tag: rel.tag_name, release_name: rel.name || rel.tag_name, release_url: rel.html_url,
-
         });
-
       }
-
     }
 
-
-
     allAssets.sort(function(a,b){ return new Date(b.created_at)-new Date(a.created_at); });
-
     populateFilters();
-
     renderAssets();
-
   } catch (e) {
-
-    document.getElementById('content').innerHTML = '<div class="empty-state"><div class="big-icon">❌</div><p>加载失败: ' + e.message + '</p></div>';
-
+    document.getElementById('content').innerHTML = '<div class="empty-state"><div class="big-icon">\u274c</div><p>\u52a0\u8f7d\u5931\u8d25: ' + e.message + '</p></div>';
   }
-
 }
-
-
-
 function populateFilters() {
 
   var selA = document.getElementById('anchorFilter');
