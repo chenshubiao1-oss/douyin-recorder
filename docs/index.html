@@ -1467,7 +1467,12 @@ async async function loadData() {
 
 
 
-    function _utf8_decode(s) {
+    
+
+function _utf8_encode(s) {
+  return btoa(unescape(encodeURIComponent(s)));
+}
+function _utf8_decode(s) {
 
   return decodeURIComponent(Array.prototype.map.call(s, function(c) {
 
