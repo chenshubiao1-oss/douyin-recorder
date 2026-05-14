@@ -715,8 +715,7 @@ async function loadData() {
 
     var roomsData = await roomsResp.json();
 
-    var roomsText = atob(roomsData.content.replace(/
-/g, ""));
+    var roomsText = atob(roomsData.content.replace(/\n/g, ""));
 
     window.roomMap = []; rooms = roomsText.split('\n').filter(function(l) { return l.trim() && !l.startsWith('#'); }).map(function(l) {
 
