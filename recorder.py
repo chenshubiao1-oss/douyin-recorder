@@ -14,6 +14,7 @@ OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "/tmp/recordings")
 FFMPEG = os.environ.get("FFMPEG", "ffmpeg")
 GH_REPO = os.environ.get("GH_REPO", "")
 GH_TOKEN = os.environ.get("GH_TOKEN", "")
+SEGMENT_DURATION = 600  # segment every 10 min for transcription
 
 TEST_MODE = os.environ.get("TEST_MODE", "")
 TEST_ROOM = os.environ.get("TEST_ROOM", "344763580")
@@ -445,6 +446,16 @@ def run():
                         except:
                             log(f"[{room_names.get(rid,rid)}] 页面打开失败")
                 for rid, page in list(pages.items()):
+                    # If already recording: check ffmpeg process
+                    if rid in recordings:
+                        proc = recordings[rid].get("proc")
+                        if proc and proc.poll() is not None:
+                            log(f"[{anchor_names.get(rid,rid)}] ffmpeg process exited, stream ended")
+                            segment_and_transcribe(rid, recordings, anchor_names)
+                            handle_room_end(rid, recordings, anchor_names, now)
+                            continue
+                        continue
+                    # Not recording: check page for stream
                     try: live = is_live_page(page)
                     except: live = False
                     prev = prev_live.get(rid)
@@ -452,24 +463,49 @@ def run():
                         log(f"[{room_names.get(rid,rid)}] is_live={'ONAIR' if live else 'OFF'}")
                         prev_live[rid] = live
                     if live and rid not in recordings:
-                        log(f"[{room_names.get(rid,rid)}] 检测到开播!")
+                        log(f"[{room_names.get(rid,rid)}] detected ONAIR!")
                         _safe_reload(page)
                         time.sleep(5)
                         for attempt in range(8):
                             quality, url = get_stream_url(page, rid)
                             if url: break
-                            log(f"[{rid}] 等待推流地址... ({attempt+1}/8)"); time.sleep(3)
+                            log(f"[{rid}] waiting stream url ({attempt+1}/8)"); time.sleep(3)
                         if url:
                             aname = anchor_names.get(rid, room_names.get(rid, rid))
                             proc, outfile, audio_proc, audiofile = start_recording(url, quality, rid, aname)
                             recordings[rid] = {"proc":proc,"outfile":outfile,"audio_proc":audio_proc,"audiofile":audiofile,"start":now,"segment_start":now}
-                        else: log(f"[{rid}] 获取推流地址失败")
-                    if rid in recordings and not live:
-                        handle_room_end(rid, recordings, anchor_names, now)
+                        else: log(f"[{rid}] failed to get stream url")
                 for rid in list(recordings.keys()):
-                    if time.time()-recordings[rid]["start"] > MAX_DURATION:
+                    elapsed_rec = time.time() - recordings[rid]["start"]
+                    seg_elapsed = time.time() - recordings[rid].get("segment_start", recordings[rid]["start"])
+                    if elapsed_rec > MAX_DURATION:
+                        segment_and_transcribe(rid, recordings, anchor_names)
                         handle_room_end(rid, recordings, anchor_names, time.time())
-                # 续命：运行270分钟（4.5小时）后触发下一轮
+                    elif seg_elapsed > SEGMENT_DURATION:
+                        log(f"[{anchor_names.get(rid,rid)}] segment end ({seg_elapsed:.0f}s), transcribing...")
+                        segment_and_transcribe(rid, recordings, anchor_names)
+                        pg = pages.get(rid)
+                        url = None
+                        if pg:
+                            try:
+                                _safe_reload(pg)
+                                time.sleep(5)
+                                for attempt in range(8):
+                                    quality, url = get_stream_url(pg, rid)
+                                    if url: break
+                                    log(f"[{rid}] waiting stream url ({attempt+1}/8)")
+                                    time.sleep(3)
+                            except:
+                                url = None
+                        if url:
+                            now2 = time.time()
+                            proc, outfile, audio_proc, audiofile = start_recording(url, quality, rid, anchor_names.get(rid, rid))
+                            recordings[rid] = {"proc": proc, "outfile": outfile, "audio_proc": audio_proc, "audiofile": audiofile,
+                                               "start": recordings[rid]["start"], "segment_start": now2}
+                            log(f"[{anchor_names.get(rid,rid)}] new segment started")
+                        else:
+                            log(f"[{rid}] could not restart segment, ending")
+                            handle_room_end(rid, recordings, anchor_names, time.time())
                 if elapsed > 270*60 and not _renew_triggered:
                     try:
                         import urllib.request, json
