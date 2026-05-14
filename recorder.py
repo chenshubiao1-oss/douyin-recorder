@@ -422,24 +422,33 @@ def run():
                 except: pass
             browser.close()
 
-if __name__ == "__main__":
-    if TEST_MODE:
-        run_test()
-    else:
-        run()def _try_eval(page, js, default=None):
+
+# ====== 防卡死机制 ======
+WATCHDOG_TIMEOUT = 180  # 秒，主循环最大执行时间
+PAGE_EVAL_TIMEOUT = 30000  # page.evaluate 超时(ms)
+
+def _try_eval(page, js, default=None):
+    """安全包装 page.evaluate，超时或异常返回默认值"""
     try:
         return page.evaluate(js, timeout=PAGE_EVAL_TIMEOUT)
     except:
         return default
 
 def _safe_reload(page):
+    """线程安全 reload，35s 超时"""
     def _reload():
         try: page.reload(wait_until="domcontentloaded", timeout=30000)
         except: pass
     try:
         t = threading.Thread(target=_reload)
-        t.daemon = True; t.start(); t.join(timeout=35)
+        t.daemon = True
+        t.start()
+        t.join(timeout=35)
     except:
         pass
 
-
+if __name__ == "__main__":
+    if TEST_MODE:
+        run_test()
+    else:
+        run()
