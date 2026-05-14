@@ -117,16 +117,35 @@ def _try_eval(page, js, default=None):
         return default
 
 def is_live_page(page):
+    """检测直播间是否正在直播。综合多种方法：flv_pull_url + text + 页面URL状态"""
     try:
-        if not _try_eval(page, """() => {const s=document.querySelectorAll('script:not([src])');for(const x of s){if((x.textContent||'').includes('flv_pull_url'))return true}return false}""", False):
-            return False
-        text = _try_eval(page, "document.body?.innerText?.slice(0,300)||''", '')
+        # 方法1: 检查页面中是否包含结束关键词
+        text = _try_eval(page, "document.body?.innerText?.slice(0,500)||''", '')
         if text:
             for w in ['直播已结束','主播暂时离开','下播了','主播不在','当前没有直播','主播正在赶来的路上']:
-                if w in text: return False
-        # 有些抖音直播间没有 <video> 标签（沉浸式UI/WebGL渲染）
-        # 已经通过 flv_pull_url 确认有流，所以直接返回 True
-        return True
+                if w in text:
+                    return False
+        
+        # 方法2: 搜索所有 script 标签（包括带src的）中的 flv_pull_url
+        has_flv = _try_eval(page, """() => {
+            const allScripts = document.querySelectorAll('script');
+            for (const s of allScripts) {
+                const t = s.textContent || '';
+                if (t.includes('flv_pull_url') || t.includes('pull_url')) return true;
+            }
+            const html = document.documentElement.outerHTML || '';
+            return html.includes('flv_pull_url');
+        }""", False)
+        
+        if has_flv:
+            return True
+        
+        # 方法3: 检查URL是否仍在直播间页面
+        url = _try_eval(page, "window.location.href", '')
+        if '/live.douyin.com/' in url:
+            return False
+        
+        return False
     except:
         return False
 
