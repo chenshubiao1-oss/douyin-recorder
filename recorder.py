@@ -133,9 +133,13 @@ def get_anchor_name(page):
     try:
         title = page.evaluate("document.title || ''")
         if title:
-            name = title.replace(' 正在直播', '').replace(' 的直播间', '').replace(' - 抖音', '').strip()
-            if name:
-                return name
+            # 跳过默认标题（页面未完全加载时的通用标题）
+            if '抖音直播' in title and ('电脑版' in title or '网页版' in title or '入口' in title):
+                pass  # 默认标题，跳过
+            else:
+                name = title.replace(' 正在直播', '').replace(' 的直播间', '').replace(' - 抖音', '').strip()
+                if name:
+                    return name
         js = """() => {
             const scripts = document.querySelectorAll('script:not([src])');
             for (const s of scripts) {
