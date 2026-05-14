@@ -110,7 +110,7 @@ def is_live_page(page):
         text = page.evaluate("document.body?.innerText?.slice(0,300)||''")
         for w in ['直播已结束','主播暂时离开','下播了','主播不在','当前没有直播','主播正在赶来的路上']:
             if w in text: return False
-        return page.evaluate("!!document.querySelector('video')")
+        return True
     except: return False
 
 def get_anchor_name(page):
