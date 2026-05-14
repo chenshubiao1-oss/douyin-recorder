@@ -115,7 +115,7 @@ def get_stream_url(page, room_id):
     }
     """
     try:
-        raw = _try_eval(page, js, '')  # 用 _try_eval 代替 page.evaluate
+        raw = page.evaluate(js)
         if raw:
             streams = json.loads(raw)
             priority = {"FULL_HD1": 4, "HD1": 3, "SD1": 2, "SD2": 1}
@@ -379,6 +379,7 @@ def run():
                     if live and rid not in recordings:
                         log(f"[{room_names.get(rid,rid)}] 检测到开播!")
                         _safe_reload(page)
+                        time.sleep(5)
                         for attempt in range(8):
                             quality, url = get_stream_url(page, rid)
                             if url: break
