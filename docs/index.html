@@ -342,11 +342,19 @@ function extractNickname(name) {
   n = n.replace(/_\d{8}_\d{6}$/, '');
   n = n.replace(/的抖音直播间直播$/, '').replace(/的抖音直播间$/, '');
   n = n.replace(/[（(].*?[）)]/g, '');
-  n = n.replace(/\d{6,}$/, '');
-  return n.trim() || name;
-}
-
-function toRawUrl(browserUrl) {
+  // If only digits remain, look up room name
+  if (/^\d+$/.test(n)) {
+    for (var i = 0; i < window.roomMap.length; i++) {
+      if (window.roomMap[i].id === n) {
+        return window.roomMap[i].name;
+      }
+    }
+    return '房间 ' + n;
+  }
+  n = n.replace(/^-\.?/, '');
+  n = n.trim();
+  return n || name;
+}function toRawUrl(browserUrl) {
   var m = browserUrl.match(/github\.com\/([^\/]+)\/([^\/]+)\/releases\/download\/([^\/]+)\/(.+)/);
   if (m) return 'https://raw.githubusercontent.com/' + m[1] + '/' + m[2] + '/refs/tags/' + m[3] + '/' + m[4];
   return browserUrl;
@@ -361,9 +369,11 @@ async function loadData() {
     var roomsResp = await fetch(API + '/repos/' + REPO + '/contents/rooms.txt');
     var roomsData = await roomsResp.json();
     var roomsText = atob(roomsData.content.replace(/\n/g, ''));
-    rooms = roomsText.split('\n').filter(function(l) { return l.trim() && !l.startsWith('#'); }).map(function(l) {
+    window.roomMap = []; rooms = roomsText.split('\n').filter(function(l) { return l.trim() && !l.startsWith('#'); }).map(function(l) {
       var parts = l.split('=');
-      return { id: parts[0].trim(), name: parts[1] ? parts[1].trim() : parts[0].trim() };
+      var r = { id: parts[0].trim(), name: parts[1] ? parts[1].trim() : parts[0].trim() };
+      window.roomMap.push(r);
+      return r;
     });
 
     var page = 1, all = [];
