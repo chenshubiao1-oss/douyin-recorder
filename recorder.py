@@ -589,4 +589,4 @@ if __name__ == "__main__":
     if TEST_MODE:
         run_test()
     else:
-        run(
+        run()
