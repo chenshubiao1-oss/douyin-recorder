@@ -529,7 +529,7 @@ def run():
                         else: log(f"[{rid}] failed to get stream url")
                 for rid in list(recordings.keys()):
                     if time.time()-recordings[rid].get("start", 0) > MAX_DURATION:
-                        handle_room_end(rid, recordings, anchor_names, time.time(, model_obj))
+                        handle_room_end(rid, recordings, anchor_names, time.time(), model_obj))
                 if elapsed > 270*60 and not _renew_triggered:
                     try:
                         import urllib.request, json
@@ -557,7 +557,7 @@ def run():
             # 1. 正常结束当前录制任务
             for rid in list(recordings.keys()):
                 # Stop + transcribe remaining recording
-                handle_room_end(rid, recordings, anchor_names, time.time(, model_obj))
+                handle_room_end(rid, recordings, anchor_names, time.time(), model_obj))
             # 2. 清理未结束的页面
             for p in pages.values():
                 try: p.close()
