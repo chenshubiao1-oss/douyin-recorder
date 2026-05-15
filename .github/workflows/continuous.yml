@@ -2,6 +2,8 @@ name: 24h连续监控
 
 on:
   workflow_dispatch:
+  repository_dispatch:
+    types: [record_lives]
     inputs:
       test_mode:
         description: '测试模式: 录制60秒+转写'
