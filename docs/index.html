@@ -524,13 +524,7 @@ body {
 
       <div class="stat-item"><span class="num" id="stat-releases">-</span> Release</div>
 
-  <!-- Add Room -->
-  <div class="add-room-bar">
-    <input type="text" id="newRoomId" placeholder="主播房间ID" style="width:140px;padding:5px 8px;border:1px solid #444;border-radius:4px;background:#222;color:#eee;font-size:13px;">
-    <input type="text" id="newRoomName" placeholder="显示名称(可选)" style="width:140px;padding:5px 8px;border:1px solid #444;border-radius:4px;background:#222;color:#eee;font-size:13px;margin-left:4px;">
-
-    
-  </div>
+  
 
 
 
@@ -819,12 +813,13 @@ function extractNickname(name) {
     for (var i = 0; i < window.roomMap.length; i++) {
       if (window.roomMap[i].id === roomId) {
         var n = window.roomMap[i].name;
-        if (/^[0-9]+$/.test(n)) return '\u672a\u5206\u7c7b'; // unmapped
+        if (/^[0-9]+$/.test(n)) return roomId; // use room id as fallback
         return n;
       }
     }
+    return roomId; // not in roomMap, use room id
   }
-  return '\u672a\u5206\u7c7b';
+  return name.split('_')[0]; // use first segment of filename
 }
 
 async function loadData() {
