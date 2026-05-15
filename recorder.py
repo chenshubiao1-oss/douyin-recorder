@@ -203,6 +203,50 @@ def navigate_page(page, room_id):
             pass
     time.sleep(5)
 
+
+def update_rooms_nickname(anchor_names):
+    """Update rooms.txt with detected anchor names = roomId=nickname format"""
+    if not GH_REPO or not GH_TOKEN or not anchor_names:
+        return
+    try:
+        req = urllib.request.Request(f'https://api.github.com/repos/{GH_REPO}/contents/rooms.txt',
+            headers={'Authorization': f'Bearer {GH_TOKEN}', 'Accept': 'application/vnd.github+json'})
+        resp = urllib.request.urlopen(req, timeout=15)
+        d = json.loads(resp.read())
+        content = base64.b64decode(d['content']).decode('utf-8')
+        sha = d['sha']
+        lines = content.split('\n')
+        changed = False
+        for i, line in enumerate(lines):
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            parts = line.split('=', 1)
+            rid = parts[0].strip()
+            if rid in anchor_names:
+                nickname = anchor_names[rid]
+                if nickname and nickname != rid and not re.match(r'^\d+$', nickname):
+                    if len(parts) == 1:
+                        # Pure ID, no nickname - add it
+                        lines[i] = f'{rid}={nickname}'
+                        changed = True
+                    elif len(parts) > 1:
+                        # Already has nickname, update if different
+                        old_name = parts[1].strip()
+                        if old_name != nickname:
+                            lines[i] = f'{rid}={nickname}'
+                            changed = True
+        if changed:
+            new_content = '\n'.join(lines)
+            new_b64 = base64.b64encode(new_content.encode('utf-8')).decode()
+            put_req = urllib.request.Request(f'https://api.github.com/repos/{GH_REPO}/contents/rooms.txt',
+                data=json.dumps({'message': f'auto-update nickname(s)', 'content': new_b64, 'sha': sha}).encode(),
+                headers={'Authorization': f'Bearer {GH_TOKEN}', 'Content-Type': 'application/json'}, method='PUT')
+            urllib.request.urlopen(put_req, timeout=15)
+            log(f"rooms.txt 昵称已自动更新")
+    except Exception as e:
+        log(f"更新rooms.txt昵称失败: {e}")
+
 def start_recording(url, quality, room_id, anchor_name=""):
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -392,6 +436,7 @@ def run():
                 if aname:
                     anchor_names[r["id"]] = aname
                     log(f"  主播昵称: {aname}")
+                    update_rooms_nickname(anchor_names)
             start_time = last_refresh = time.time()
             _iter_watchdog = None
             while True:
@@ -416,6 +461,7 @@ def run():
                                 anchor_names[nr["id"]] = aname if aname else nr["name"]
                                 room_names[nr["id"]] = nr["name"]
                                 log(f"  主播昵称: {aname}")
+                                update_rooms_nickname(anchor_names)
                                 try:
                                     new_live = is_live_page(new_page)
                                 except:
