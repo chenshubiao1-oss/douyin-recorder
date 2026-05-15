@@ -387,6 +387,7 @@ def run():
         browser = p.chromium.launch(headless=True, args=["--no-sandbox","--disable-gpu","--disable-dev-shm-usage"])
         context = browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36", viewport={"width":1280,"height":720})
         pages, room_names, anchor_names = {}, {}, {}
+        global _renew_triggered
         prev_live = {}
         model_obj = None
         try:
