@@ -305,16 +305,67 @@ def handle_room_end(rid, recordings, room_names, now, model_obj=None):
     # 实时转录
     wav_file = rec.get("audiofile")
     if wav_file and os.path.exists(wav_file):
-        try:
+        wav_sz = os.path.getsize(wav_file) if os.path.exists(wav_file) else 0
+        if wav_sz > 50 * 1024 * 1024:
+            log(f"audio large ({wav_sz/1024/1024:.0f}MB) chunking...")
             from transcriber import transcribe
-            txt_path, srt_path = transcribe(wav_file, model=model_obj)
-            if txt_path and os.path.exists(txt_path):
-                upload_now(txt_path, room_names.get(rid, rid))
-            if srt_path and os.path.exists(srt_path):
-                upload_now(srt_path, room_names.get(rid, rid))
-            log(f"转录完成 [{room_names.get(rid,rid)}]")
-        except Exception as e:
-            log(f"转录失败 [{rid}]: {e}")
+            wd = os.path.dirname(wav_file)
+            wb = os.path.splitext(os.path.basename(wav_file))[0]
+            chunk_pat = os.path.join(wd, wb + '_chunk_%03d.wav')
+            sp = subprocess.Popen([FFMPEG, '-y', '-loglevel', 'warning', '-i', wav_file,
+                '-f', 'segment', '-segment_time', '600', '-acodec', 'pcm_s16le', '-ar', '16000', '-ac', '1', chunk_pat],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            sp.wait(timeout=600)
+            cfs = sorted([f for f in os.listdir(wd) if f.startswith(wb + '_chunk_') and f.endswith('.wav')])
+            all_t, all_s = [], []
+            for cf in cfs:
+                cp = os.path.join(wd, cf)
+                try:
+                    tp, sp2 = transcribe(cp, model=model_obj)
+                    if tp and os.path.exists(tp):
+                        with open(tp, 'r', encoding='utf-8') as _f: all_t.append(_f.read())
+                        os.remove(tp)
+                    if sp2 and os.path.exists(sp2):
+                        with open(sp2, 'r', encoding='utf-8') as _f: all_s.append(_f.read())
+                        os.remove(sp2)
+                except:
+                    pass
+                finally:
+                    try: os.remove(cp)
+                    except: pass
+            if all_t:
+                mt = os.path.join(wd, wb + '.txt')
+                with open(mt, 'w', encoding='utf-8') as _f: _f.write('
+
+'.join(all_t))
+                upload_now(mt, room_names.get(rid, rid))
+            if all_s:
+                ms = os.path.join(wd, wb + '.srt')
+                ln = 0
+                with open(ms, 'w', encoding='utf-8') as _f:
+                    for seg in all_s:
+                        for line in seg.split('
+'):
+                            if line.strip().isdigit():
+                                ln += 1; _f.write(str(ln) + '
+')
+                            else: _f.write(line + '
+')
+                    _f.write('
+')
+                upload_now(ms, room_names.get(rid, rid))
+            log(f"chunk transcribe done [{room_names.get(rid,rid)}] ({len(cfs)} parts)")
+        else:
+            try:
+                from transcriber import transcribe
+                txt_path, srt_path = transcribe(wav_file, model=model_obj)
+                if txt_path and os.path.exists(txt_path):
+                    upload_now(txt_path, room_names.get(rid, rid))
+                if srt_path and os.path.exists(srt_path):
+                    upload_now(srt_path, room_names.get(rid, rid))
+                log(f"transcribe done [{room_names.get(rid,rid)}]")
+            except Exception as e:
+                log(f"transcribe fail [{rid}]: {e}")
     # Keep page open for re-detection (do NOT close)
     log(f"[{room_names.get(rid,rid)}] recording ended, page kept open for re-detection")
 
