@@ -551,16 +551,66 @@ def run():
                         if os.path.exists(srt_path):
                             continue  # 已转录，跳过
                         log(f"扫描到未转录音频: {fname}，开始转录...")
-                        try:
-                            from transcriber import transcribe
-                            txt_path, srt_path = transcribe(wav_path)
-                            if txt_path and os.path.exists(txt_path):
-                                upload_now(txt_path, base)
-                            if srt_path and os.path.exists(srt_path):
-                                upload_now(srt_path, base)
-                            log(f"转录完成: {fname}")
-                        except Exception as e:
-                            log(f"转录失败 {fname}: {e}")
+                            wav_oom2 = os.path.getsize(wav_path)
+                            if wav_oom2 > 50 * 1024 * 1024:
+                                log(f"audio ({wav_oom2/1024/1024:.0f}MB) chunking...")
+                                from transcriber import transcribe
+                                wd2 = os.path.dirname(wav_path)
+                                wb2 = os.path.splitext(os.path.basename(wav_path))[0]
+                                cp2 = os.path.join(wd2, wb2 + '_chunk_%03d.wav')
+                                sp2 = subprocess.Popen([FFMPEG, '-y', '-loglevel', 'warning', '-i', wav_path,
+                                    '-f', 'segment', '-segment_time', '600', '-acodec', 'pcm_s16le', '-ar', '16000', '-ac', '1', cp2],
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                                sp2.wait(timeout=600)
+                                cfs2 = sorted([f for f in os.listdir(wd2) if f.startswith(wb2 + '_chunk_') and f.endswith('.wav')])
+                                all_t2, all_s2 = [], []
+                                for cf2 in cfs2:
+                                    cp2 = os.path.join(wd2, cf2)
+                                    try:
+                                        tp2, sp3 = transcribe(cp2)
+                                        if tp2 and os.path.exists(tp2):
+                                            with open(tp2, 'r', encoding='utf-8') as _f: all_t2.append(_f.read())
+                                            os.remove(tp2)
+                                        if sp3 and os.path.exists(sp3):
+                                            with open(sp3, 'r', encoding='utf-8') as _f: all_s2.append(_f.read())
+                                            os.remove(sp3)
+                                    except: pass
+                                    finally:
+                                        try: os.remove(cp2)
+                                        except: pass
+                                if all_t2:
+                                    mt2 = os.path.join(wd2, wb2 + '.txt')
+                                    with open(mt2, 'w', encoding='utf-8') as _f: _f.write('
+
+'.join(all_t2))
+                                    upload_now(mt2, base)
+                                if all_s2:
+                                    ms2 = os.path.join(wd2, wb2 + '.srt')
+                                    ln2 = 0
+                                    with open(ms2, 'w', encoding='utf-8') as _f:
+                                        for seg2 in all_s2:
+                                            for line2 in seg2.split('
+'):
+                                                if line2.strip().isdigit():
+                                                    ln2 += 1; _f.write(str(ln2) + '
+')
+                                                else: _f.write(line2 + '
+')
+                                        _f.write('
+')
+                                    upload_now(ms2, base)
+                                log(f"chunk done: {fname}")
+                            else:
+                                try:
+                                    from transcriber import transcribe
+                                    txt_path, srt_path = transcribe(wav_path)
+                                    if txt_path and os.path.exists(txt_path):
+                                        upload_now(txt_path, base)
+                                    if srt_path and os.path.exists(srt_path):
+                                        upload_now(srt_path, base)
+                                    log(f"transcribe done: {fname}")
+                                except Exception as e:
+                                    log(f"transcribe fail {fname}: {e}")
             browser.close()
 
 if __name__ == "__main__":
