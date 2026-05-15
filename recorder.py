@@ -270,9 +270,11 @@ def upload_now(filepath, room_name):
             cn_entry = '\n' + room_name + '/' + fname
             if cn_entry not in old_body:
                 new_body = old_body + cn_entry if old_body != 'auto upload' else 'auto upload' + cn_entry
-                patch_hdrs = {'Authorization': f'Bearer {GH_TOKEN}', 'Content-Type': 'application/json'}
+                patch_hdrs = {'Authorization': f'Bearer {GH_TOKEN}', 'Content-Type': 'application/json; charset=utf-8'}
+                # Ensure proper unicode JSON
+                body_json = json.dumps({'body': new_body}, ensure_ascii=False).encode('utf-8')
                 patch_req = urllib.request.Request(upload_url_template.split('{')[0],
-                    data=json.dumps({'body': new_body}).encode(),
+                    data=body_json,
                     headers=patch_hdrs, method='PATCH')
                 urllib.request.urlopen(patch_req, timeout=30)
         except Exception as _eb:
