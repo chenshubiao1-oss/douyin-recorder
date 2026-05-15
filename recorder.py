@@ -335,24 +335,19 @@ def handle_room_end(rid, recordings, room_names, now, model_obj=None):
                     except: pass
             if all_t:
                 mt = os.path.join(wd, wb + '.txt')
-                with open(mt, 'w', encoding='utf-8') as _f: _f.write('
-
-'.join(all_t))
+                with open(mt, 'w', encoding='utf-8') as _f: _f.write(chr(10)*2.join(all_t))
                 upload_now(mt, room_names.get(rid, rid))
             if all_s:
                 ms = os.path.join(wd, wb + '.srt')
                 ln = 0
                 with open(ms, 'w', encoding='utf-8') as _f:
                     for seg in all_s:
-                        for line in seg.split('
-'):
+                        for line in seg.split(chr(10)):
                             if line.strip().isdigit():
-                                ln += 1; _f.write(str(ln) + '
-')
+                                ln += 1; _f.write(str(ln) + chr(10))
                             else: _f.write(line + '
 ')
-                    _f.write('
-')
+                    _f.write(chr(10))
                 upload_now(ms, room_names.get(rid, rid))
             log(f"chunk transcribe done [{room_names.get(rid,rid)}] ({len(cfs)} parts)")
         else:
@@ -640,15 +635,13 @@ def run():
                                     ln2 = 0
                                     with open(ms2, 'w', encoding='utf-8') as _f:
                                         for seg2 in all_s2:
-                                            for line2 in seg2.split('
-'):
+                                            for line2 in seg2.split(chr(10)):
                                                 if line2.strip().isdigit():
                                                     ln2 += 1; _f.write(str(ln2) + '
 ')
                                                 else: _f.write(line2 + '
 ')
-                                        _f.write('
-')
+                                        _f.write(chr(10))
                                     upload_now(ms2, base)
                                 log(f"chunk done: {fname}")
                             else:
