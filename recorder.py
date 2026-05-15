@@ -388,6 +388,7 @@ def run():
         context = browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36", viewport={"width":1280,"height":720})
         pages, room_names, anchor_names = {}, {}, {}
         prev_live = {}
+        model_obj = None
         try:
             for r in rooms:
                 page = context.new_page()
