@@ -311,42 +311,88 @@ function bdel(){
 
 
 var chr=String.fromCharCode;
+
 function rm(){
-  var m=document.getElementById('rm');if(m.classList.contains('show')){m.classList.remove('show');return}
-  document.getElementById('rl').innerHTML='';
+  var m=document.getElementById('rm');
+  if(m.classList.contains('show')){m.classList.remove('show');return}
+  m.classList.add('show');
+  var tb=document.getElementById('rb');
+  tb.innerHTML='<tr><td colspan="4" style="text-align:center;color:var(--text-dim)">\u52a0\u8f7d\u4e2d...</td></tr>';
   fetch(A+'/repos/'+R+'/contents/rooms.txt',{headers:{Accept:'application/vnd.github.v3+json',Authorization:'Bearer '+T}})
   .then(function(r){return r.json()})
   .then(function(d){
     var txt=atob(d.content);
-    var lines=txt.trim().split(chr(10));
+    var lines=txt.trim().split('\n');
     var h='';
-    lines.forEach(function(l){
+    lines.forEach(function(l,i){
       l=l.trim();
       if(!l)return;
       var parts=l.split('|');
       var rid=parts[0].trim();
       var rn=parts.length>1?parts[1].trim():'';
-      h+='<div class="rm-row"><span class="rm-id">'+rid+'</span><span class="rm-nick">'+(rn||'')+'</span><button class="rm-del" onclick="delRoom(\''+rid+'\')">\u2715</button></div>';
+      h+='<tr><td>'+(i+1)+'</td><td>'+rid+'</td><td>'+(rn||'-')+'</td><td><span style="cursor:pointer;color:#f55" onclick="delRoom(\''+rid+'\')">\u2715</span></td></tr>';
     });
-    document.getElementById('rl').innerHTML=h;
-  }).catch(function(e){document.getElementById('rl').innerHTML='error: '+e.message});
-  m.classList.add('show');
+    tb.innerHTML=h;
+    document.getElementById('rs').textContent='ok '+lines.filter(function(x){return x.trim()!==''}).length;
+  }).catch(function(e){tb.innerHTML='<tr><td colspan="4" style="text-align:center;color:#f55">error: '+e.message+'</td></tr>'});
 }
+
 function delRoom(rid){
   if(!confirm('\u786e\u5b9a\u5220\u9664\u623f\u95f4 '+rid+'\uff1f'))return;
+  var tb=document.getElementById('rb');
   fetch(A+'/repos/'+R+'/contents/rooms.txt',{headers:{Accept:'application/vnd.github.v3+json',Authorization:'Bearer '+T}})
   .then(function(r){return r.json()})
   .then(function(d){
     var txt=atob(d.content);
-    var lines=txt.trim().split(chr(10)).filter(function(l){return l.trim().split('|')[0].trim()!==rid;});
-    var newtxt=lines.join(chr(10));
-    var newb64=btoa(newtxt);
+    var lines=txt.split('\n').filter(function(l){return l.trim().split('|')[0].trim()!==rid;});
+    var newb64=btoa(lines.join('\n'));
     fetch(A+'/repos/'+R+'/contents/rooms.txt',{method:'PUT',body:JSON.stringify({message:'del room '+rid,content:newb64,sha:d.sha}),headers:{Accept:'application/vnd.github.v3+json','Content-Type':'application/json',Authorization:'Bearer '+T}})
     .then(function(r){
       if(r.ok){st('ok');rm()}else{st('fail '+r.status)}
     }).catch(function(e){st('err '+e.message)});
+  }).catch(function(e){tb.innerHTML='<tr><td colspan="4" style="text-align:center;color:#f55">err: '+e.message+'</td></tr>'});
+}
+
+function addRm(){
+  var rid=document.getElementById('ni').value.trim();
+  var rn=document.getElementById('nn').value.trim();
+  if(!rid){st('need room id');return}
+  fetch(A+'/repos/'+R+'/contents/rooms.txt',{headers:{Accept:'application/vnd.github.v3+json',Authorization:'Bearer '+T}})
+  .then(function(r){return r.json()})
+  .then(function(d){
+    var txt=atob(d.content);
+    var parts=[rid];if(rn)parts.push(rn);
+    txt=(txt.trim()?txt+'\n':'')+parts.join('|');
+    var newb64=btoa(txt);
+    fetch(A+'/repos/'+R+'/contents/rooms.txt',{method:'PUT',body:JSON.stringify({message:'add room '+rid,content:newb64,sha:d.sha}),headers:{Accept:'application/vnd.github.v3+json','Content-Type':'application/json',Authorization:'Bearer '+T}})
+    .then(function(r){
+      if(r.ok){st('ok');document.getElementById('ni').value='';document.getElementById('nn').value='';rm()}else{r.json().then(function(j){st('fail: '+(j.message||r.status))})}
+    }).catch(function(e){st('err '+e.message)});
   });
 }
+
+function svRm(){
+  var rows=document.querySelectorAll('#rb tr');
+  var lines=[];
+  rows.forEach(function(r){
+    var tds=r.querySelectorAll('td');
+    if(tds.length<3)return;
+    var rid=tds[1].textContent.trim();
+    var nickCell=tds[2];
+    var nickInput=nickCell.querySelector('input');
+    var rn=nickInput?nickInput.value.trim():nickCell.textContent.trim();
+    if(rn && rn!=='-' && rid)lines.push(rid+'|'+rn);
+    else if(rid)lines.push(rid);
+  });
+  fetch(A+'/repos/'+R+'/contents/rooms.txt',{headers:{Accept:'application/vnd.github.v3+json',Authorization:'Bearer '+T}})
+  .then(function(r){return r.json()})
+  .then(function(d){
+    var newb64=btoa(lines.join('\n'));
+    fetch(A+'/repos/'+R+'/contents/rooms.txt',{method:'PUT',body:JSON.stringify({message:'save rooms',content:newb64,sha:d.sha}),headers:{Accept:'application/vnd.github.v3+json','Content-Type':'application/json',Authorization:'Bearer '+T}})
+    .then(function(r){if(r.ok){st('ok');rm()}else{st('fail '+r.status)}}).catch(function(e){st('err '+e.message)});
+  });
+}
+
 
 lo();
 </script>
