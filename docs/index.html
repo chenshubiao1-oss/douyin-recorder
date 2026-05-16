@@ -1259,9 +1259,13 @@ function showConfirm(msg, onYes) {
   document.body.appendChild(d);
 }
 
-function deleteAsset(assetId, name) {
+function deleteAssetByIndex(gi, ii) {
+  if (!window._allData || !window._allData[gi]) return;
+  var asset = window._allData[gi].items[ii];
+  if (!asset) return;
   var ghHeaders = {'Accept': 'application/vnd.github.v3+json', 'Authorization': 'Bearer ' + 'ghp_tMiOuO6Ankr' + 'PemPZiOmm908eIww65j0Xmlp7'};
-  showConfirm('\u786e\u5b9a\u8981\u5220\u9664\u6587\u4ef6\uff1a<br><strong>' + escHtml(name) + '</strong>\uff1f', 'fetch(\'' + 'https://api.github.com/repos/' + REPO + '/releases/assets/' + "' + assetId + ', {method:\'DELETE\',headers:ghHeaders}).then(function(r){if(r.ok||r.status===204){showToast(\'\u2705 \u5df2\u5220\u9664\');loadData()}else{showToast(\'\u274c \u5220\u9664\u5931\u8d25: \'+r.status)}}).catch(function(e){showToast(\'\u274c \u7f51\u7edc\u9519\u8bef\')})");
+  showConfirm('\u786e\u5b9a\u8981\u5220\u9664\u6587\u4ef6\uff1a<br><strong>' + escHtml(asset.name) + '</strong>\uff1f',
+    'fetch(\'' + 'https://api.github.com/repos/' + REPO + '/releases/assets/' + "' + asset.id + ', {method:\'DELETE\',headers:ghHeaders}).then(function(r){if(r.ok||r.status===204){showToast(\'\u2705 \u5df2\u5220\u9664\');loadData()}else{showToast(\'\u274c \u5220\u9664\u5931\u8d25: \'+r.status)}}).catch(function(e){showToast(\'\u274c \u7f51\u7edc\u9519\u8bef\')})");
 }
 
 function addRoomViaMgr() {
