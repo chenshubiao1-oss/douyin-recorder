@@ -226,8 +226,8 @@ function rp(){
   });
   var el=document.getElementById('ct');
   if(!f.length){el.innerHTML='<div class="empty-state"><p>&#x1F4ED; &#x6CA1;&#x6709;&#x5339;&#x914D;&#x7684;&#x5F55;&#x5236;&#x5305;</p></div>';return}
-  var h='<div class="packages-grid">';
-  f.forEach(function(p){
+  var h='',lastDate='';
+  f.forEach(function(p){var pd=p.dk;if(pd!=lastDate){h+='<div style="font-size:18px;font-weight:700;color:var(--accent2);margin:24px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--border)">'+pd.slice(5)+'</div><div class="packages-grid">';lastDate=pd;}
     var ty={};
     p.it.forEach(function(a){ty[a.ty]=(ty[a.ty]||0)+1});
     h+='<div class="pkg-card" onclick="od(\''+p.an+'\','+pk.indexOf(p)+')">';
