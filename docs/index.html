@@ -133,6 +133,8 @@ function pfn(n){
   if(m)return{id:m[1],s:m[2],e:m[3]||null};
   m=n.match(/^(\d+)_(\d{8}_\d{6})_(\d{8}_\d{6})\./);
   if(m)return{id:m[1],s:m[2],e:m[3]};
+  m=n.match(/^(\d+)_(\d{8}_\d{6})\.(\d{8}_\d{6})\./);
+  if(m)return{id:m[1],s:m[2],e:m[3]};
   m=n.match(/^(\d+)_[A-Z0-9_]+_(\d{8}_\d{6})\./);
   if(m)return{id:m[1],s:m[2],e:null};
   return null;
