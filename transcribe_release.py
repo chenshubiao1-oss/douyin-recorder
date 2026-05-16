@@ -138,7 +138,4 @@ for asset, upload_url_template in release_jobs:
         urllib.request.urlopen(req2, timeout=120)
         print(f'  Uploaded: {srt_name}')
 
-    # Cleanup wav
-    os.remove(wav_path)
-
-print('Transcription complete')
+    print('Transcription complete')
