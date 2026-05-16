@@ -6,7 +6,7 @@
 <title>抖音录制文件浏览器</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{--bg:#0a0a0f;--surface:#12121a;--surface2:#1a1a28;--surface3:#242440;--border:#2a2a45;--text:#e0e0f0;--text-dim:#8888aa;--accent:#ff4d6a;--accent2:#ffb347;--accent3:#6c5ce7;--green:#00e676;--radius:12px}
+:root{--bg:#0a0a0f;--surface:#12121a;--surface2:#1a1a28;--surface3:#242440;--border:#2a2a45;--text:#e0e0f0;--text-dim:#8888aa;--accent:#ff4d6a;--accent2:#ffb347;--accent3:#6c5ce7;--green:#00e676;--radius:10px}
 body{font-family:'Noto Sans SC',-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
 .container{max-width:1200px;margin:0 auto;padding:24px}
 .header{background:linear-gradient(135deg,#0a0a1a,#1a0a2e,#0a1a2e);border-bottom:1px solid var(--border);padding:40px 24px 32px}
@@ -207,9 +207,9 @@ function pf(){
   var as2={};pk.forEach(function(p){as2[p.an]=true});
   var sel=document.getElementById('af');sel.innerHTML='<option value="all">&#x5168;&#x90E8;</option>';
   Object.keys(as2).sort(function(a,b){if(a==='oth')return 1;if(b==='oth')return-1;return a.localeCompare(b)}).forEach(function(a){var o=document.createElement('option');o.value=a;o.textContent=a==='oth'?'其他主播':a;sel.appendChild(o)});
-  var ds2={};pk.forEach(function(p){ds2[fl(p.it[0].c)]=true});
+  var ds2={};pk.forEach(function(p){ds2[p.dk]=true});
   var sel2=document.getElementById('df');sel2.innerHTML='<option value="all">&#x5168;&#x90E8;&#x65E5;&#x671F;</option>';
-  Object.keys(ds2).sort().reverse().forEach(function(d){var o=document.createElement('option');o.value=d;o.textContent=d;sel2.appendChild(o)});
+  Object.keys(ds2).sort().reverse().forEach(function(d){var o=document.createElement('option');o.value=d;o.textContent=d.slice(5);sel2.appendChild(o)});
   document.getElementById('sp').textContent=pk.length;
   document.getElementById('sf').textContent=as.length;
   var as3={};as.forEach(function(a){as3[a.an]=true});
