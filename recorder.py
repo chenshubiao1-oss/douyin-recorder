@@ -413,7 +413,9 @@ def run_test():
     log("测试结束")
 
 def run():
-    rooms = load_rooms()
+    rooms = load_rooms_from_github()
+    if not rooms:
+        rooms = load_rooms()
     if not rooms:
         log("ERROR: 没有配置任何房间ID"); sys.exit(1)
     log(f"加载 {len(rooms)} 个房间:")
@@ -538,7 +540,7 @@ def run():
                             handle_room_end(rid, recordings, anchor_names, now)
                     for rid in list(recordings.keys()):
                         if time.time()-recordings[rid]["start"] > MAX_DURATION:
-                            handle_room_end(rid, recordings, anchor_names, time.time(), model_obj)
+                            handle_room_end(rid, recordings, anchor_names, time.time())
                     # 续命：运行270分钟（4.5小时）后触发下一轮
                     if elapsed > 270*60 and not _renew_triggered:
                         try:
@@ -572,7 +574,7 @@ def run():
         except: pass  # 其他异常
         finally:
             # 1. 正常结束当前录制任务
-            for rid in list(recordings.keys()): handle_room_end(rid, recordings, anchor_names, time.time(), model_obj)
+            for rid in list(recordings.keys()): handle_room_end(rid, recordings, anchor_names, time.time())
             # 2. 清理未结束的页面
             for p in pages.values():
                 try: p.close()
