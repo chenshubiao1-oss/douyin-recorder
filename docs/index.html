@@ -103,7 +103,7 @@ body{font-family:'Noto Sans SC',-apple-system,sans-serif;background:var(--bg);co
     <input id="ni" placeholder="&#x623F;&#x95F4; ID" style="flex:0 0 180px">
     <input id="nn" placeholder="&#x4E3B;&#x64AD;&#x6635;&#x79F0;">
     <button onclick="addRm()">+ &#x6DFB;&#x52A0;</button>
-    <button class="sec" onclick="lo()">&#x21BB;</button>
+    <button class="sec" onclick="lo();setTimeout(function(){rrb()},500)">&#x21BB;</button>
   </div>
   <table class="room-tb" id="rt"><thead><tr><th>#</th><th>&#x623F;&#x95F4; ID</th><th>&#x4E3B;&#x64AD;</th><th></th></tr></thead><tbody id="rb"></tbody></table>
   <div style="margin-top:16px"><button onclick="svRm()">&#x1F4BE; &#x4FDD;&#x5B58;</button><span id="rs" style="margin-left:12px;color:var(--text-dim);font-size:13px"></span></div>
@@ -179,7 +179,7 @@ async function lo(){
       if(!an&&id&&nm[a.name])an=nm[a.name];if(!an)an=id||'oth';
       as.push({id:a.id,n:a.name,z:a.size,u:a.browser_download_url,c:a.created_at||r.created_at,ty:t,ri:id,an:an,st:p?p.s:null,et:p?p.e:null});
     })});
-    bp();
+    bp();rrb();
   }catch(e){document.getElementById('ct').innerHTML='<div class="empty-state"><p>Error: '+eh(e.message)+'</p></div>'}
 }
 
