@@ -287,21 +287,21 @@ function bts(){
   bsm=!bsm;
   var cards=document.querySelectorAll('.pkg-card');
   for(var i=0;i<cards.length;i++)cards[i].style.cursor=bsm?'pointer':'default';
-  if(!bsm){bpm={};document.getElementById('bd').style.display='none';document.getElementById('bt').textContent='选择';return}
-  document.getElementById('bt').textContent='取消';
+  if(!bsm){bpm={};var b2=document.getElementById('bd');if(b2)b2.style.display='none';var be=document.getElementById('bt');if(be)be.textContent='选择';return}
+  var be=document.getElementById('bt');if(be)be.textContent='取消';
   for(var i=0;i<cards.length;i++)cards[i].onclick=function(j){return function(){
     var c=document.querySelectorAll('.pkg-card')[j];
     if(bpm[j]){delete bpm[j];c.style.border=''}else{bpm[j]=1;c.style.border='2px solid #f5a623'}
     var ks=Object.keys(bpm);
     document.getElementById('bd').style.display=ks.length?'':'none';
-    document.getElementById('bc').textContent=ks.length?' ('+ks.length+')':'';
+    (document.getElementById('bc')||{}).textContent=ks.length?' ('+ks.length+')':'';
   };}(i);
 }
 function bda(){
   var ks=Object.keys(bpm);
   if(!ks.length)return;
   if(!confirm('确定删除选中 '+ks.length+'个包的全部文件？'))return;
-  document.getElementById('bd').disabled=1;document.getElementById('bd').textContent='删除中...';
+  var b2=document.getElementById('bd');if(b2)b2.disabled=1;var b2=document.getElementById('bd');if(b2)b2.textContent='删除中...';
   var ids=[];
   ks.forEach(function(k){
     if(pk[k]&&pk[k].it)pk[k].it.forEach(function(a){ids.push(a.id);});
@@ -311,7 +311,7 @@ function bda(){
   ids.forEach(function(id){
     fetch(A+'/repos/'+R+'/releases/assets/'+id,{method:'DELETE',headers:{Accept:'application/vnd.github.v3+json',Authorization:'Bearer '+T}})
     .then(function(r){done++;if(!r.ok&&r.status!==204)fail++;}).catch(function(){fail++;}).then(function(){
-      if(done+fail===tot){bpm={};bsm=0;document.getElementById('bd').style.display='none';document.getElementById('bt').textContent='选择';
+      if(done+fail===tot){bpm={};bsm=0;var b2=document.getElementById('bd');if(b2)b2.style.display='none';var be=document.getElementById('bt');if(be)be.textContent='选择';
         st(fail?'ok '+(tot-fail)+'/'+tot+',fail '+fail:'ok');bts();lo();
       }
     });
@@ -333,7 +333,7 @@ function ts(){
     }
   }
   document.getElementById('bs').textContent=sx?'\u2716 \u53d6\u6d88':'\u267b \u9009\u62e9';
-  if(!sx){sp={};document.getElementById('bd').style.display='none';}
+  if(!sx){sp={};var b2=document.getElementById('bd');if(b2)b2.style.display='none';}
 }
 function tk(i){
   var cards=document.querySelectorAll('.pkg-card');
@@ -359,7 +359,7 @@ function da(){
     .then(function(r){
       if(r.ok||r.status===204)d2++;else f2++;
     }).catch(function(){f2++;}).then(function(){
-      if(d2+f2===t2){sp={};sx=false;document.getElementById('bd').style.display='none';document.getElementById('bs').textContent='\u267b \u9009\u62e9';if(f2===0)st('ok '+t2);else st('ok '+d2+'/'+t2+',fail '+f2);lo();}
+      if(d2+f2===t2){sp={};sx=false;var b2=document.getElementById('bd');if(b2)b2.style.display='none';document.getElementById('bs').textContent='\u267b \u9009\u62e9';if(f2===0)st('ok '+t2);else st('ok '+d2+'/'+t2+',fail '+f2);lo();}
     });
   });
 }
