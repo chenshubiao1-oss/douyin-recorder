@@ -260,7 +260,7 @@ def update_rooms_nickname(anchor_names):
 def start_recording(url, quality, room_id, anchor_name=""):
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    base = f"{room_id}_{quality}_{ts}"
+    base = f"{room_id}_{ts}"
     outfile = os.path.join(OUTPUT_DIR, f"{base}.mp4")
     audiofile = os.path.join(OUTPUT_DIR, f"{base}.wav")
     with open(os.path.join(OUTPUT_DIR, f"{room_id}_meta.json"), "w", encoding="utf-8") as f:
