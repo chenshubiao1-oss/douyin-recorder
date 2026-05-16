@@ -80,9 +80,11 @@ for asset, upload_url_template in release_jobs:
                     if isinstance(item, dict):
                         txt = item.get('text', '') or item.get('sentence', '') or ''
                         if txt.strip():
-                            import re as _re
-                            txt = _re.sub(r'<\|.*?\|>', '', txt).strip()
+                                txt = re.sub(r'<\|\w+\|?>', '', txt).strip()
                             if not txt: continue
+                            # Python punctuation post-processing
+                            if not txt.endswith(('。','！','？','）','」','》','”')):
+                                txt += '。'
                             text_lines.append(txt.strip())
                             ts = item.get('timestamp', '')
                             if ts:
@@ -96,19 +98,23 @@ for asset, upload_url_template in release_jobs:
                                             st_fmt = '%02d:%02d:%02d,%03d' % (st_s // 3600, (st_s % 3600) // 60, st_s % 60, st_ms % 1000)
                                             et_s = et_ms // 1000
                                             et_fmt = '%02d:%02d:%02d,%03d' % (et_s // 3600, (et_s % 3600) // 60, et_s % 60, et_ms % 1000)
-                                            srt_lines.append('%d\n%s --> %s\n%s\n' % (srt_idx, st_fmt, et_fmt, seg_txt))
+                                            srt_lines.append('%d\n%s --> %s\n%s\n' % (srt_idx, st_fmt, et_fmt, seg_txt + ("。" if not seg_txt.endswith(("。","！","？","）","」","》","”")) else "") ))
                                             srt_idx += 1
                     elif isinstance(item, str) and item.strip():
                         txt_clean = item.strip()
-                        import re as _re
-                        txt_clean = _re.sub(r'<\|.*?\|>', '', txt_clean).strip()
-                        if txt_clean: text_lines.append(txt_clean)
+                        txt_clean = re.sub(r'<\|\w+\|?>', '', txt_clean).strip()
+                        if txt_clean:
+                            if not txt_clean.endswith(('。','！','？','）','」','》','”')):
+                                txt_clean += '。'
+                            text_lines.append(txt_clean)
             elif isinstance(result, dict):
                 txt = result.get('text', '') or result.get('sentence', '') or ''
                 if txt.strip():
                     import re as _re
-                    txt = _re.sub(r'<\|.*?\|>', '', txt).replace('<|Speech|>', '').replace('<|woitn|>', '').strip()
+                    txt = re.sub(r'<\|\w+\|?>', '', txt).strip()
                     if not txt: continue
+                    if not txt.endswith(('。','！','？','）','」','》','”')):
+                        txt += '。'
                     text_lines.append(txt.strip())
 
             os.remove(seg_path)
