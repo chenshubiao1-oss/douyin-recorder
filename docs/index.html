@@ -80,7 +80,7 @@ body{font-family:'Noto Sans SC',-apple-system,sans-serif;background:var(--bg);co
     <h1>&#x1F3AC; &#x6296;&#x97F3; &#x5F55;&#x5236; &#x6587;&#x4EF6; &#x6D4F;&#x89C8;&#x5668;</h1>
     <p>&#x76F4;&#x64AD;&#x95F4; &#x5F55;&#x5236; / &#x97F3;&#x9891; / &#x8F6C;&#x5F55; &#x6587;&#x5B57;</p>
     <div class="stats-bar">
-      <div class="stat-item"><span class="num" id="sp">-</span> <button id="bsb" onclick="bs()" style="font-size:13px;padding:4px 10px;border:1px solid #888;border-radius:6px;background:var(--surface);color:var(--text);cursor:pointer">选择</button> <button id="bd" onclick="bdel()" style="display:none;font-size:13px;padding:4px 10px;border:1px solid #f55;border-radius:6px;background:var(--surface);color:#f55;cursor:pointer">批量删除<span id="bc"></span></button> &#x5F55;&#x5236;&#x5305;</div>
+      <div class="stat-item"><span class="num" id="sp">-</span> &#x5F55;&#x5236;&#x5305;</div>
       <div class="stat-item"><span class="num" id="sf">-</span> &#x6587;&#x4EF6;</div>
       <div class="stat-item"><span class="num" id="sa">-</span> &#x4E3B;&#x64AD;</div>
     </div>
@@ -88,7 +88,8 @@ body{font-family:'Noto Sans SC',-apple-system,sans-serif;background:var(--bg);co
 </div>
 <div class="tab-bar">
   <button class="tab-btn active" id="tb1" onclick="sw('browse')">&#x1F4C2; &#x6D4F;&#x89C8;</button>
-  <button class="tab-btn" id="tb2" onclick="sw('rooms')">&#x1F4CB; &#x623F;&#x95F4;</button>
+  <button class="tab-btn" id="tb2" onclick="sw('rooms')">&#x1F4CB <button id="bsb" onclick="bs()" style="font-size:13px;padding:4px 10px;border:1px solid #888;border-radius:6px;background:var(--surface);color:var(--text);cursor:pointer">选择</button> <button id="bd" onclick="bdel()" style="display:none;font-size:13px;padding:4px 10px;border:1px solid #f55;border-radius:6px;background:var(--surface);color:#f55;cursor:pointer">批量删除<span id="bc"></span></button>
+    ; &#x623F;&#x95F4;</button>
 </div>
 <div id="bp" class="container">
   <div class="filters">
@@ -117,7 +118,7 @@ body{font-family:'Noto Sans SC',-apple-system,sans-serif;background:var(--bg);co
   </div>
 </div>
 
-<script>
+<sc
 var R = 'tangwei880620-rgb/douyin-recorder', A = 'https://api.github.com', T = 'ghp_tMiOuO6Ankr' + 'PemPZiOmm908eIww65j0Xmlp7';
 var as = [], rs = [], rm = [], pk = [];
 
@@ -394,7 +395,15 @@ function svRm(){
 }
 
 
+
+function sw(t){
+  var b=document.getElementById('bp'),r=document.getElementById('rm');
+  if(t==='browse'){if(r)r.classList.remove('show');if(b)b.style.display='';document.getElementById('tb1').classList.add('active');document.getElementById('tb2').classList.remove('active');}
+  else{if(r)rmo();if(b)b.style.display='none';document.getElementById('tb2').classList.add('active');document.getElementById('tb1').classList.remove('active');}
+}
+
 lo();
+o();
 </script>
 
 
