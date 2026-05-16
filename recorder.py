@@ -395,7 +395,8 @@ def upload_now(filepath, room_name):
 
 def handle_room_end(rid, recordings, room_names, now):
     rec = recordings.pop(rid)
-    end_ts = now.split('.')[0].replace(':', '').replace('-', '').replace(' ', '_')
+    if isinstance(now, float): from datetime import datetime; end_ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+    else: end_ts = now.split('.')[0].replace(':', '').replace('-', '').replace(' ', '_')
     # Stop processes first
     try:
         p = rec.get("proc")
