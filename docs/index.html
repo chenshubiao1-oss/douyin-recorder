@@ -348,7 +348,7 @@ function delR(rid){
     var newb64=btoa(lines.join('\n'));
     fetch(A+'/repos/'+R+'/contents/rooms.txt',{method:'PUT',body:JSON.stringify({message:'del room '+rid,content:newb64,sha:d.sha}),headers:{Accept:'application/vnd.github.v3+json','Content-Type':'application/json',Authorization:'Bearer '+T}})
     .then(function(r){
-      if(r.ok){st('ok');rm()}else{st('fail '+r.status)}
+      if(r.ok){st('ok');rmo()}else{st('fail '+r.status)}
     }).catch(function(e){st('err '+e.message)});
   }).catch(function(e){tb.innerHTML='<tr><td colspan="4" style="text-align:center;color:#f55">err: '+e.message+'</td></tr>'});
 }
@@ -389,7 +389,7 @@ function svRm(){
   .then(function(d){
     var newb64=btoa(lines.join('\n'));
     fetch(A+'/repos/'+R+'/contents/rooms.txt',{method:'PUT',body:JSON.stringify({message:'save rooms',content:newb64,sha:d.sha}),headers:{Accept:'application/vnd.github.v3+json','Content-Type':'application/json',Authorization:'Bearer '+T}})
-    .then(function(r){if(r.ok){st('ok');rm()}else{st('fail '+r.status)}}).catch(function(e){st('err '+e.message)});
+    .then(function(r){if(r.ok){st('ok');rmo()}else{st('fail '+r.status)}}).catch(function(e){st('err '+e.message)});
   });
 }
 
