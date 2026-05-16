@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """抖音直播监控录制器 - 多房间同时录制 + 录制完成即实时上传 + 同步抽音频(用于转写)"""
-import os, sys, json, threading, time, subprocess, re, urllib.request, base64, base64
+import os, sys, json, threading, time, subprocess, re, urllib.request, base64, signal, base64
 from datetime import datetime
 
 WATCHDOG_TIMEOUT = 180
@@ -74,6 +74,62 @@ def load_rooms_from_github():
         log(f"从GitHub拉取rooms.txt失败: {e}，使用本地文件")
         return load_rooms()
 
+# SIGTERM handler for graceful shutdown on workflow cancel
+def _handle_sigterm(signum, frame):
+    log(f"收到取消信号(SIGTERM)，正在清理录制文件...")
+    end_ts = datetime.now().strftime("%%Y%%m%%d_%%H%%M%%S")
+    for rid, rec in list(recordings.items()):
+        try:
+            # Kill ffmpeg
+            if "proc" in rec and rec["proc"].poll() is None:
+                rec["proc"].kill()
+            # Rename to include end timestamp
+            fpath = rec.get("path", "")
+            if fpath and os.path.exists(fpath):
+                dirn, fn = os.path.split(fpath)
+                base_name = fn.rsplit('.', 1)[0]
+                ext = fn.rsplit('.', 1)[1] if '.' in fn else ''
+                new_fn = base_name + '~' + end_ts + '.' + ext
+                new_path = os.path.join(dirn, new_fn)
+                os.rename(fpath, new_path)
+                log(f"取消时重命名: {fn} -> {new_fn}")
+                upload_now(new_path, rid, anchor_names.get(rid, rid))
+            # Rename audio too
+            if "wav_path" in rec and os.path.exists(rec["wav_path"]):
+                wav = rec["wav_path"]
+                wdir, wfn = os.path.split(wav)
+                wbase = wfn.rsplit('.', 1)[0]
+                wext = wfn.rsplit('.', 1)[1] if '.' in wfn else ''
+                new_wav = os.path.join(wdir, wbase + '~' + end_ts + '.' + wext)
+                os.rename(wav, new_wav)
+                upload_now(new_wav, rid, anchor_names.get(rid, rid))
+        except Exception as e:
+            log(f"取消清理异常: {e}")
+    # Also handle TEST_MODE in global scope
+    try:
+        global _test_recording_path, _test_audio_path
+        for attr in ['_test_recording_path', '_test_audio_path']:
+            fpath = globals().get(attr, '')
+            if fpath and os.path.exists(fpath):
+                dirn, fn = os.path.split(fpath)
+                base_name = fn.rsplit('.', 1)[0]
+                ext = fn.rsplit('.', 1)[1] if '.' in fn else ''
+                new_fn = base_name + '~' + end_ts + '.' + ext
+                new_path = os.path.join(dirn, new_fn)
+                os.rename(fpath, new_path)
+                log(f"取消时重命名测试文件: {fn} -> {new_fn}")
+                upload_now(new_path, rid, anchor_names.get(rid, rid) if 'rid' in dir() else rid)
+    except: pass
+    # Upload any orphan recordings left
+    for f in os.listdir(OUTPUT_DIR):
+        fpath = os.path.join(OUTPUT_DIR, f)
+        if os.path.isfile(fpath):
+            log(f"上传取消时的残留文件: {f}")
+            upload_now(fpath, None, None)
+    log("取消清理完成")
+    sys.exit(0)
+
+signal.signal(signal.SIGTERM, _handle_sigterm)
 def log(msg):
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {msg}", flush=True)
 
