@@ -29,11 +29,11 @@ while True:
                 release_jobs.append((a, upload_url))
     page += 1
 
-if not wav_to_transcribe:
+if not release_jobs:
     print('No new audio files to transcribe')
     exit(0)
 
-print(f'Found {len(wav_to_transcribe)} audio file(s) to transcribe')
+print(f'Found {len(release_jobs)} audio file(s) to transcribe')
 
 # Step 3: Download model (once)
 from funasr import AutoModel
