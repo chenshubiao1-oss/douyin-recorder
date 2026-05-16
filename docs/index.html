@@ -283,6 +283,42 @@ function de(id){
 
 function st(m){var t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(function(){t.classList.remove('show')},2000)}
 
+var sp={};
+function tp(i,p){
+  var cb=document.getElementById('cb_'+i);
+  if(cb&&cb.checked){sp[i]=p;}else{delete sp[i];}
+  var ks=Object.keys(sp);
+  var bd=document.getElementById('bd');
+  if(bd){bd.style.display=ks.length?'inline-block':'none';}
+  var sc=document.getElementById('sc');
+  if(sc){sc.textContent=ks.length?' ('+ks.length+')':'';}
+}
+function da(){
+  var ks=Object.keys(sp);
+  if(!ks.length)return;
+  if(!confirm('\u786E\u5B9A\u5220\u9664\u9009\u4E2D '+ks.length+'\u4E2A\u5305\u7684\u5168\u90E8\u6587\u4EF6?'))return;
+  var bd=document.getElementById('bd');
+  if(bd){bd.disabled=true;bd.textContent='\u5220\u9664\u4E2D...';}
+  var ids=[];
+  ks.forEach(function(k){sp[k].it.forEach(function(a){ids.push(a.id);});});
+  var done=0,fail=0,total=ids.length;
+  ids.forEach(function(id){
+    fetch(A+'/repos/'+R+'/releases/assets/'+id,{method:'DELETE',headers:{Accept:'application/vnd.github.v3+json',Authorization:'Bearer '+T}})
+    .then(function(r){
+      if(r.ok||r.status===204){done++;}else{fail++;}
+    }).catch(function(){fail++;}).then(function(){
+      if(done+fail===total){
+        sp={};
+        var bd2=document.getElementById('bd');
+        if(bd2){bd2.style.display='none';bd2.disabled=false;bd2.innerHTML='\u267B \u6279\u91CF\u5220\u9664<span id="sc"></span>';}
+        if(fail===0){st('\u2705 \u5220\u9664'+total+'\u4E2A\u6587\u4EF6\u6210\u529F');}
+        else{st('\u26A0\uFE0F \u6210\u529F'+done+'/'+total+'\uFF0C\u5931\u8D25'+fail);}
+        lo();
+      }
+    });
+  });
+}
+
 var sp={};function tp(i,p){var cb=document.getElementById('cb_'+i);if(cb&&cb.checked){sp[i]=p;}else{delete sp[i];}var ks=Object.keys(sp);document.getElementById('bd').style.display=ks.length?'inline-block':'none';document.getElementById('sc').textContent=ks.length?' ('+ks.length+')':'';}
 function da(){var ks=Object.keys(sp);if(!ks.length)return;if(!confirm('确定删除选中 '+ks.length+'个包的全部文件?'))return;document.getElementById('bd').disabled=true;document.getElementById('bd').textContent='删除中...';var ids=[];ks.forEach(function(k){sp[k].it.forEach(function(a){ids.push(a.id);});});var done=0,fail=0,total=ids.length;ids.forEach(function(id){fetch(A+'/repos/'+R+'/releases/assets/'+id,{method:'DELETE',headers:{Accept:'application/vnd.github.v3+json',Authorization:'Bearer '+T}}).then(function(r){if(r.ok||r.status===204){done++;}else{fail++;}}).catch(function(){fail++;}).then(function(){if(done+fail===total){sp={};document.getElementById('bd').style.display='none';document.getElementById('bd').disabled=false;document.getElementById('bd').innerHTML='♻ 批量删除<span id="sc"></span>';if(fail===0){st('✅ 删除'+total+'个文件成功');}else{st('⚠️ 成功'+done+'/'+total+'，失败'+fail);}lo();}});});}
 
