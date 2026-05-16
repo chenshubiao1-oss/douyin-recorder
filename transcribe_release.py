@@ -80,7 +80,7 @@ for asset, upload_url_template in release_jobs:
                     if isinstance(item, dict):
                         txt = item.get('text', '') or item.get('sentence', '') or ''
                         if txt.strip():
-                                txt = re.sub(r'<\|\w+\|?>', '', txt).strip()
+                            txt = re.sub(r'<\|\w+\|?>', '', txt).strip()
                             if not txt: continue
                             # Python punctuation post-processing
                             if not txt.endswith(('。','！','？','）','」','》','”')):
