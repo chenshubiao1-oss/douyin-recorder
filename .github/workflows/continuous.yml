@@ -130,11 +130,4 @@ jobs:
           GH_REPO: ${{ github.repository }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_RUN_ID: ${{ github.run_id }}
-      - name: Upload to Artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: cleanup-transcripts-${{ github.run_id }}
-          path: /tmp/recordings/*.txt /tmp/recordings/*.srt
-          retention-days: 90
-          if-no-files-found: ignore
+      - name
