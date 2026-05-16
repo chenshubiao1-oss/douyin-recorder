@@ -31,6 +31,8 @@ jobs:
           key: transcribe-v3-${{ runner.os }}
       - name: Install deps
         run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
           python -m pip install --upgrade pip
           pip install --timeout 120 torch --index-url https://download.pytorch.org/whl/cpu
           pip install --timeout 120 torchaudio --index-url https://download.pytorch.org/whl/cpu
