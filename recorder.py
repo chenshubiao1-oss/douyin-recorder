@@ -84,7 +84,7 @@ def _handle_sigterm(signum, frame):
             if "proc" in rec and rec["proc"].poll() is None:
                 rec["proc"].kill()
             # Rename to include end timestamp
-            fpath = rec.get("path", "")
+            fpath = rec.get("outfile", "")
             if fpath and os.path.exists(fpath):
                 dirn, fn = os.path.split(fpath)
                 base_name = fn.rsplit('.', 1)[0]
@@ -95,8 +95,8 @@ def _handle_sigterm(signum, frame):
                 log(f"取消时重命名: {fn} -> {new_fn}")
                 upload_now(new_path, rid, anchor_names.get(rid, rid))
             # Rename audio too
-            if "wav_path" in rec and os.path.exists(rec["wav_path"]):
-                wav = rec["wav_path"]
+            if "audiofile" in rec and os.path.exists(rec["audiofile"]):
+                wav = rec["audiofile"]
                 wdir, wfn = os.path.split(wav)
                 wbase = wfn.rsplit('.', 1)[0]
                 wext = wfn.rsplit('.', 1)[1] if '.' in wfn else ''
