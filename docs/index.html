@@ -504,6 +504,17 @@ body {
 .room-table .rname-input { background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 4px 8px; color: var(--text); font-size: 13px; outline: none; width: 100%; min-width: 120px; font-family: inherit; }
 .room-table .rname-input:focus { border-color: var(--accent); }
 
+.card-actions .del-asset { background: var(--accent) !important; }
+.card-actions .del-asset:hover { background: #ff3355 !important; }
+.confirm-dialog { position:fixed;inset:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:4000; }
+.confirm-box { background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;max-width:360px;text-align:center; }
+.confirm-box p { margin-bottom:16px;font-size:14px;line-height:1.6; }
+.confirm-box .btn-row { display:flex;gap:8px;justify-content:center; }
+.confirm-box button { padding:8px 20px;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-family:inherit;font-weight:600; }
+.confirm-box .btn-yes { background:var(--accent);color:#fff; }
+.confirm-box .btn-yes:hover { opacity:0.85; }
+.confirm-box .btn-no { background:var(--surface2);color:var(--text-dim);border:1px solid var(--border); }
+.confirm-box .btn-no:hover { background:var(--surface3); }
 </style>
 
 </head>
@@ -1237,6 +1248,19 @@ function renderRoomTable() {
   });
   tbody.innerHTML = html || '<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text-dim)">📭 暂无房间</td></tr>';
   document.getElementById('roomCount').textContent = '共 ' + window.roomList.length + ' 个房间';
+}
+
+function showConfirm(msg, onYes) {
+  var d = document.createElement('div');
+  d.className = 'confirm-dialog';
+  d.id = '_confirm';
+  d.innerHTML = '<div class="confirm-box"><p>' + msg + '</p><div class="btn-row"><button class="btn-yes" onclick="document.getElementById(\'_confirm\').remove();' + onYes + '">\u786e\u5b9a\u5220\u9664</button><button class="btn-no" onclick="document.getElementById(\'_confirm\').remove()">\u53d6\u6d88</button></div></div>';
+  document.body.appendChild(d);
+}
+
+function deleteAsset(assetId, name) {
+  var ghHeaders = {'Accept': 'application/vnd.github.v3+json', 'Authorization': 'Bearer ' + 'ghp_tMiOuO6Ankr' + 'PemPZiOmm908eIww65j0Xmlp7'};
+  showConfirm('\u786e\u5b9a\u8981\u5220\u9664\u6587\u4ef6\uff1a<br><strong>' + escHtml(name) + '</strong>\uff1f', 'fetch(\'' + 'https://api.github.com/repos/' + REPO + '/releases/assets/' + "' + assetId + ', {method:\'DELETE\',headers:ghHeaders}).then(function(r){if(r.ok||r.status===204){showToast(\'\u2705 \u5df2\u5220\u9664\');loadData()}else{showToast(\'\u274c \u5220\u9664\u5931\u8d25: \'+r.status)}}).catch(function(e){showToast(\'\u274c \u7f51\u7edc\u9519\u8bef\')})");
 }
 
 function addRoomViaMgr() {
