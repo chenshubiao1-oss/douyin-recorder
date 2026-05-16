@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """抖音直播监控录制器 - 多房间同时录制 + 录制完成即实时上传 + 同步抽音频(用于转写)"""
-import os, sys, json, threading, time, subprocess, re, urllib.request
+import os, sys, json, threading, time, subprocess, re, urllib.request, base64
 from datetime import datetime
 
 WATCHDOG_TIMEOUT = 180
