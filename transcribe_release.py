@@ -35,7 +35,7 @@ print('Found %d audio file(s) to transcribe' % len(release_jobs))
 # Step 3: Download model (once)
 from funasr import AutoModel
 print('Loading SenseVoiceSmall model...')
-model = AutoModel(model='iic/SenseVoiceSmall', vad_model=None, punc_model=None,
+model = AutoModel(model='iic/SenseVoiceSmall', vad_model=None, punc_model='iic/punc_ct-transformer_zh-cn-0.2.2',
                   spk_model=None, disable_update=True, device='cpu')
 print('Model loaded')
 
@@ -80,6 +80,9 @@ for asset, upload_url_template in release_jobs:
                     if isinstance(item, dict):
                         txt = item.get('text', '') or item.get('sentence', '') or ''
                         if txt.strip():
+                            import re as _re
+                            txt = _re.sub(r'<\|.*?\|>', '', txt).replace('<|Speech|>', '').replace('<|woitn|>', '').strip()
+                            if not txt: continue
                             text_lines.append(txt.strip())
                             ts = item.get('timestamp', '')
                             if ts:
@@ -96,10 +99,16 @@ for asset, upload_url_template in release_jobs:
                                             srt_lines.append('%d\n%s --> %s\n%s\n' % (srt_idx, st_fmt, et_fmt, seg_txt))
                                             srt_idx += 1
                     elif isinstance(item, str) and item.strip():
-                        text_lines.append(item.strip())
+                        txt_clean = item.strip()
+                        import re as _re
+                        txt_clean = _re.sub(r'<\|.*?\|>', '', txt_clean).strip()
+                        if txt_clean: text_lines.append(txt_clean)
             elif isinstance(result, dict):
                 txt = result.get('text', '') or result.get('sentence', '') or ''
                 if txt.strip():
+                    import re as _re
+                    txt = _re.sub(r'<\|.*?\|>', '', txt).replace('<|Speech|>', '').replace('<|woitn|>', '').strip()
+                    if not txt: continue
                     text_lines.append(txt.strip())
 
             os.remove(seg_path)
