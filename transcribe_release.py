@@ -35,7 +35,7 @@ print('Found %d audio file(s) to transcribe' % len(release_jobs))
 # Step 3: Download model (once)
 from funasr import AutoModel
 print('Loading SenseVoiceSmall model...')
-model = AutoModel(model='iic/SenseVoiceSmall', vad_model=None, punc_model='iic/punc_ct-transformer_zh-cn-0.2.2',
+model = AutoModel(model='iic/SenseVoiceSmall', vad_model=None, punc_model=None,
                   spk_model=None, disable_update=True, device='cpu')
 print('Model loaded')
 
@@ -81,7 +81,7 @@ for asset, upload_url_template in release_jobs:
                         txt = item.get('text', '') or item.get('sentence', '') or ''
                         if txt.strip():
                             import re as _re
-                            txt = _re.sub(r'<\|.*?\|>', '', txt).replace('<|Speech|>', '').replace('<|woitn|>', '').strip()
+                            txt = _re.sub(r'<\|.*?\|>', '', txt).strip()
                             if not txt: continue
                             text_lines.append(txt.strip())
                             ts = item.get('timestamp', '')
@@ -122,7 +122,22 @@ for asset, upload_url_template in release_jobs:
 
         # Upload TXT
         txt_name = base + '.txt'
-        txt_text = '\n'.join(text_lines)
+        # Add basic punctuation to make text readable
+                        punct_pairs = [
+                            # Insert 。after known sentence-ending words
+                            (['呢', '吗', '啊', '吧', '哦', '嗯', '嘛', '哟', '哈', '呀', '了'], '。'),
+                            (['不', '好', '是', '要', '有', '去', '来'], '，'),
+                        ]
+                        cleaned = []
+                        for line in text_lines:
+                            if not line.strip():
+                                continue
+                            # Add 。at end of line if missing
+                            if not line[-1] in '。！？，、；：．.':
+                                line += '。'
+                            cleaned.append(line)
+                        text_lines = cleaned
+                        txt_text = '\n'.join(text_lines)
         upload_url = upload_url_template.replace('{?name,label}', '?name=' + urllib.parse.quote(txt_name))
         req = urllib.request.Request(upload_url,
             data=txt_text.encode('utf-8'),
