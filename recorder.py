@@ -572,8 +572,8 @@ def run():
                         new_ids = {r["id"] for r in new_rooms}
                         for rid in list(pages.keys()):
                             if rid not in new_ids:
-                                if rid in set([r['id'] for r in current_rooms]):
-                                    log(f"房间 {rid} 临时丢失，已恢复")
+                                if rid in set([r['id'] for r in new_rooms]):
+                                    log(f"房间 {rid} 临时丢失，已跳过移除")
                                     continue
                                 log(f"房间已移除: {room_names.get(rid,rid)}")
                                 if rid in recordings: handle_room_end(rid, recordings, anchor_names, now)
