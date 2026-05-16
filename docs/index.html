@@ -124,8 +124,8 @@ var as = [], rs = [], rm = [], pk = [];
 function us(s){return decodeURIComponent(Array.prototype.map.call(s,function(c){return '%'+('00'+c.charCodeAt(0).toString(16)).slice(-2)}).join(''))}
 function fs(b){if(!b)return '-';if(b<1048576)return(b/1024).toFixed(1)+'K';if(b<1073741824)return(b/1048576).toFixed(1)+'M';return(b/1073741824).toFixed(2)+'G'}
 function gt(fn){var f=fn.toLowerCase();if(f.match(/\\.(mp4|flv|webm|mkv)$/))return 'v';if(f.match(/\\.(wav|mp3|aac|ogg)$/))return 'a';if(f.match(/\\.srt$/))return 's';return 't'}
-function gi(t){return{v:'@',a:'&',t:'#',s:'!'}[t]||'#'}
-function gl(t){return{v:'&#x89C6;&#x9891;',a:'&#x97F3;&#x9891;',t:'&#x6587;&#x5B57;',s:'SRT'}[t]||''}
+function gi(t){return{v:'🎬',a:'🎵',t:'📄',s:'💬'}[t]||'📄'}
+function gl(t){return{v:'视频',a:'音频',t:'文字',s:'SRT'}[t]||''}
 function eh(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
 function fl(d){return new Date(d).toLocaleString([],{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})}
 function pfn(n){
@@ -216,7 +216,7 @@ function rp(){
     p.it.forEach(function(a){ty[a.ty]=(ty[a.ty]||0)+1});
     h+='<div class="pkg-card" onclick="od(\''+p.an+'\')">';
     h+='<div class="anchor-name">'+eh(p.an)+(p.ri?' <span style="font-size:11px;color:var(--text-dim)">'+p.ri+'</span>':'')+'</div>';
-    h+='<div class="time-range">'+ft(p.st,p.et)+'</div><div>';
+    h+='<div class="time-range">'+(p.st?ft(p.st,p.et):fl(p.it[0].c))+'</div><div>';
     for(var k in ty){h+='<span class="file-badge">'+gi(k)+' '+ty[k]+'</span>';}
     h+='</div></div>';
   });
@@ -229,10 +229,10 @@ function od(an){
   var p=null;
   for(var i=0;i<pk.length;i++)if(pk[i].an==an){p=pk[i];break;}
   if(!p)return;
-  document.getElementById('dt').textContent=p.an+' &#x5F55;&#x5236;&#x5305;';
+  document.getElementById('dt').textContent=p.an+' 的录制包';
   var gr={v:[],a:[],t:[],s:[]};
   p.it.forEach(function(a){if(gr[a.ty])gr[a.ty].push(a);else gr.t.push(a)});
-  var h='<div style="margin-bottom:16px;font-weight:600">'+ft(p.st,p.et)+'</div>';
+  var h='<div style="margin-bottom:16px;font-weight:600">'+(p.st?ft(p.st,p.et):fl(p.it[0].c))+'</div>';
   ['v','a','t','s'].forEach(function(t){
     if(!gr[t].length)return;
     h+='<div class="fgroup"><h3>'+gi(t)+' '+gl(t)+' ('+gr[t].length+')</h3>';
