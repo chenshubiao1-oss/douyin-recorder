@@ -3,7 +3,7 @@ name: Transcribe Release Audio
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 * * * *'
+    - cron: '*/5 * * * *'
 
 env:
   PYTHON_VERSION: '3.11'
