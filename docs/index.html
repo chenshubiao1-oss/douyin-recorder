@@ -281,88 +281,35 @@ function de(id){
 }
 
 function st(m){var t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(function(){t.classList.remove('show')},2000)}
-
 var bpm={},bsm=false;
-function bts(){
+function bs(){
   bsm=!bsm;
   var cards=document.querySelectorAll('.pkg-card');
   for(var i=0;i<cards.length;i++)cards[i].style.cursor=bsm?'pointer':'default';
-  if(!bsm){bpm={};var b2=document.getElementById('bd');if(b2)b2.style.display='none';var be=document.getElementById('bt');if(be)be.textContent='选择';return}
-  var be=document.getElementById('bt');if(be)be.textContent='取消';
+  if(!bsm){bpm={};var bd=document.getElementById('bd');if(bd)bd.style.display='none';document.getElementById('bsb').textContent='Busca';return}
+  document.getElementById('bsb').textContent='CANC';
   for(var i=0;i<cards.length;i++)cards[i].onclick=function(j){return function(){
     var c=document.querySelectorAll('.pkg-card')[j];
     if(bpm[j]){delete bpm[j];c.style.border=''}else{bpm[j]=1;c.style.border='2px solid #f5a623'}
     var ks=Object.keys(bpm);
-    document.getElementById('bd').style.display=ks.length?'':'none';
-    (document.getElementById('bc')||{}).textContent=ks.length?' ('+ks.length+')':'';
+    var bd=document.getElementById('bd');if(bd)bd.style.display=ks.length?'':'none';
+    var bc=document.getElementById('bc');if(bc)bc.textContent=ks.length?' ('+ks.length+')':'';
   };}(i);
 }
-function bda(){
+function bdel(){
   var ks=Object.keys(bpm);
   if(!ks.length)return;
-  if(!confirm('确定删除选中 '+ks.length+'个包的全部文件？'))return;
-  var b2=document.getElementById('bd');if(b2)b2.disabled=1;var b2=document.getElementById('bd');if(b2)b2.textContent='删除中...';
+  if(!confirm('\u786e\u5b9a\u5220\u9664\u9009\u4e2d '+ks.length+'\u4e2a\u5305\u7684\u5168\u90e8\u6587\u4ef6\uff1f'))return;
+  var btn=document.getElementById('bd');if(btn){btn.disabled=1;btn.textContent='DEl';}
   var ids=[];
-  ks.forEach(function(k){
-    if(pk[k]&&pk[k].it)pk[k].it.forEach(function(a){ids.push(a.id);});
-  });
+  ks.forEach(function(k){if(pk[k]&&pk[k].it)pk[k].it.forEach(function(a){ids.push(a.id);});});
   var done=0,fail=0,tot=ids.length;
   if(!tot){st('ok 0');bpm={};return}
   ids.forEach(function(id){
-    fetch(A+'/repos/'+R+'/releases/assets/'+id,{method:'DELETE',headers:{Accept:'application/vnd.github.v3+json',Authorization:'Bearer '+T}})
-    .then(function(r){done++;if(!r.ok&&r.status!==204)fail++;}).catch(function(){fail++;}).then(function(){
-      if(done+fail===tot){bpm={};bsm=0;var b2=document.getElementById('bd');if(b2)b2.style.display='none';var be=document.getElementById('bt');if(be)be.textContent='选择';
-        st(fail?'ok '+(tot-fail)+'/'+tot+',fail '+fail:'ok');bts();lo();
-      }
-    });
+    fetch('https://api.github.com/repos/'+R+'/releases/assets/'+id,{method:'DELETE',headers:{Accept:'application/vnd.github.v3+json',Authorization:'Bearer '+T}}).then(function(r){done++;if(!r.ok&&r.status!==204)fail++;}).catch(function(){fail++;}).then(function(){if(done+fail===tot){bpm={};bsm=0;var bd=document.getElementById('bd');if(bd)bd.style.display='none';document.getElementById('bsb').textContent='Busca';st(fail?'ok '+(tot-fail)+'/'+tot+',fail '+fail:'ok');lo();}});
   });
 }
 
-
-var sp={},sx=false;
-function bts(){
-  sx=!sx;
-  var cards=document.querySelectorAll('.pkg-card');
-  for(var i=0;i<cards.length;i++){
-    var c=cards[i];
-    c.style.cursor=sx?'pointer':'default';
-    if(sx){
-      c.onclick=function(j){return function(){tk(j);};}(i);
-    }else{
-      (function(j){var an=document.querySelectorAll('.anchor-name')[j];c.onclick=function(){if(an)od(an.textContent.split(' ')[0],j);};})(i);
-    }
-  }
-  (document.getElementById('bs')||{}).textContent=sx?'\u2716 \u53d6\u6d88':'\u267b \u9009\u62e9';
-  if(!sx){sp={};var b2=document.getElementById('bd');if(b2)b2.style.display='none';}
-}
-function tk(i){
-  var cards=document.querySelectorAll('.pkg-card');
-  if(sp[i]){delete sp[i];cards[i].style.border='';}
-  else{sp[i]=true;cards[i].style.border='2px solid #f5a623';}
-  var ks=Object.keys(sp);
-  document.getElementById('bd').style.display=ks.length?'inline-block':'none';
-  document.getElementById('sc').textContent=ks.length?' ('+ks.length+')':'';
-}
-function da(){
-  var ks=Object.keys(sp);
-  if(!ks.length)return;
-  if(!confirm('确定删除选中 '+ks.length+' 个包的全部文件?'))return;
-  var bd=document.getElementById('bd');if(bd){bd.disabled=true;bd.textContent='删除中...';}
-  var ids=[];
-  ks.forEach(function(k){
-    var p=pk[k];
-    if(p&&p.it){p.it.forEach(function(a){ids.push(a.id);});}
-  });
-  var d2=0,f2=0,t2=ids.length;
-  ids.forEach(function(id){
-    fetch(A+'/repos/'+R+'/releases/assets/'+id,{method:'DELETE',headers:{Accept:'application/vnd.github.v3+json',Authorization:'Bearer '+T}})
-    .then(function(r){
-      if(r.ok||r.status===204)d2++;else f2++;
-    }).catch(function(){f2++;}).then(function(){
-      if(d2+f2===t2){sp={};sx=false;var b2=document.getElementById('bd');if(b2)b2.style.display='none';(document.getElementById('bs')||{}).textContent='\u267b \u9009\u62e9';if(f2===0)st('ok '+t2);else st('ok '+d2+'/'+t2+',fail '+f2);lo();}
-    });
-  });
-}
 lo();
 </script>
 </body>
