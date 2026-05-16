@@ -174,7 +174,7 @@ async function lo(){
     rs.forEach(function(r){(r.body||'').split('\n').forEach(function(l){var i=l.indexOf('/');if(i>0&&i<l.length-1)nm[l.substring(i+1)]=l.substring(0,i)})});
     as=[];
     rs.forEach(function(r){r.assets.forEach(function(a){
-      if(a.name.match(/_meta\.json$/))return;
+      if(a.name.indexOf('_meta.')>=0&&a.name.endsWith('.json'))return;if(a.name.match(/_meta\.json$/))return;
       var t=gt(a.name),p=pfn(a.name),id=p?p.id:null,an=id?gb(id):null;
       if(!an&&id&&nm[a.name])an=nm[a.name];if(!an)an=id||'oth';
       as.push({id:a.id,n:a.name,z:a.size,u:a.browser_download_url,c:a.created_at||r.created_at,ty:t,ri:id,an:an,st:p?p.s:null,et:p?p.e:null});
