@@ -1,0 +1,45 @@
+name: Transcribe Release Audio
+
+on:
+  release:
+    types: [published, edited]
+
+env:
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  transcribe:
+    if: github.event.release.prerelease == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.cache/torch
+            ~/.cache/modelscope
+            ~/.cache/huggingface
+          key: transcribe-v3-${{ runner.os }}
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install --timeout 120 torch --index-url https://download.pytorch.org/whl/cpu
+          pip install --timeout 120 torchaudio --index-url https://download.pytorch.org/whl/cpu
+          pip install --timeout 120 funasr
+          pip install --timeout 120 requests
+      - name: Transcribe new audio files
+        run: python transcribe_release.py
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_ID: ${{ github.event.release.id }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
