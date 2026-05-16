@@ -251,7 +251,8 @@ function rp(){
 
 function od(an,pi){
   var p=null;
-  for(var i=0;i<pk.length;i++)if(pk[i].an==an){p=pk[i];break;}
+  if(pi!==undefined&&pi<pk.length&&pk[pi]&&pk[pi].an===an){p=pk[pi];}
+  else{for(var i=0;i<pk.length;i++)if(pk[i].an==an){p=pk[i];break;}}
   if(!p)return;
   document.getElementById('dt').textContent=p.an+' 的录制包';
   var gr={v:[],a:[],t:[],s:[]};
