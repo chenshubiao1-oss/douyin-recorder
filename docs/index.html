@@ -190,7 +190,7 @@ function bp(){
 function pf(){
   var as2={};pk.forEach(function(p){as2[p.an]=true});
   var sel=document.getElementById('af');sel.innerHTML='<option value="all">&#x5168;&#x90E8;</option>';
-  Object.keys(as2).sort(function(a,b){if(a==='oth')return 1;if(b==='oth')return-1;return a.localeCompare(b)}).forEach(function(a){var o=document.createElement('option');o.value=a;o.textContent=a;sel.appendChild(o)});
+  Object.keys(as2).sort(function(a,b){if(a==='oth')return 1;if(b==='oth')return-1;return a.localeCompare(b)}).forEach(function(a){var o=document.createElement('option');o.value=a;o.textContent=a==='oth'?'其他主播':a;sel.appendChild(o)});
   var ds2={};pk.forEach(function(p){ds2[fl(p.it[0].c)]=true});
   var sel2=document.getElementById('df');sel2.innerHTML='<option value="all">&#x5168;&#x90E8;&#x65E5;&#x671F;</option>';
   Object.keys(ds2).sort().reverse().forEach(function(d){var o=document.createElement('option');o.value=d;o.textContent=d;sel2.appendChild(o)});
@@ -215,7 +215,7 @@ function rp(){
     var ty={};
     p.it.forEach(function(a){ty[a.ty]=(ty[a.ty]||0)+1});
     h+='<div class="pkg-card" onclick="od(\''+p.an+'\')">';
-    h+='<div class="anchor-name">'+eh(p.an)+(p.ri?' <span style="font-size:11px;color:var(--text-dim)">'+p.ri+'</span>':'')+'</div>';
+    var dn=p.an;if(dn==='oth')dn='其他主播';h+='<div class="anchor-name">'+eh(dn)+(p.ri?' <span style="font-size:11px;color:var(--text-dim)">'+p.ri+'</span>':'')+'</div>';
     h+='<div class="time-range">'+(p.st?ft(p.st,p.et):fl(p.it[0].c))+'</div><div>';
     for(var k in ty){h+='<span class="file-badge">'+gi(k)+' '+ty[k]+'</span>';}
     h+='</div></div>';
