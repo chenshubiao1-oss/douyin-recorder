@@ -26,10 +26,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cache/pip
-            ~/.cache/torch
-            ~/.cache/modelscope
-            ~/.cache/huggingface
+            /home/runner/.cache/pip
+            /home/runner/.cache/torch
+            /home/runner/.cache/modelscope
+            /home/runner/.cache/huggingface
           key: transcribe-v3-${{ runner.os }}
       - name: Install deps
         run: |
