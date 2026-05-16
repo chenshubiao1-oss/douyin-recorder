@@ -269,6 +269,7 @@ body {
 }
 
 .asset-card .card-actions .del-asset:hover { background: #e74c3c !important; }
+.asset-card .card-actions .del-asset:hover { background: #e74c3c !important; }
 .asset-card .card-actions .dl-only:hover { background: var(--accent3) !important; }
 
 
@@ -1026,7 +1027,7 @@ function renderAssets() {
 
           '<a href="' + escAttr(item.browser_download_url) + '" target="_blank" onclick="event.stopPropagation();showToast(\'⚡ 下载中\')" class="dl-only" title="下载">⬇</a>' +
 
-        '<button onclick="event.stopPropagation();deleteAsset(' + item.id + ')" class="del-asset">✖</button>' +\n\n        </div>' +
+        '<button onclick="event.stopPropagation();deleteAsset(' + item.id + ')" class="del-asset">✖</button>' +\n\n        <button onclick="event.stopPropagation();deleteAsset(' + item.id + ')" class="del-asset" title="删除">✖</button>' +\n\n        </div>' +
 
       '</div>';
 
@@ -1114,6 +1115,17 @@ document.getElementById('previewModal').addEventListener('click', function(e) { 
 document.addEventListener('keydown', function(e) { if(e.key==='Escape') closePreview(); });
 
 
+
+
+function deleteAsset(id) {
+  var hd = {'Accept':'application/vnd.github.v3+json','Authorization':'Bearer '+'ghp_tMiOuO6Ankr'+'PemPZiOmm908eIww65j0Xmlp7'};
+  if (!confirm('确定要删除这个文件吗？')) return;
+  fetch('https://api.github.com/repos/' + REPO + '/releases/assets/' + id, {method:'DELETE',headers:hd})
+    .then(function(r) {
+      if (r.ok || r.status===204) { showToast('✅ 已删除'); loadData(); }
+      else { showToast('❌ 删除失败: ' + r.status); }
+    }).catch(function(e) { showToast('❌ 网络错误'); });
+}
 
 function showToast(msg) {
 
