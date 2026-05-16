@@ -1,15 +1,15 @@
 name: Transcribe Release Audio
 
 on:
-  release:
-    types: [published, edited]
+  workflow_dispatch:
+  schedule:
+    - cron: '0 * * * *'
 
 env:
   PYTHON_VERSION: '3.11'
 
 jobs:
   transcribe:
-    if: github.event.release.prerelease == true
     runs-on: ubuntu-latest
     timeout-minutes: 120
     permissions:
@@ -36,10 +36,8 @@ jobs:
           pip install --timeout 120 torchaudio --index-url https://download.pytorch.org/whl/cpu
           pip install --timeout 120 funasr
           pip install --timeout 120 requests
-      - name: Transcribe new audio files
+      - name: Transcribe all untranscribed audio
         run: python transcribe_release.py
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
-          RELEASE_ID: ${{ github.event.release.id }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
