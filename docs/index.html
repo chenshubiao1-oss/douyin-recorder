@@ -312,7 +312,7 @@ function bdel(){
 
 var chr=String.fromCharCode;
 
-function rm(){
+function rmo(){
   var m=document.getElementById('rm');
   if(m.classList.contains('show')){m.classList.remove('show');return}
   m.classList.add('show');
@@ -330,14 +330,14 @@ function rm(){
       var parts=l.split('|');
       var rid=parts[0].trim();
       var rn=parts.length>1?parts[1].trim():'';
-      h+='<tr><td>'+(i+1)+'</td><td>'+rid+'</td><td>'+(rn||'-')+'</td><td><span style="cursor:pointer;color:#f55" onclick="delRoom(\''+rid+'\')">\u2715</span></td></tr>';
+      h+='<tr><td>'+(i+1)+'</td><td>'+rid+'</td><td>'+(rn||'-')+'</td><td><span style="cursor:pointer;color:#f55" onclick="delR(\''+rid+'\')">\u2715</span></td></tr>';
     });
     tb.innerHTML=h;
     document.getElementById('rs').textContent='ok '+lines.filter(function(x){return x.trim()!==''}).length;
   }).catch(function(e){tb.innerHTML='<tr><td colspan="4" style="text-align:center;color:#f55">error: '+e.message+'</td></tr>'});
 }
 
-function delRoom(rid){
+function delR(rid){
   if(!confirm('\u786e\u5b9a\u5220\u9664\u623f\u95f4 '+rid+'\uff1f'))return;
   var tb=document.getElementById('rb');
   fetch(A+'/repos/'+R+'/contents/rooms.txt',{headers:{Accept:'application/vnd.github.v3+json',Authorization:'Bearer '+T}})
@@ -395,6 +395,6 @@ function svRm(){
 
 
 lo();
-</script>
+pt>
 </body>
 </html>
