@@ -338,6 +338,21 @@ def stop_proc(proc):
 def upload_now(filepath, room_name):
     if not filepath or not os.path.exists(filepath): return
     fname = os.path.basename(filepath)
+    # Auto-rename: add end timestamp if missing
+    if '~' not in fname:
+        try:
+            ets = datetime.now().strftime('%Y%m%d_%H%M%S')
+            dn = os.path.dirname(filepath)
+            bn = fname.rsplit('.', 1)[0]
+            ext = fname.split('.')[-1] if '.' in fname else ''
+            nfn = bn + '~' + ets + '.' + ext
+            np = os.path.join(dn, nfn)
+            os.rename(filepath, np)
+            log(f"upload_now重命名: {fname} -> {nfn}")
+            filepath = np
+            fname = nfn
+        except Exception as e:
+            log(f"upload_now重命名失败: {e}")
     import re
     fsize = os.path.getsize(filepath)
     try:
