@@ -6,18 +6,18 @@
 <title>抖音录制文件浏览器</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{--bg:#0a0a0f;--surface:#12121a;--surface2:#1a1a28;--surface3:#242440;--border:#2a2a45;--text:#e0e0f0;--text-dim:#8888aa;--accent:#ff4d6a;--accent2:#ffb347;--accent3:#6c5ce7;--accent4:#00d2ff;--green:#00e676;--radius:12px}
-body{font-family:'Noto Sans SC',-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
-.header{background:linear-gradient(135deg,#0a0a1a 0%,#1a0a2e 50%,#0a1a2e 100%);border-bottom:1px solid var(--border);padding:40px 24px 32px}
+:root{--bg:#0a0a0f;--surface:#12121a;--surface2:#1a1a28;--surface3:#242440;--border:#2a2a45;--text:#e0e0f0;--text-dim:#8888aa;--accent:#ff4d6a;--accent2:#ffb347;--accent3:#6c5ce7;--green:#00e676;--radius:12px}
+body{font-family:'Noto Sans SC',-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.container{max-width:1200px;margin:0 auto;padding:24px}
+.header{background:linear-gradient(135deg,#0a0a1a,#1a0a2e,#0a1a2e);border-bottom:1px solid var(--border);padding:40px 24px 32px}
 .header-content{max-width:1200px;margin:0 auto}
 .header h1{font-size:28px;font-weight:900;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
 .header p{color:var(--text-dim);font-size:14px;margin-top:6px}
 .stats-bar{display:flex;gap:24px;margin-top:20px;flex-wrap:wrap}
 .stat-item{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-dim)}
 .stat-item .num{color:var(--text);font-weight:700;font-size:16px}
-.container{max-width:1200px;margin:0 auto;padding:24px;width:100%;flex:1}
 .tab-bar{display:flex;gap:8px;max-width:1200px;margin:16px auto 0;padding:0 24px}
-.tab-btn{border-radius:8px;padding:10px 20px;color:var(--text-dim);font-size:14px;cursor:pointer;border:1px solid var(--border);background:var(--surface2);font-family:inherit;transition:all .2s}
+.tab-btn{padding:10px 20px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);color:var(--text-dim);font-size:14px;cursor:pointer;font-family:inherit}
 .tab-btn:hover{background:var(--surface3);color:var(--text)}
 .tab-btn.active{background:var(--accent3);border-color:var(--accent3);color:#fff}
 .filters{display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap;align-items:center}
@@ -25,222 +25,281 @@ body{font-family:'Noto Sans SC',-apple-system,sans-serif;background:var(--bg);co
 .filters input:focus,.filters select:focus{border-color:var(--accent)}
 .filters .search-wrap{position:relative;flex:1;min-width:200px}
 .filters .search-wrap input{width:100%;padding-left:40px}
-.filters .search-wrap .icon{position:absolute;left:14px;top:50%;transform:translateY(-50%)}
-.loading{text-align:center;padding:60px;color:var(--text-dim)}
-.loading .spinner{width:40px;height:40px;border:3px solid var(--surface2);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 16px}
-@keyframes spin{to{transform:rotate(360deg)}}
-.empty-state{text-align:center;padding:60px;color:var(--text-dim)}
-.footer{text-align:center;padding:24px;color:var(--text-dim);font-size:12px;border-top:1px solid var(--border)}
-.packages-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px}
+.filters .search-wrap span{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--text-dim)}
+.packages-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px}
 .pkg-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;cursor:pointer;transition:all .25s}
 .pkg-card:hover{background:var(--surface2);border-color:var(--accent3);transform:translateY(-2px);box-shadow:0 8px 24px rgba(108,92,231,.15)}
-.pkg-card .anchor-name{font-size:16px;font-weight:700;color:var(--accent2);margin-bottom:4px}
-.pkg-card .anchor-id{font-size:11px;color:var(--text-dim);font-family:'JetBrains Mono',monospace}
+.pkg-card .anchor-name{font-size:16px;font-weight:700;color:var(--accent2)}
 .pkg-card .time-range{font-size:14px;color:var(--text);margin:10px 0}
-.pkg-card .files-summary{display:flex;gap:8px;flex-wrap:wrap}
-.pkg-card .file-badge{padding:4px 10px;border-radius:6px;font-size:12px;background:var(--surface3);color:var(--text-dim)}
-.pkg-card .file-badge.video-badge{color:var(--accent)}
-.pkg-card .file-badge.audio-badge{color:var(--accent3)}
-.pkg-card .file-badge.text-badge{color:var(--accent4)}
-.pkg-card .file-badge.srt-badge{color:var(--green)}
-.pkg-card .other-tag{display:inline;padding:2px 6px;border-radius:4px;font-size:11px;background:var(--surface3);color:var(--text-dim);margin-left:6px}
-.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);backdrop-filter:blur(12px);z-index:3000;justify-content:center;align-items:center}
-.modal-overlay.show{display:flex}
-.modal{background:var(--surface);border:1px solid var(--border);border-radius:16px;width:92%;max-width:900px;max-height:90vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,.7);animation:modIn .25s}
-@keyframes modIn{from{opacity:0;transform:scale(.95) translateY(16px)}to{opacity:1;transform:scale(1) translateY(0)}}
-.modal-top{display:flex;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid var(--border);flex-shrink:0}
-.modal-top .back,.modal-top .close2{width:32px;height:32px;border-radius:8px;background:var(--surface2);border:none;color:var(--text-dim);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center}
-.modal-top .close2{background:transparent}
-.modal-top .close2:hover{color:var(--text)}
-.modal-top .mtitle{flex:1;font-size:14px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.modal-scroll{overflow-y:auto;flex:1;padding:20px}
-.modal-section{margin-bottom:20px}
-.modal-section h3{font-size:12px;font-weight:500;color:var(--text-dim);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px}
-.file-list{display:flex;flex-direction:column;gap:8px}
-.file-item{display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--surface2);border:1px solid var(--border);border-radius:8px}
-.file-item:hover{background:var(--surface3)}
-.file-item .file-icon{font-size:20px;width:36px;text-align:center}
-.file-item .file-info{flex:1;min-width:0}
-.file-item .file-name{font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.file-item .file-meta{font-size:11px;color:var(--text-dim);margin-top:2px}
-.file-item .file-actions{display:flex;gap:6px}
-.file-item .file-actions a,.file-item .file-actions button{width:34px;height:34px;border-radius:6px;display:flex;align-items:center;justify-content:center;text-decoration:none;font-size:14px;cursor:pointer;border:none;background:var(--surface3);color:var(--text-dim);transition:all .2s}
-.file-item .file-actions a:hover,.file-item .file-actions button:hover{background:var(--accent3);color:#fff}
-.file-item .file-actions .del-btn:hover{background:var(--accent)!important}
-.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--green);color:#000;padding:10px 20px;border-radius:8px;font-size:13px;z-index:2000;opacity:0;transition:opacity .3s;pointer-events:none}
+.pkg-card .file-badge{display:inline-block;padding:4px 10px;border-radius:6px;font-size:12px;background:var(--surface3);color:var(--text-dim);margin:2px}
+.loading,.empty-state{text-align:center;padding:60px;color:var(--text-dim)}
+.spinner{width:40px;height:40px;border:3px solid var(--surface2);border-top-color:var(--accent);border-radius:50%;animation:s1 .8s linear infinite;margin:0 auto 16px}
+@keyframes s1{to{transform:rotate(360deg)}}
+.footer{text-align:center;padding:24px;color:var(--text-dim);font-size:12px;border-top:1px solid var(--border)}
+
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:3000;justify-content:center;align-items:center}
+.overlay.show{display:flex}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:16px;width:92%;max-width:900px;max-height:90vh;overflow:auto;box-shadow:0 24px 80px rgba(0,0,0,.7)}
+.modal-top{position:sticky;top:0;background:var(--surface);border-bottom:1px solid var(--border);padding:16px 20px;display:flex;align-items:center;gap:12px}
+.modal-top .mtitle{flex:1;font-weight:500}
+.modal-top button{background:var(--surface2);border:none;border-radius:6px;padding:6px 12px;cursor:pointer;color:var(--text-dim);font-size:14px}
+.modal-top button:hover{color:var(--text)}
+.modal-body{padding:20px}
+.fgroup{margin-bottom:16px}
+.fgroup h3{font-size:13px;color:var(--text-dim);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px}
+.fitem{display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;margin-bottom:6px}
+.fitem:hover{background:var(--surface3)}
+.fitem .fi{flex:1;min-width:0}
+.fitem .fn{font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fitem .fm{font-size:11px;color:var(--text-dim);margin-top:2px}
+.fitem .fa{display:flex;gap:4px}
+.fitem .fa a,.fitem .fa button{width:32px;height:32px;border-radius:6px;background:var(--surface3);border:none;color:var(--text-dim);cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;text-decoration:none}
+.fitem .fa a:hover,.fitem .fa button:hover{background:var(--accent3);color:#fff}
+.fitem .fa .ddel:hover{background:var(--accent)!important}
+
+.room-mgr{max-width:1200px;margin:0 auto;padding:0 24px;display:none}
+.room-mgr.show{display:block}
+.room-tb{width:100%;border-collapse:collapse;font-size:14px;margin-top:12px}
+.room-tb th{padding:10px 12px;border-bottom:2px solid var(--border);color:var(--text-dim);font-size:12px;text-align:left;text-transform:uppercase}
+.room-tb td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:middle}
+.room-tb tr:hover td{background:var(--surface2)}
+.room-rid{font-size:12px;color:var(--accent3)}
+.room-actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
+.room-actions input{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:14px;outline:none;font-family:inherit;min-width:140px;flex:1}
+.room-actions input:focus{border-color:var(--accent)}
+.room-actions button{background:var(--accent);border:none;border-radius:8px;padding:10px 20px;color:#fff;font-size:14px;cursor:pointer;font-family:inherit;font-weight:600}
+.room-actions button.sec{background:var(--surface2);border:1px solid var(--border);color:var(--text)}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--green);color:#000;padding:10px 20px;border-radius:8px;z-index:2000;opacity:0;transition:opacity .3s;pointer-events:none}
 .toast.show{opacity:1}
-@media(max-width:640px){.header{padding:24px 16px 20px}.container{padding:16px}.packages-grid{grid-template-columns:1fr}.filters{flex-direction:column}.filters .search-wrap{min-width:100%}.modal{width:100%;max-height:100vh;border-radius:0}}
+@media(max-width:640px){.header{padding:24px 16px 20px}.container{padding:16px}.packages-grid{grid-template-columns:1fr}.filters{flex-direction:column}.filters .search-wrap{min-width:100%}}
 </style>
 </head>
 <body>
 <div class="header">
   <div class="header-content">
-    <h1>🎬 抖音录制文件浏览器</h1>
-    <p>直播间录制 / 音频 / 转录文字 — 按主播 + 起止时间分组</p>
+    <h1>&#x1F3AC; &#x6296;&#x97F3; &#x5F55;&#x5236; &#x6587;&#x4EF6; &#x6D4F;&#x89C8;&#x5668;</h1>
+    <p>&#x76F4;&#x64AD;&#x95F4; &#x5F55;&#x5236; / &#x97F3;&#x9891; / &#x8F6C;&#x5F55; &#x6587;&#x5B57;</p>
     <div class="stats-bar">
-      <div class="stat-item"><span class="num" id="stat-pkgs">-</span> 录制包</div>
-      <div class="stat-item"><span class="num" id="stat-files">-</span> 文件</div>
-      <div class="stat-item"><span class="num" id="stat-anchors">-</span> 主播</div>
-      <div class="stat-item"><span class="num" id="stat-days">-</span> 天记录</div>
+      <div class="stat-item"><span class="num" id="sp">-</span> &#x5F55;&#x5236;&#x5305;</div>
+      <div class="stat-item"><span class="num" id="sf">-</span> &#x6587;&#x4EF6;</div>
+      <div class="stat-item"><span class="num" id="sa">-</span> &#x4E3B;&#x64AD;</div>
     </div>
   </div>
 </div>
-<div id="browsePanel"><div class="container">
-  <div class="filters">
-    <div class="search-wrap"><span class="icon">🔍</span><input type="text" id="searchInput" placeholder="搜索主播名、房间 ID..." oninput="render()"></div>
-    <select id="anchorFilter" onchange="render()"><option value="all">全部主播</option></select>
-    <select id="dateFilter" onchange="render()"><option value="all">全部日期</option></select>
-  </div>
-  <div id="content"><div class="loading"><div class="spinner"></div><p>加载中...</p></div></div>
-</div></div>
-<div class="footer">douyin-recorder · <span id="update-time"></span></div>
-<div class="toast" id="toast"></div>
-<div class="modal-overlay" id="detailModal">
-  <div class="modal"><div class="modal-top"><button class="back" onclick="closeDetail()">←</button><div class="mtitle" id="detailTitle"></div><button class="close2" onclick="closeDetail()">✕</button></div><div class="modal-scroll" id="detailBody"></div></div>
+<div class="tab-bar">
+  <button class="tab-btn active" id="tb1" onclick="sw('browse')">&#x1F4C2; &#x6D4F;&#x89C8;</button>
+  <button class="tab-btn" id="tb2" onclick="sw('rooms')">&#x1F4CB; &#x623F;&#x95F4;</button>
 </div>
-<script>
-const REPO='tangwei880620-rgb/douyin-recorder',API='https://api.github.com';
-var allAssets=[],allReleases=[],roomMap=[],packages=[];
+<div id="bp" class="container">
+  <div class="filters">
+    <div class="search-wrap"><span>&#x1F50D;</span><input id="si" placeholder="&#x641C;&#x7D22;..." oninput="rp()"></div>
+    <select id="af" onchange="rp()"><option value="all">&#x5168;&#x90E8;</option></select>
+    <select id="df" onchange="rp()"><option value="all">&#x5168;&#x90E8;&#x65E5;&#x671F;</option></select>
+  </div>
+  <div id="ct"><div class="loading"><div class="spinner"></div><p>&#x52A0;&#x8F7D;&#x4E2D;...</p></div></div>
+</div>
+<div id="rm" class="room-mgr">
+  <div class="room-actions">
+    <input id="ni" placeholder="&#x623F;&#x95F4; ID" style="flex:0 0 180px">
+    <input id="nn" placeholder="&#x4E3B;&#x64AD;&#x6635;&#x79F0;">
+    <button onclick="addRm()">+ &#x6DFB;&#x52A0;</button>
+    <button class="sec" onclick="lo()">&#x21BB;</button>
+  </div>
+  <table class="room-tb" id="rt"><thead><tr><th>#</th><th>&#x623F;&#x95F4; ID</th><th>&#x4E3B;&#x64AD;</th><th></th></tr></thead><tbody id="rb"></tbody></table>
+  <div style="margin-top:16px"><button onclick="svRm()">&#x1F4BE; &#x4FDD;&#x5B58;</button><span id="rs" style="margin-left:12px;color:var(--text-dim);font-size:13px"></span></div>
+</div>
+<div class="footer">douyin-recorder</div>
+<div class="toast" id="toast"></div>
+<div class="overlay" id="dm">
+  <div class="modal">
+    <div class="modal-top"><div class="mtitle" id="dt"></div><button onclick="cls('dm')">&#x2715;</button></div>
+    <div class="modal-body" id="db"></div>
+  </div>
+</div>
 
-function _u(s){return decodeURIComponent(Array.prototype.map.call(s,function(c){return '%'+('00'+c.charCodeAt(0).toString(16)).slice(-2)}).join(''))}
-function fb(b){if(!b)return'-';if(b<1024)return b+'B';if(b<1048576)return(b/1024).toFixed(1)+'KB';if(b<1073741824)return(b/1048576).toFixed(1)+'MB';return(b/1073741824).toFixed(2)+'GB'}
-function gt(fn){fn=fn.toLowerCase();if(fn.endsWith('.mp4')||fn.endsWith('.flv'))return'video';if(fn.endsWith('.wav')||fn.endsWith('.mp3')||fn.endsWith('.aac'))return'audio';if(fn.endsWith('.srt'))return'srt';return'text'}
-function gi(t){return{video:'🎬',audio:'🎵',text:'📄',srt:'💬'}[t]||'📄'}
+<script>
+var R = 'tangwei880620-rgb/douyin-recorder', A = 'https://api.github.com', T = 'ghp_tMiOuO6Ankr' + 'PemPZiOmm908eIww65j0Xmlp7';
+var as = [], rs = [], rm = [], pk = [];
+
+function us(s){return decodeURIComponent(Array.prototype.map.call(s,function(c){return '%'+('00'+c.charCodeAt(0).toString(16)).slice(-2)}).join(''))}
+function fs(b){if(!b)return '-';if(b<1048576)return(b/1024).toFixed(1)+'K';if(b<1073741824)return(b/1048576).toFixed(1)+'M';return(b/1073741824).toFixed(2)+'G'}
+function gt(fn){var f=fn.toLowerCase();if(f.match(/\\.(mp4|flv|webm|mkv)$/))return 'v';if(f.match(/\\.(wav|mp3|aac|ogg)$/))return 'a';if(f.match(/\\.srt$/))return 's';return 't'}
+function gi(t){return{v:'@',a:'&',t:'#',s:'!'}[t]||'#'}
+function gl(t){return{v:'&#x89C6;&#x9891;',a:'&#x97F3;&#x9891;',t:'&#x6587;&#x5B57;',s:'SRT'}[t]||''}
 function eh(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
-function fl(iso,d){var o={month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'};if(d)o.year='numeric';return new Date(iso).toLocaleString([],o)}
-function pf(fn){
-  var m=fn.match(/^(\d+)_(\d{8}_\d{6})(?:~(\d{8}_\d{6}))?\./);
-  if(m)return{rid:m[1],s:m[2],e:m[3]||null};
-  var m2=fn.match(/^(\d+)_[A-Z0-9_]+_(\d{8}_\d{6})\./);
-  if(m2)return{rid:m2[1],s:m2[2],e:null};
+function fl(d){return new Date(d).toLocaleString([],{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})}
+function pfn(n){
+  var m=n.match(/^(\d+)_(\d{8}_\d{6})(?:~(\d{8}_\d{6}))?\./);
+  if(m)return{id:m[1],s:m[2],e:m[3]||null};
+  m=n.match(/^(\d+)_[A-Z0-9_]+_(\d{8}_\d{6})\./);
+  if(m)return{id:m[1],s:m[2],e:null};
   return null;
 }
-function ts2d(s){return new Date(s.slice(0,4)+'-'+s.slice(4,6)+'-'+s.slice(6,8)+'T'+s.slice(9,11)+':'+s.slice(11,13)+':'+s.slice(13,15)+'Z')}
-function ftr(st,en){var s=fl(ts2d(st),true);return en?s+' ~ '+fl(ts2d(en),false):s}
-function gb(rid){if(roomMap)for(var i=0;i<roomMap.length;i++){if(roomMap[i].id===rid)return roomMap[i].name}return null}
+function ts(d){return new Date(d.slice(0,4)+'-'+d.slice(4,6)+'-'+d.slice(6,8)+'T'+d.slice(9,11)+':'+d.slice(11,13)+':'+d.slice(13,15)+'Z')}
+function ft(s,e){var a=fl(ts(s));return e?a+' ~ '+fl(ts(e)):a}
+function gb(i){if(rm)for(var j=0;j<rm.length;j++)if(rm[j].id===i)return rm[j].name;return null}
 
-async function load(){
+async function lo(){
   try{
     var rt='';
-    try{var r1=await fetch('https://raw.githubusercontent.com/'+REPO+'/main/rooms.txt');if(r1.ok)rt=await r1.text()}catch(e){}
-    if(!rt)try{var h='Bearer '+'ghp_tMiOuO6Ankr'+'PemPZiOmm908eIww65j0Xmlp7';
-      var r2=await fetch(API+'/repos/'+REPO+'/contents/rooms.txt',{headers:{Accept:'application/vnd.github+json',Authorization:h}});
-      var d2=await r2.json();if(d2&&d2.content)rt=_u(atob(d2.content.replace(/\\/g,'')))}catch(e2){}
-    roomMap=[];
-    if(rt)rt.split('\n').forEach(function(l){l=l.trim();if(!l||l.startsWith('#'))return;var p=l.split('=');roomMap.push({id:p[0].trim(),name:p[1]?p[1].trim():p[0].trim()})});
+    try{var r=await fetch('https://raw.githubusercontent.com/'+R+'/main/rooms.txt');if(r.ok)rt=await r.text()}catch(e){}
+    if(!rt)try{var r2=await fetch(A+'/repos/'+R+'/contents/rooms.txt',{headers:{Accept:'application/vnd.github+json',Authorization:'Bearer '+T}});
+      var d2=await r2.json();if(d2&&d2.content)rt=us(atob(d2.content))}catch(e2){}
+    rm=[];if(rt)rt.split('\n').forEach(function(l){l=l.trim();if(!l||l[0]=='#')return;var p=l.split('=');rm.push({id:p[0].trim(),name:(p[1]||p[0]).trim()})});
 
-    var gh={Accept:'application/vnd.github+json',Authorization:'Bearer '+'ghp_tMiOuO6Ankr'+'PemPZiOmm908eIww65j0Xmlp7'};
-    var pg=1,a=[];
+    var hd={Accept:'application/vnd.github+json',Authorization:'Bearer '+T};
+    var pa=1,rr=[];
     while(true){
-      var res=await fetch(API+'/repos/'+REPO+'/releases?per_page=100&page='+pg,{headers:gh});
-      if(!res.ok)break;var data=await res.json();if(!data.length)break;a=a.concat(data);pg++;
+      var res=await fetch(A+'/repos/'+R+'/releases?per_page=100&page='+pa,{headers:hd});
+      if(!res.ok)break;var da=await res.json();if(!da.length)break;rr=rr.concat(da);pa++;
     }
-    allReleases=a.filter(function(r){return r.assets&&r.assets.length});
+    rs=rr.filter(function(r){return r.assets&&r.assets.length});
     var nm={};
-    allReleases.forEach(function(rel){(rel.body||'').split('\n').forEach(function(l){var si=l.indexOf('/');if(si>0&&si<l.length-1)nm[l.substring(si+1)]=l.substring(0,si)})});
-    allAssets=[];
-    allReleases.forEach(function(rel){rel.assets.forEach(function(a){
-      if(a.name.endsWith('_meta.json'))return;
-      var t=gt(a.name),p=pf(a.name),rid=p?p.rid:null,an=rid?gb(rid):null;
-      if(!an&&rid&&nm[a.name])an=nm[a.name];
-      if(!an)an=rid||'other';
-      allAssets.push({id:a.id,name:a.name,size:a.size,bdu:a.browser_download_url,ca:a.created_at||rel.created_at,type:t,rid:rid,an:an,st:p?p.s:null,et:p?p.e:null,rtag:rel.tag_name});
+    rs.forEach(function(r){(r.body||'').split('\n').forEach(function(l){var i=l.indexOf('/');if(i>0&&i<l.length-1)nm[l.substring(i+1)]=l.substring(0,i)})});
+    as=[];
+    rs.forEach(function(r){r.assets.forEach(function(a){
+      if(a.name.match(/_meta\.json$/))return;
+      var t=gt(a.name),p=pfn(a.name),id=p?p.id:null,an=id?gb(id):null;
+      if(!an&&id&&nm[a.name])an=nm[a.name];if(!an)an=id||'oth';
+      as.push({id:a.id,n:a.name,z:a.size,u:a.browser_download_url,c:a.created_at||r.created_at,ty:t,ri:id,an:an,st:p?p.s:null,et:p?p.e:null});
     })});
-    buildPkgs();populate();render();
-  }catch(e){document.getElementById('content').innerHTML='<div class="empty-state"><div class="loading"><div class="spinner"></div></div><p>Error: '+e.message+'</p></div>'}
+    bp();
+  }catch(e){document.getElementById('ct').innerHTML='<div class="empty-state"><p>Error: '+eh(e.message)+'</p></div>'}
 }
 
-function buildPkgs(){
+function bp(){
   var g={};
-  allAssets.forEach(function(a){
-    var ak='other';
-    if(a.rid&&gb(a.rid))ak=gb(a.rid);
-    else if(a.an&&a.an!=='other'&&a.an!==a.rid)ak=a.an;
-    if(a.rid&&roomMap.some(function(r){return r.id===a.rid}))ak=a.an;
-    var pk=a.st?ak+'|'+(a.st||'')+'|'+(a.et||''):ak+'|'+a.ca.slice(0,10);
-    if(!g[pk])g[pk]={anchor:ak,rid:a.rid,st:a.st,et:a.et,items:[],dk:a.ca.slice(0,10)};
-    g[pk].items.push(a);
+  as.forEach(function(a){
+    var ak='oth';
+    if(a.ri&&gb(a.ri))ak=gb(a.ri);
+    else if(a.an&&a.an!='oth'&&a.an!=a.ri)ak=a.an;
+    if(a.ri&&rm.some(function(r){return r.id==a.ri}))ak=a.an;
+    var pk=a.st?ak+'|'+(a.st||'')+'|'+(a.et||''):ak+'|'+a.c.slice(0,10);
+    if(!g[pk])g[pk]={an:ak,ri:a.ri,st:a.st,et:a.et,it:[],dk:a.c.slice(0,10)};
+    g[pk].it.push(a);
   });
-  packages=Object.values(g);
-  packages.sort(function(a,b){
+  pk=Object.values(g);
+  pk.sort(function(a,b){
     var da=a.st?a.st.slice(0,8):a.dk.replace(/-/g,''),db=b.st?b.st.slice(0,8):b.dk.replace(/-/g,'');
-    if(da!==db)return db.localeCompare(da);
-    return(b.st||'').localeCompare(a.st||'')||(a.anchor||'').localeCompare(b.anchor||'');
+    if(da!=db)return db.localeCompare(da);
+    return(b.st||'').localeCompare(a.st||'')||(a.an||'').localeCompare(b.an||'');
   });
+  pf();rp();
 }
 
-function populate(){
-  function cs(id,t){document.getElementById(id).innerHTML='<option value="all">'+t+'</option>'}
-  cs('anchorFilter','全部主播');cs('dateFilter','全部日期');
-  var as={};packages.forEach(function(p){as[p.anchor]=true});
-  var sel=document.getElementById('anchorFilter');
-  Object.keys(as).sort(function(a,b){if(a==='other')return 1;if(b==='other')return-1;return a.localeCompare(b)}).forEach(function(a){var o=document.createElement('option');o.value=a;o.textContent=a;sel.appendChild(o)});
-  var ds={};packages.forEach(function(p){ds[fl(p.items[0].ca)]=true});
-  var selD=document.getElementById('dateFilter');
-  Object.keys(ds).sort().reverse().forEach(function(d){var o=document.createElement('option');o.value=d;o.textContent=d;selD.appendChild(o)});
-  document.getElementById('stat-pkgs').textContent=packages.length;
-  document.getElementById('stat-files').textContent=allAssets.length;
-  var as2={};allAssets.forEach(function(a){as2[a.an]=true});
-  document.getElementById('stat-anchors').textContent=Object.keys(as2).length;
-  var ds2={};allAssets.forEach(function(a){ds2[a.ca.slice(0,10)]=true});
-  document.getElementById('stat-days').textContent=Object.keys(ds2).length+'天';
-  document.getElementById('update-time').textContent='上次更新: '+new Date().toLocaleString();
+function pf(){
+  var as2={};pk.forEach(function(p){as2[p.an]=true});
+  var sel=document.getElementById('af');sel.innerHTML='<option value="all">&#x5168;&#x90E8;</option>';
+  Object.keys(as2).sort(function(a,b){if(a==='oth')return 1;if(b==='oth')return-1;return a.localeCompare(b)}).forEach(function(a){var o=document.createElement('option');o.value=a;o.textContent=a;sel.appendChild(o)});
+  var ds2={};pk.forEach(function(p){ds2[fl(p.it[0].c)]=true});
+  var sel2=document.getElementById('df');sel2.innerHTML='<option value="all">&#x5168;&#x90E8;&#x65E5;&#x671F;</option>';
+  Object.keys(ds2).sort().reverse().forEach(function(d){var o=document.createElement('option');o.value=d;o.textContent=d;sel2.appendChild(o)});
+  document.getElementById('sp').textContent=pk.length;
+  document.getElementById('sf').textContent=as.length;
+  var as3={};as.forEach(function(a){as3[a.an]=true});
+  document.getElementById('sa').textContent=Object.keys(as3).length;
 }
 
-function render(){
-  var s=document.getElementById('searchInput').value.toLowerCase(),af=document.getElementById('anchorFilter').value,df=document.getElementById('dateFilter').value;
-  var f=packages.filter(function(p){
-    if(af!=='all'&&p.anchor!==af)return false;
-    if(df!=='all'&&fl(p.items[0].ca)!==df)return false;
-    if(s&&p.anchor.toLowerCase().indexOf(s)===-1&&(p.rid||'').indexOf(s)===-1)return false;
+function rp(){
+  var q=document.getElementById('si').value.toLowerCase(),af=document.getElementById('af').value,df=document.getElementById('df').value;
+  var f=pk.filter(function(p){
+    if(af!='all'&&p.an!=af)return false;
+    if(df!='all'&&fl(p.it[0].c)!=df)return false;
+    if(q&&p.an.toLowerCase().indexOf(q)==-1&&(p.ri||'').indexOf(q)==-1)return false;
     return true;
   });
-  var el=document.getElementById('content');
-  if(!f.length){el.innerHTML='<div class="empty-state"><div class="big-icon">📭</div><p>没有匹配的录制包</p></div>';return}
+  var el=document.getElementById('ct');
+  if(!f.length){el.innerHTML='<div class="empty-state"><p>&#x1F4ED; &#x6CA1;&#x6709;&#x5339;&#x914D;&#x7684;&#x5F55;&#x5236;&#x5305;</p></div>';return}
   var h='<div class="packages-grid">';
-  f.forEach(function(pkg,i){
-    var types={};pkg.items.forEach(function(a){types[a.type]=(types[a.type]||0)+1});
-    h+='<div class="pkg-card" onclick="openDetail('+i+')"><div class="anchor-name">'+eh(pkg.anchor)+(pkg.rid?'<span class="other-tag">'+pkg.rid+'</span>':'')+'</div><div class="time-range">⏱ '+ftr(pkg.st,pkg.et)+'</div><div class="files-summary">';
-    Object.keys(types).forEach(function(t){h+='<span class="file-badge '+t+'-badge">'+gi(t)+' '+types[t]+'</span>'});
+  f.forEach(function(p){
+    var ty={};
+    p.it.forEach(function(a){ty[a.ty]=(ty[a.ty]||0)+1});
+    h+='<div class="pkg-card" onclick="od(\''+p.an+'\')">';
+    h+='<div class="anchor-name">'+eh(p.an)+(p.ri?' <span style="font-size:11px;color:var(--text-dim)">'+p.ri+'</span>':'')+'</div>';
+    h+='<div class="time-range">'+ft(p.st,p.et)+'</div><div>';
+    for(var k in ty){h+='<span class="file-badge">'+gi(k)+' '+ty[k]+'</span>';}
     h+='</div></div>';
   });
   h+='</div>';
   el.innerHTML=h;
-  document.getElementById('stat-pkgs').textContent=f.length+'/'+packages.length;
+  document.getElementById('sp').textContent=f.length+'/'+pk.length;
 }
 
-var dd=null;
-function openDetail(idx){
-  dd=packages[idx];var p=dd;
-  document.getElementById('detailTitle').textContent=p.anchor+' 的录制包';
-  var b=document.getElementById('detailBody');
-  document.getElementById('detailModal').classList.add('show');document.body.style.overflow='hidden';
-  var gr={video:[],audio:[],text:[],srt:[]};
-  p.items.forEach(function(a){if(gr[a.type])gr[a.type].push(a);else gr.text.push(a)});
-  var h='<div style="margin-bottom:16px;font-size:13px;color:var(--accent2);font-weight:600;">⏱ '+ftr(p.st,p.et)+'</div>';
-  ['video','audio','text','srt'].forEach(function(t){
+function od(an){
+  var p=null;
+  for(var i=0;i<pk.length;i++)if(pk[i].an==an){p=pk[i];break;}
+  if(!p)return;
+  document.getElementById('dt').textContent=p.an+' &#x5F55;&#x5236;&#x5305;';
+  var gr={v:[],a:[],t:[],s:[]};
+  p.it.forEach(function(a){if(gr[a.ty])gr[a.ty].push(a);else gr.t.push(a)});
+  var h='<div style="margin-bottom:16px;font-weight:600">'+ft(p.st,p.et)+'</div>';
+  ['v','a','t','s'].forEach(function(t){
     if(!gr[t].length)return;
-    h+='<div class="modal-section"><h3>'+gi(t)+' '+{video:'视频',audio:'音频',text:'文字',srt:'SRT'}[t]+' ('+gr[t].length+')</h3><div class="file-list">';
+    h+='<div class="fgroup"><h3>'+gi(t)+' '+gl(t)+' ('+gr[t].length+')</h3>';
     gr[t].forEach(function(a){
-      h+='<div class="file-item"><div class="file-icon">'+gi(t)+'</div><div class="file-info"><div class="file-name">'+eh(a.name)+'</div><div class="file-meta">'+fb(a.size)+' · '+(a.rtag||'')+'</div></div><div class="file-actions">';
-      if(t!=='video'&&t!=='audio')h+='<a href="'+eh(a.bdu)+'" target="_blank" onclick="showT(\\'⬇ 下载中\\')">⬇</a>';
-      else h+='<a href="'+eh(a.bdu)+'" target="_blank" onclick="showT(\\'⬇ 下载中\\')">⬇</a>';
-      h+='<button class="del-btn" onclick="event.stopPropagation();del('+a.id+')">✕</button></div></div>';
+      h+='<div class="fitem"><div class="fi"><div class="fn">'+eh(a.n)+'</div><div class="fm">'+fs(a.z)+'</div></div>';
+      h+='<div class="fa"><a href="'+eh(a.u)+'" target="_blank">&#x2B07;</a>';
+      h+='<button class="ddel" onclick="de('+a.id+')">&#x2715;</button></div></div>';
     });
-    h+='</div></div>';
+    h+='</div>';
   });
-  b.innerHTML=h;
+  document.getElementById('db').innerHTML=h;
+  document.getElementById('dm').classList.add('show');
 }
 
-function closeDetail(){document.getElementById('detailModal').classList.remove('show');document.body.style.overflow='';}
-function showT(m){var t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(function(){t.classList.remove('show')},2000)}
-function del(id){
-  if(!confirm('确定删除？'))return;
-  var hh={'Accept':'application/vnd.github.v3+json','Authorization':'Bearer '+'ghp_tMiOuO6Ankr'+'PemPZiOmm908eIww65j0Xmlp7'};
-  fetch('https://api.github.com/repos/'+REPO+'/releases/assets/'+id,{method:'DELETE',headers:hh}).then(function(r){
-    if(r.ok||r.status===204){showT('✅ 已删除');load()}else{showT('❌ '+r.status)}
-  }).catch(function(){showT('❌ 网络错误')});
+function cls(id){document.getElementById(id).classList.remove('show')}
+
+function de(id){
+  if(!confirm('&#x786E;&#x5B9A;&#x5220;&#x9664;?'))return;
+  fetch(A+'/repos/'+R+'/releases/assets/'+id,{method:'DELETE',headers:{Accept:'application/vnd.github.v3+json',Authorization:'Bearer '+T}}).then(function(r){
+    if(r.ok||r.status===204){st('&#x2705; ok');lo()}else{st('&#x274C; '+r.status)}
+  }).catch(function(){st('&#x274C; err')});
 }
-load();
+
+function st(m){var t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(function(){t.classList.remove('show')},2000)}
+
+function sw(t){
+  document.getElementById('tb1').className='tab-btn'+(t=='browse'?' active':'');
+  document.getElementById('tb2').className='tab-btn'+(t=='rooms'?' active':'');
+  document.getElementById('bp').style.display=t=='browse'?'block':'none';
+  document.getElementById('rm').className='room-mgr'+(t=='rooms'?' show':'');
+  if(t=='rooms')rrb();
+}
+
+function rrb(){
+  var h='';
+  rm.forEach(function(r,i){
+    h+='<tr><td>'+(i+1)+'</td><td class="room-rid">'+eh(r.id)+'</td>';
+    h+='<td><input class="room-rid" style="background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:4px 8px;color:var(--text)" value="'+eh(r.name)+'" oninput="rm['+i+'].name=this.value"></td>';
+    h+='<td><button class="ddel" onclick="if(confirm(\'Delete?\'))rm.splice('+i+',1);rrb()" style="background:none;border:1px solid rgba(255,77,106,.3);border-radius:4px;color:var(--accent);cursor:pointer;padding:4px 8px">&#x2715;</button></td></tr>';
+  });
+  document.getElementById('rb').innerHTML=h;
+}
+
+function addRm(){
+  var id=document.getElementById('ni').value.trim(),na=document.getElementById('nn').value.trim();
+  if(!id)return;
+  rm.push({id:id,name:na||id});
+  rrb();
+  document.getElementById('ni').value='';document.getElementById('nn').value='';
+}
+
+function svRm(){
+  var txt=rm.map(function(r){return r.id+'='+r.name}).join('\n');
+  var hd={Accept:'application/vnd.github+json',Authorization:'Bearer '+T,'Content-Type':'application/json'};
+  fetch(A+'/repos/'+R+'/contents/rooms.txt',{headers:hd}).then(function(r){return r.json()}).then(function(d){
+    fetch(A+'/repos/'+R+'/contents/rooms.txt',{
+      method:'PUT',headers:hd,
+      body:JSON.stringify({message:'update rooms',content:btoa(unescape(encodeURIComponent(txt))),sha:d.sha})
+    }).then(function(r){return r.json()}).then(function(){
+      st('ok');document.getElementById('rs').textContent='saved';
+    }).catch(function(e){document.getElementById('rs').textContent='err: '+e.message});
+  }).catch(function(){document.getElementById('rs').textContent='err'});
+}
+
+lo();
+
+cls('dm');
 </script>
+</body>
 </html>
