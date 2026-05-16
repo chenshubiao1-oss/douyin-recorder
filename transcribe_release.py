@@ -16,8 +16,6 @@ while True:
     except: break
     if not rels: break
     for rel in rels:
-        if not rel.get('prerelease', False):
-            continue
         upload_url = rel.get('upload_url', '')
         existing_names = {a['name'] for a in rel.get('assets', [])}
         for a in rel.get('assets', []):
@@ -44,6 +42,7 @@ print('Model loaded')
 
 # Step 4: Transcribe each
 for asset, upload_url_template in release_jobs:
+    try:
     name = asset['name']
     base = name.rsplit('.', 1)[0]
     download_url = asset['browser_download_url']
@@ -138,4 +137,7 @@ for asset, upload_url_template in release_jobs:
         urllib.request.urlopen(req2, timeout=120)
         print(f'  Uploaded: {srt_name}')
 
+    except Exception as e:
+        print(f'  Error transcribing {name}: {e}')
+        continue
     print('Transcription complete')
