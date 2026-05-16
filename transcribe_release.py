@@ -122,22 +122,7 @@ for asset, upload_url_template in release_jobs:
 
         # Upload TXT
         txt_name = base + '.txt'
-        # Add basic punctuation to make text readable
-                        punct_pairs = [
-                            # Insert 。after known sentence-ending words
-                            (['呢', '吗', '啊', '吧', '哦', '嗯', '嘛', '哟', '哈', '呀', '了'], '。'),
-                            (['不', '好', '是', '要', '有', '去', '来'], '，'),
-                        ]
-                        cleaned = []
-                        for line in text_lines:
-                            if not line.strip():
-                                continue
-                            # Add 。at end of line if missing
-                            if not line[-1] in '。！？，、；：．.':
-                                line += '。'
-                            cleaned.append(line)
-                        text_lines = cleaned
-                        txt_text = '\n'.join(text_lines)
+        txt_text = '\n'.join(text_lines)
         upload_url = upload_url_template.replace('{?name,label}', '?name=' + urllib.parse.quote(txt_name))
         req = urllib.request.Request(upload_url,
             data=txt_text.encode('utf-8'),
