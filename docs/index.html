@@ -283,6 +283,51 @@ function de(id){
 
 function st(m){var t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(function(){t.classList.remove('show')},2000)}
 
+var sp={},sx=false;
+function ts(){
+  sx=!sx;
+  var cards=document.querySelectorAll('.pkg-card');
+  for(var i=0;i<cards.length;i++){
+    var c=cards[i];
+    c.style.cursor=sx?'pointer':'default';
+    if(sx){
+      c.onclick=function(j){return function(){tk(j);};}(i);
+    }else{
+      (function(j){var an=document.querySelectorAll('.anchor-name')[j];c.onclick=function(){if(an)od(an.textContent.split(' ')[0],j);};})(i);
+    }
+  }
+  document.getElementById('bs').textContent=sx?'\u2716 \u53d6\u6d88':'\u267b \u9009\u62e9';
+  if(!sx){sp={};document.getElementById('bd').style.display='none';}
+}
+function tk(i){
+  var cards=document.querySelectorAll('.pkg-card');
+  if(sp[i]){delete sp[i];cards[i].style.border='';}
+  else{sp[i]=true;cards[i].style.border='2px solid #f5a623';}
+  var ks=Object.keys(sp);
+  document.getElementById('bd').style.display=ks.length?'inline-block':'none';
+  document.getElementById('sc').textContent=ks.length?' ('+ks.length+')':'';
+}
+function da(){
+  var ks=Object.keys(sp);
+  if(!ks.length)return;
+  if(!confirm('确定删除选中 '+ks.length+' 个包的全部文件?'))return;
+  var bd=document.getElementById('bd');if(bd){bd.disabled=true;bd.textContent='删除中...';}
+  var ids=[];
+  ks.forEach(function(k){
+    var p=pk[k];
+    if(p&&p.it){p.it.forEach(function(a){ids.push(a.id);});}
+  });
+  var d2=0,f2=0,t2=ids.length;
+  ids.forEach(function(id){
+    fetch(A+'/repos/'+R+'/releases/assets/'+id,{method:'DELETE',headers:{Accept:'application/vnd.github.v3+json',Authorization:'Bearer '+T}})
+    .then(function(r){
+      if(r.ok||r.status===204)d2++;else f2++;
+    }).catch(function(){f2++;}).then(function(){
+      if(d2+f2===t2){sp={};sx=false;document.getElementById('bd').style.display='none';document.getElementById('bs').textContent='\u267b \u9009\u62e9';if(f2===0)st('ok '+t2);else st('ok '+d2+'/'+t2+',fail '+f2);lo();}
+    });
+  });
+}
+
 var sp={};
 function tp(i,p){
   var cb=document.getElementById('cb_'+i);
