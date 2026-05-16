@@ -83,7 +83,7 @@ body{font-family:'Noto Sans SC',-apple-system,sans-serif;background:var(--bg);co
       <div class="stat-item"><span class="num" id="sp">-</span> &#x5F55;&#x5236;&#x5305;</div>
       <div class="stat-item"><span class="num" id="sf">-</span> &#x6587;&#x4EF6;</div>
       <div class="stat-item"><span class="num" id="sa">-</span> &#x4E3B;&#x64AD;</div>
-       <button id="bsb" onclick="bs()" style="font-size:13px;padding:4px 10px;border:1px solid #888;border-radius:6px;background:var(--surface);color:var(--text);cursor:pointer">选择</button> <button id="bd" onclick="bdel()" style="display:none;font-size:13px;padding:4px 10px;border:1px solid #f55;border-radius:6px;background:var(--surface);color:#f55;cursor:pointer">批量删除<span id="bc"></span></button></div>
+    </div>
   </div>
 </div>
 <div class="tab-bar">
@@ -219,9 +219,9 @@ function pf(){
   var sel2=document.getElementById('df');sel2.innerHTML='<option value="all">&#x5168;&#x90E8;&#x65E5;&#x671F;</option>';
   Object.keys(ds2).sort().reverse().forEach(function(d){var o=document.createElement('option');o.value=d;o.textContent=d.slice(5);sel2.appendChild(o)});
   document.getElementById('sp').textContent=pk.length;
-  (document.getElementById('sf')||{}).textContent=as.length;
+  document.getElementById('sf').textContent=as.length;
   var as3={};as.forEach(function(a){as3[a.an]=true});
-  (document.getElementById('sa')||{}).textContent=Object.keys(as3).length;
+  document.getElementById('sa').textContent=Object.keys(as3).length;
 }
 
 function rp(){
@@ -236,11 +236,13 @@ function rp(){
   if(!f.length){el.innerHTML='<div class="empty-state"><p>&#x1F4ED; &#x6CA1;&#x6709;&#x5339;&#x914D;&#x7684;&#x5F55;&#x5236;&#x5305;</p></div>';return}
   var h='',lastDate='';
   f.forEach(function(p){var pd=p.dk;if(pd!=lastDate){h+='<div style="font-size:18px;font-weight:700;color:var(--accent2);margin:32px 0 16px;padding:10px 16px;background:var(--surface);border-radius:10px;border-left:4px solid var(--accent3)">\ud83d\udcc5 '+pd.slice(5)+'</div><div class="packages-grid">';lastDate=pd;}
-    var ty={};    h+='<div class="pkg-card"><label class="pkg-cb"><input type="checkbox" class="pkg-checkbox" data-idx="'+pk.indexOf(p)+'"></label><div onclick="od(&apos;'+p.an+'&apos;,'+pk.indexOf(p)+')">';
+    var ty={};
+    p.it.forEach(function(a){ty[a.ty]=(ty[a.ty]||0)+1});
+    h+='<div class="pkg-card" onclick="od(\''+p.an+'\','+pk.indexOf(p)+')">';
     var dn=p.an;if(dn==='oth')dn='其他主播';h+='<div class="anchor-name">'+eh(dn)+(p.ri?' <span style="font-size:11px;color:var(--text-dim)">'+p.ri+'</span>':'')+'</div>';
     h+='<div class="time-range">'+(p.st?ft(p.st,p.et):(p.st?'':p.dk.slice(5)))+'</div><div>';
     for(var k in ty){h+='<span class="file-badge">'+gi(k)+' '+ty[k]+'</span>';}
-    h+='</div></div></div>';
+    h+='</div></div>';
   });
   h+='</div>';
   el.innerHTML=h;
@@ -280,130 +282,50 @@ function de(id){
 }
 
 function st(m){var t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(function(){t.classList.remove('show')},2000)}
-var bpm={},bsm=false;
-function bs(){
-  bsm=!bsm;
-  var cards=document.querySelectorAll('.pkg-card');
-  for(var i=0;i<cards.length;i++)cards[i].style.cursor=bsm?'pointer':'default';
-  if(!bsm){bpm={};var bd=document.getElementById('bd');if(bd)bd.style.display='none';document.getElementById('bsb').textContent='Busca';return}
-  document.getElementById('bsb').textContent='CANC';
-  for(var i=0;i<cards.length;i++)cards[i].onclick=function(j){return function(){
-    var c=document.querySelectorAll('.pkg-card')[j];
-    if(bpm[j]){delete bpm[j];c.style.border=''}else{bpm[j]=1;c.style.border='2px solid #f5a623'}
-    var ks=Object.keys(bpm);
-    var bd=document.getElementById('bd');if(bd)bd.style.display=ks.length?'':'none';
-    var bc=document.getElementById('bc');if(bc)bc.textContent=ks.length?' ('+ks.length+')':'';
-  };}(i);
+
+function sw(t){
+  document.getElementById('tb1').className='tab-btn'+(t=='browse'?' active':'');
+  document.getElementById('tb2').className='tab-btn'+(t=='rooms'?' active':'');
+  document.getElementById('bp').style.display=t=='browse'?'block':'none';
+  document.getElementById('rm').className='room-mgr'+(t=='rooms'?' show':'');
+  if(t=='rooms')rrb();
 }
-function bdel(){
-  var ks=Object.keys(bpm);
-  if(!ks.length)return;
-  if(!confirm('\u786e\u5b9a\u5220\u9664\u9009\u4e2d '+ks.length+'\u4e2a\u5305\u7684\u5168\u90e8\u6587\u4ef6\uff1f'))return;
-  var btn=document.getElementById('bd');if(btn){btn.disabled=1;btn.textContent='DEl';}
-  var ids=[];
-  ks.forEach(function(k){if(pk[k]&&pk[k].it)pk[k].it.forEach(function(a){ids.push(a.id);});});
-  var done=0,fail=0,tot=ids.length;
-  if(!tot){st('ok 0');bpm={};return}
-  ids.forEach(function(id){
-    fetch('https://api.github.com/repos/'+R+'/releases/assets/'+id,{method:'DELETE',headers:{Accept:'application/vnd.github.v3+json',Authorization:'Bearer '+T}}).then(function(r){done++;if(!r.ok&&r.status!==204)fail++;}).catch(function(){fail++;}).then(function(){if(done+fail===tot){bpm={};bsm=0;var bd=document.getElementById('bd');if(bd)bd.style.display='none';document.getElementById('bsb').textContent='Busca';st(fail?'ok '+(tot-fail)+'/'+tot+',fail '+fail:'ok');lo();}});
+
+function rrb(){
+  var h='';
+  rm.forEach(function(r,i){
+    h+='<tr><td>'+(i+1)+'</td><td class="room-rid">'+eh(r.id)+'</td>';
+    h+='<td><input class="room-rid" style="background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:4px 8px;color:var(--text)" value="'+eh(r.name)+'" oninput="rm['+i+'].name=this.value"></td>';
+    h+='<td><button class="ddel" onclick="if(confirm(\'Delete?\'))rm.splice('+i+',1);rrb()" style="background:none;border:1px solid rgba(255,77,106,.3);border-radius:4px;color:var(--accent);cursor:pointer;padding:4px 8px">&#x2715;</button></td></tr>';
   });
-}
-
-
-var chr=String.fromCharCode;
-
-function rmo(){
-  var m=document.getElementById('rm');
-  if(m.classList.contains('show')){m.classList.remove('show');return}
-  m.classList.add('show');
-  var tb=document.getElementById('rb');
-  tb.innerHTML='<tr><td colspan="4" style="text-align:center;color:var(--text-dim)">\u52a0\u8f7d\u4e2d...</td></tr>';
-  fetch(A+'/repos/'+R+'/contents/rooms.txt',{headers:{Accept:'application/vnd.github.v3+json',Authorization:'Bearer '+T}})
-  .then(function(r){return r.json()})
-  .then(function(d){
-    var txt=atob(d.content);
-    var lines=txt.trim().split('\n');
-    var h='';
-    lines.forEach(function(l,i){
-      l=l.trim();
-      if(!l)return;
-      var parts=l.split('|');
-      var rid=parts[0].trim();
-      var rn=parts.length>1?parts[1].trim():'';
-      h+='<tr><td>'+(i+1)+'</td><td>'+rid+'</td><td>'+(rn||'-')+'</td><td><span style="cursor:pointer;color:#f55" onclick="delR(\''+rid+'\')">\u2715</span></td></tr>';
-    });
-    tb.innerHTML=h;
-    document.getElementById('rs').textContent='ok '+lines.filter(function(x){return x.trim()!==''}).length;
-  }).catch(function(e){tb.innerHTML='<tr><td colspan="4" style="text-align:center;color:#f55">error: '+e.message+'</td></tr>'});
-}
-
-function delR(rid){
-  if(!confirm('\u786e\u5b9a\u5220\u9664\u623f\u95f4 '+rid+'\uff1f'))return;
-  var tb=document.getElementById('rb');
-  fetch(A+'/repos/'+R+'/contents/rooms.txt',{headers:{Accept:'application/vnd.github.v3+json',Authorization:'Bearer '+T}})
-  .then(function(r){return r.json()})
-  .then(function(d){
-    var txt=atob(d.content);
-    var lines=txt.split('\n').filter(function(l){return l.trim().split('|')[0].trim()!==rid;});
-    var newb64=btoa(lines.join('\n'));
-    fetch(A+'/repos/'+R+'/contents/rooms.txt',{method:'PUT',body:JSON.stringify({message:'del room '+rid,content:newb64,sha:d.sha}),headers:{Accept:'application/vnd.github.v3+json','Content-Type':'application/json',Authorization:'Bearer '+T}})
-    .then(function(r){
-      if(r.ok){st('ok');rmo()}else{st('fail '+r.status)}
-    }).catch(function(e){st('err '+e.message)});
-  }).catch(function(e){tb.innerHTML='<tr><td colspan="4" style="text-align:center;color:#f55">err: '+e.message+'</td></tr>'});
+  document.getElementById('rb').innerHTML=h;
 }
 
 function addRm(){
-  var rid=document.getElementById('ni').value.trim();
-  var rn=document.getElementById('nn').value.trim();
-  if(!rid){st('need room id');return}
-  fetch(A+'/repos/'+R+'/contents/rooms.txt',{headers:{Accept:'application/vnd.github.v3+json',Authorization:'Bearer '+T}})
-  .then(function(r){return r.json()})
-  .then(function(d){
-    var txt=atob(d.content);
-    var parts=[rid];if(rn)parts.push(rn);
-    txt=(txt.trim()?txt+'\n':'')+parts.join('|');
-    var newb64=btoa(txt);
-    fetch(A+'/repos/'+R+'/contents/rooms.txt',{method:'PUT',body:JSON.stringify({message:'add room '+rid,content:newb64,sha:d.sha}),headers:{Accept:'application/vnd.github.v3+json','Content-Type':'application/json',Authorization:'Bearer '+T}})
-    .then(function(r){
-      if(r.ok){st('ok');document.getElementById('ni').value='';document.getElementById('nn').value='';rm()}else{r.json().then(function(j){st('fail: '+(j.message||r.status))})}
-    }).catch(function(e){st('err '+e.message)});
-  });
+  var id=document.getElementById('ni').value.trim(),na=document.getElementById('nn').value.trim();
+  if(!id)return;
+  rm.push({id:id,name:na||id});
+  rrb();
+  document.getElementById('ni').value='';document.getElementById('nn').value='';
+  svRm();
 }
 
 function svRm(){
-  var rows=document.querySelectorAll('#rb tr');
-  var lines=[];
-  rows.forEach(function(r){
-    var tds=r.querySelectorAll('td');
-    if(tds.length<3)return;
-    var rid=tds[1].textContent.trim();
-    var nickCell=tds[2];
-    var nickInput=nickCell.querySelector('input');
-    var rn=nickInput?nickInput.value.trim():nickCell.textContent.trim();
-    if(rn && rn!=='-' && rid)lines.push(rid+'|'+rn);
-    else if(rid)lines.push(rid);
-  });
-  fetch(A+'/repos/'+R+'/contents/rooms.txt',{headers:{Accept:'application/vnd.github.v3+json',Authorization:'Bearer '+T}})
-  .then(function(r){return r.json()})
-  .then(function(d){
-    var newb64=btoa(lines.join('\n'));
-    fetch(A+'/repos/'+R+'/contents/rooms.txt',{method:'PUT',body:JSON.stringify({message:'save rooms',content:newb64,sha:d.sha}),headers:{Accept:'application/vnd.github.v3+json','Content-Type':'application/json',Authorization:'Bearer '+T}})
-    .then(function(r){if(r.ok){st('ok');rmo()}else{st('fail '+r.status)}}).catch(function(e){st('err '+e.message)});
-  });
-}
-
-
-
-function sw(t){
-  var b=document.getElementById('bp'),r=document.getElementById('rm');
-  if(t==='browse'){if(r)r.classList.remove('show');if(b)b.style.display='';document.getElementById('tb1').classList.add('active');document.getElementById('tb2').classList.remove('active');}
-  else{if(r)rmo();if(b)b.style.display='none';document.getElementById('tb2').classList.add('active');document.getElementById('tb1').classList.remove('active');}
+  var txt=rm.map(function(r){return r.id+'='+r.name}).join('\n');
+  var hd={Accept:'application/vnd.github+json',Authorization:'Bearer '+T,'Content-Type':'application/json'};
+  fetch(A+'/repos/'+R+'/contents/rooms.txt',{headers:hd}).then(function(r){return r.json()}).then(function(d){
+    fetch(A+'/repos/'+R+'/contents/rooms.txt',{
+      method:'PUT',headers:hd,
+      body:JSON.stringify({message:'update rooms',content:btoa(unescape(encodeURIComponent(txt))),sha:d.sha})
+    }).then(function(r){return r.json()}).then(function(){
+      st('ok');document.getElementById('rs').textContent='saved';
+    }).catch(function(e){document.getElementById('rs').textContent='err: '+e.message});
+  }).catch(function(){document.getElementById('rs').textContent='err'});
 }
 
 lo();
+
+cls('dm');
 </script>
-
-
 </body>
 </html>
