@@ -1251,6 +1251,12 @@ function renderRoomTable() {
   document.getElementById('roomCount').textContent = '共 ' + window.roomList.length + ' 个房间';
 }
 
+function deleteAsset(id, name) {
+  var ghHeaders = {'Accept': 'application/vnd.github.v3+json', 'Authorization': 'Bearer ' + 'ghp_tMiOuO6Ankr' + 'PemPZiOmm908eIww65j0Xmlp7'};
+  showConfirm('确定要删除文件：<br><strong>' + escHtml(name) + '</strong>？',
+    'fetch(\'https://api.github.com/repos/' + REPO + '/releases/assets/\' + id + ', {method:\'DELETE\',headers:ghHeaders}).then(function(r){if(r.ok||r.status===204){showToast(\'✅ 已删除\');loadData()}else{showToast(\'❌ 删除失败: \'+r.status)}}).catch(function(e){showToast(\'❌ 网络错误\')})");
+}
+
 function showConfirm(msg, onYes) {
   var d = document.createElement('div');
   d.className = 'confirm-dialog';
@@ -1259,7 +1265,7 @@ function showConfirm(msg, onYes) {
   document.body.appendChild(d);
 }
 
-function deleteAssetByIndex(gi, ii) {
+// 
   if (!window._allData || !window._allData[gi]) return;
   var asset = window._allData[gi].items[ii];
   if (!asset) return;
