@@ -54,6 +54,9 @@ def load_rooms_from_github():
             headers={"Authorization":f"Bearer {GH_TOKEN}","Accept":"application/vnd.github+json"})
         resp = json.loads(urllib.request.urlopen(req, timeout=URLLIB_TIMEOUT).read())
         content = base64.b64decode(resp["content"]).decode("utf-8")
+        # Handle literal backslash+n (some saves corrupt newlines)
+        if '\\n' in content:
+            content = content.replace('\\n', '\n')
         rooms = []
         for line in content.split("\n"):
             line = line.strip()
@@ -215,6 +218,9 @@ def update_rooms_nickname(anchor_names):
         d = json.loads(resp.read())
         content = base64.b64decode(d['content']).decode('utf-8')
         sha = d['sha']
+        # Handle literal backslash+n
+        if '\\n' in content:
+            content = content.replace('\\n', '\n')
         lines = content.split('\n')
         changed = False
         for i, line in enumerate(lines):
@@ -321,7 +327,6 @@ def upload_now(filepath, room_name):
                         data=body_json,
                         headers=patch_hdrs, method='PATCH')
                     urllib.request.urlopen(patch_req, timeout=30)
-                urllib.request.urlopen(patch_req, timeout=30)
         except Exception as _eb:
             log(f"body update failed: {_eb}")
         log(f"upload OK: {room_name}/{fname} -> [{safe_fname}] ({fsize/1024/1024:.1f}MB)")
