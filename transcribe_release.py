@@ -35,7 +35,7 @@ print('Found %d audio file(s) to transcribe' % len(release_jobs))
 # Step 3: Download model (once)
 from funasr import AutoModel
 print('Loading SenseVoiceSmall model...')
-model = AutoModel(model='iic/SenseVoiceSmall', vad_model=None, punc_model='ct-punc',
+model = AutoModel(model='iic/SenseVoiceSmall', vad_model='fsmn-vad', punc_model='ct-punc',
                   spk_model=None, disable_update=True, device='cpu')
 print('Model loaded')
 
@@ -74,7 +74,7 @@ for asset, upload_url_template in release_jobs:
             seg_len = seg_end - seg_offset
             print('  Segment %d: %dm%ds - %dm%ds (%ds)' % (seg_num + 1, seg_offset // 60, seg_offset % 60, seg_end // 60, seg_end % 60, seg_len))
 
-            result = model.generate(input=seg_path, cache={})
+            result = model.generate(input=seg_path)
             if isinstance(result, list):
                 for item in result:
                     if isinstance(item, dict):
