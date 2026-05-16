@@ -150,7 +150,7 @@ def get_anchor_name(page):
             # 跳过默认标题（页面未完全加载时的通用标题）
             is_default = ('抖音直播' in title and '电脑版' in title)
             if not is_default:
-                name = title.replace(' 正在直播', '').replace(' 的直播间', '').replace(' - 抖音', '').strip()
+                name = title.replace(' 正在直播', '').replace(' 的直播间', '').replace(' - 抖音', '').replace('的抖音直播间直播', '').replace('的抖音直播间', '').strip()
                 if name:
                     return name
         # 从页面所有 script 搜 nickname
@@ -231,6 +231,10 @@ def update_rooms_nickname(anchor_names):
             rid = parts[0].strip()
             if rid in anchor_names:
                 nickname = anchor_names[rid]
+                # Clean nicknames: remove known suffixes
+                for suffix in ['的抖音直播间直播', '的抖音直播间', ' 正在直播', ' 的直播间', ' - 抖音']:
+                    nickname = nickname.replace(suffix, '')
+                nickname = nickname.strip()
                 if nickname and nickname != rid and not re.match(r'^\d+$', nickname):
                     if len(parts) == 1:
                         # Pure ID, no nickname - add it
