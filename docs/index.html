@@ -242,7 +242,7 @@ function rp(){
     var dn=p.an;if(dn==='oth')dn='其他主播';h+='<div class="anchor-name">'+eh(dn)+(p.ri?' <span style="font-size:11px;color:var(--text-dim)">'+p.ri+'</span>':'')+'</div>';
     h+='<div class="time-range">'+(p.st?ft(p.st,p.et):(p.st?'':p.dk.slice(5)))+'</div><div>';
     for(var k in ty){h+='<span class="file-badge">'+gi(k)+' '+ty[k]+'</span>';}
-    h+='</div></div>';
+    h+='</div></div></div>';
   });
   h+='</div>';
   el.innerHTML=h;
