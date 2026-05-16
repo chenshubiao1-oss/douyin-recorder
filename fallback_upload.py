@@ -65,3 +65,15 @@ for fn in os.listdir(d):
         print('UPLOADED:', fn, len(data)//1024//1024, 'MB')
     except Exception as e:
         print('FAILED:', fn, e)
+
+# Notify transcription workflow
+print('Triggering transcription check via repository_dispatch...')
+try:
+    body = json.dumps({'event_type': 'transcribe_self_renew'}).encode()
+    req = urllib.request.Request('https://api.github.com/repos/'+repo+'/dispatches',
+        data=body, headers={**gh,'Content-Type':'application/json'}, method='POST')
+    urllib.request.urlopen(req, timeout=30)
+    print('  Trigger OK')
+except Exception as e:
+    print('  Trigger failed:', e)
+
