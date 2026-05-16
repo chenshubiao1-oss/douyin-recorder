@@ -4,26 +4,13 @@ on:
   workflow_dispatch:
   repository_dispatch:
     types: [record_lives]
-    inputs:
-      test_mode:
-        description: '测试模式: 录制60秒+转写'
-        required: false
-        default: ''
-      test_room:
-        description: '测试房间ID'
-        required: false
-        default: '198953345595'
-      test_duration:
-        description: '测试录制时长(秒)'
-        required: false
-        default: '60'
   schedule:
-    - cron: '0 22 * * *'  # 泰国05:00 = UTC 22:00
-    - cron: '30 2 * * *'  # 泰国09:30 = UTC 02:30
-    - cron: '0 7 * * *'   # 泰国14:00 = UTC 07:00
-    - cron: '30 11 * * *' # 泰国18:30 = UTC 11:30
-    - cron: '0 16 * * *'  # 泰国23:00 = UTC 16:00
-    - cron: '30 20 * * *' # 泰国03:30 = UTC 20:30
+    - cron: '0 22 * * *'
+    - cron: '30 2 * * *'
+    - cron: '0 7 * * *'
+    - cron: '30 11 * * *'
+    - cron: '0 16 * * *'
+    - cron: '30 20 * * *'
 
 env:
   PYTHON_VERSION: '3.11'
@@ -40,7 +27,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          python-version: \${{ env.PYTHON_VERSION }}
       - name: Cache
         uses: actions/cache@v4
         with:
@@ -50,9 +37,9 @@ jobs:
             ~/.cache/modelscope
             ~/.cache/huggingface
             ~/.cache/ms-playwright
-          key: deps-v3-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+          key: deps-v3-\${{ runner.os }}-\${{ hashFiles('requirements.txt') }}
           restore-keys: |
-            deps-v3-${{ runner.os }}-
+            deps-v3-\${{ runner.os }}-
             deps-v3-
             deps-
             dep-
@@ -71,63 +58,16 @@ jobs:
           mkdir -p /tmp/recordings /tmp/transcripts
       - name: Show TH time
         run: |
-          echo 'GitHub UTC: ' $(date -u '+%Y-%m-%d %H:%M:%S')
-          echo 'Thailand:  ' $(TZ='Asia/Bangkok' date '+%Y-%m-%d %H:%M:%S')
+          echo 'GitHub UTC: ' \$(date -u '+%Y-%m-%d %H:%M:%S')
+          echo 'Thailand:  ' \$(TZ='Asia/Bangkok' date '+%Y-%m-%d %H:%M:%S')
       - name: Run recorder
         run: python recorder.py
         env:
           CHECK_INTERVAL: 15
-          GH_REPO: ${{ github.repository }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_RUN_ID: ${{ github.run_id }}
-          TEST_MODE: ${{ github.event.inputs.test_mode || '' }}
-          TEST_ROOM: ${{ github.event.inputs.test_room || '344763580' }}
-          TEST_DURATION: ${{ github.event.inputs.test_duration || '60' }}
-          DOUYIN_COOKIE: ${{ secrets.DOUYIN_COOKIE }}
-      
-      
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-      - name: Restore cache (record job may still be running)
-        uses: actions/cache/restore@v4
-        with:
-          path: |
-            ~/.cache/pip
-            ~/.cache/torch
-            ~/.cache/modelscope
-            ~/.cache/huggingface
-          key: deps-v3-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
-          restore-keys: |
-            deps-v3-${{ runner.os }}-
-            deps-v3-
-            deps-
-            dep-
-            de
-          fail-on-cache-miss: false
-          lookup-only: false
-      - name: Install deps
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y ffmpeg
-          pip install --timeout 120 torch --index-url https://download.pytorch.org/whl/cpu
-          pip install --timeout 120 torchaudio --index-url https://download.pytorch.org/whl/cpu
-          pip install --timeout 120 funasr
-          pip install --timeout 120 requests
-      - name: Download recordings artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: douyin-${{ github.run_id }}-1
-          path: /tmp/recordings/
-      - name: Transcribe orphan audio
-        run: python transcribe_orphan.py
-        env:
-          GH_RUN_ID: ${{ github.run_id }}
-      - name: Upload to Release
-        run: python upload_orphan.py
-        env:
-          GH_REPO: ${{ github.repository }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_RUN_ID: ${{ github.run_id }}
-      - name
+          GH_REPO: \${{ github.repository }}
+          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+          GH_RUN_ID: \${{ github.run_id }}
+          TEST_MODE: \${{ github.event.inputs.test_mode || '' }}
+          TEST_ROOM: \${{ github.event.inputs.test_room || '344763580' }}
+          TEST_DURATION: \${{ github.event.inputs.test_duration || '60' }}
+          DOUYIN_COOKIE: \${{ secrets.DOUYIN_COOKIE }}
