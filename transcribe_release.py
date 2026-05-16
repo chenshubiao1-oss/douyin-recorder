@@ -80,7 +80,7 @@ for asset, upload_url_template in release_jobs:
                     if isinstance(item, dict):
                         txt = item.get('text', '') or item.get('sentence', '') or ''
                         if txt.strip():
-                            txt = re.sub(r'<\s*\|\s*\w+\s*\|?\s*>', '', txt).strip()
+                            txt = re.sub(r'<[^>]*\|[^>]*>', '', txt).strip()
                             if not txt: continue
                             # Python punctuation post-processing
                             if not txt.endswith(('。','！','？','）','」','》','”')):
@@ -111,7 +111,7 @@ for asset, upload_url_template in release_jobs:
                 txt = result.get('text', '') or result.get('sentence', '') or ''
                 if txt.strip():
                     import re as _re
-                    txt = re.sub(r'<\s*\|\s*\w+\s*\|?\s*>', '', txt).strip()
+                    txt = re.sub(r'<[^>]*\|[^>]*>', '', txt).strip()
                     if not txt: continue
                     if not txt.endswith(('。','！','？','）','」','》','”')):
                         txt += '。'
