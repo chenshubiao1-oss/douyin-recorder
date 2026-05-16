@@ -1272,7 +1272,7 @@ function saveRoomsDirect() {
       fetch(getUrl, {
         method: 'PUT',
         headers: ghHeaders,
-        body: JSON.stringify({ message: 'add room from frontend', content: btoa(text), sha: data.sha })
+        body: JSON.stringify({ message: 'add room from frontend', content: btoa(unescape(encodeURIComponent(text))), sha: data.sha })
       }).then(function(r){ return r.json(); }).then(function(d){
         // silent
       });
@@ -1306,7 +1306,7 @@ function saveRooms() {
         headers: ghHeaders,
         body: JSON.stringify({
           message: 'save rooms from frontend',
-          content: btoa(text),
+          content: btoa(unescape(encodeURIComponent(text))),
           sha: data.sha
         })
       }).then(function(r){ return r.json(); }).then(function(d){
