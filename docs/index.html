@@ -195,6 +195,14 @@ function bp(){
     g[pk].it.push(a);
   });
   pk=Object.values(g);
+  // merge same room+start time packages
+  var mg={};
+  pk.forEach(function(p){
+    var mk=p.ri+'|'+p.st;
+    if(!mg[mk]){mg[mk]=p;}
+    else{mg[mk].it=mg[mk].it.concat(p.it);if(!mg[mk].et&&p.et)mg[mk].et=p.et;else if(p.et&&p.et<mg[mk].et)mg[mk].et=p.et;}
+  });
+  pk=Object.values(mg);
   pk.sort(function(a,b){
     var da=a.st?a.st.slice(0,8):a.dk.replace(/-/g,''),db=b.st?b.st.slice(0,8):b.dk.replace(/-/g,'');
     if(da!=db)return db.localeCompare(da);
