@@ -1025,9 +1025,9 @@ function renderAssets() {
           (canPrev ? '<button onclick="event.stopPropagation();openPreview(\'' + escAttr(item.rawUrl) + '\',\'' + escAttr(item.name) + '\',\'' + item.type + '\')" title="预览">👁</button>' : '') +
 
           '<a href="' + escAttr(item.browser_download_url) + '" target="_blank" onclick="event.stopPropagation();showToast(\'⚡ 下载中\')" class="dl-only" title="下载">⬇</a>' +
+                    '<button onclick="event.stopPropagation();deleteAsset(' + item.id + ')" class="del-asset" title="删除">✖</button>' +
 
-        '<button onclick="event.stopPropagation();deleteAsset(' + item.id + ')" class="del-asset" title="删除">✖</button>' +
-        </div>' +
+        '</div>' +
 
       '</div>';
 
