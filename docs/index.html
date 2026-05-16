@@ -236,8 +236,7 @@ function rp(){
   if(!f.length){el.innerHTML='<div class="empty-state"><p>&#x1F4ED; &#x6CA1;&#x6709;&#x5339;&#x914D;&#x7684;&#x5F55;&#x5236;&#x5305;</p></div>';return}
   var h='',lastDate='';
   f.forEach(function(p){var pd=p.dk;if(pd!=lastDate){h+='<div style="font-size:18px;font-weight:700;color:var(--accent2);margin:32px 0 16px;padding:10px 16px;background:var(--surface);border-radius:10px;border-left:4px solid var(--accent3)">\ud83d\udcc5 '+pd.slice(5)+'</div><div class="packages-grid">';lastDate=pd;}
-    var ty={};
-    h+='<div class="pkg-card"><label class="pkg-cb"><input type="checkbox" class="pkg-checkbox" data-idx="'+pk.indexOf(p)+'"></label><div onclick="od(\'"+p.an+"\'","+pk.indexOf(p)+")">';
+    var ty={};    h+='<div class="pkg-card"><label class="pkg-cb"><input type="checkbox" class="pkg-checkbox" data-idx="'+pk.indexOf(p)+'"></label><div onclick="od(&apos;'+p.an+'&apos;,'+pk.indexOf(p)+')">';
     var dn=p.an;if(dn==='oth')dn='其他主播';h+='<div class="anchor-name">'+eh(dn)+(p.ri?' <span style="font-size:11px;color:var(--text-dim)">'+p.ri+'</span>':'')+'</div>';
     h+='<div class="time-range">'+(p.st?ft(p.st,p.et):(p.st?'':p.dk.slice(5)))+'</div><div>';
     for(var k in ty){h+='<span class="file-badge">'+gi(k)+' '+ty[k]+'</span>';}
@@ -311,6 +310,7 @@ function bdel(){
 }
 
 
+var chr=String.fromCharCode;
 function rm(){
   var m=document.getElementById('rm');if(m.classList.contains('show')){m.classList.remove('show');return}
   document.getElementById('rl').innerHTML='';
