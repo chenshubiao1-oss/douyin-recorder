@@ -43,8 +43,8 @@ print('Model loaded')
 # Step 4: Transcribe each
 for asset, upload_url_template in release_jobs:
     try:
-    name = asset['name']
-    base = name.rsplit('.', 1)[0]
+        name = asset['name']
+        base = name.rsplit('.', 1)[0]
     download_url = asset['browser_download_url']
     wav_path = f'/tmp/{name}'
     print(f'Downloading: {name} ({asset["size"]//1024//1024} MB)')
