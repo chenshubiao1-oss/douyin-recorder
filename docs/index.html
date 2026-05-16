@@ -269,8 +269,6 @@ body {
 }
 
 .asset-card .card-actions .dl-only:hover { background: var(--accent3) !important; }
-.asset-card .card-actions .del-asset:hover { background: #e74c3c !important; }
-.asset-card .card-actions .del-asset:hover { background: #e74c3c !important; }
 
 
 
@@ -1005,9 +1003,7 @@ function renderAssets() {
 
       html += '<div class="asset-card icon-' + item.type + '">' +
 
-        '<div class="icon-area">' + getIcon(item.type) + '<button onclick="event.stopPropagation();deleteAsset(' + item.id + ')" class="del-asset">✖</button>' +
-        <button onclick="event.stopPropagation();deleteAsset(' + item.id + ')" class="del-asset">✖</button>' +
-        </div>' +
+        '<div class="icon-area">' + getIcon(item.type) + '</div>' +
 
         '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">' +
 
