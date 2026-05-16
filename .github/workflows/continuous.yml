@@ -27,7 +27,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: \${{ env.PYTHON_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
       - name: Cache
         uses: actions/cache@v4
         with:
@@ -37,9 +37,9 @@ jobs:
             ~/.cache/modelscope
             ~/.cache/huggingface
             ~/.cache/ms-playwright
-          key: deps-v3-\${{ runner.os }}-\${{ hashFiles('requirements.txt') }}
+          key: deps-v3-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
           restore-keys: |
-            deps-v3-\${{ runner.os }}-
+            deps-v3-${{ runner.os }}-
             deps-v3-
             deps-
             dep-
@@ -58,16 +58,16 @@ jobs:
           mkdir -p /tmp/recordings /tmp/transcripts
       - name: Show TH time
         run: |
-          echo 'GitHub UTC: ' \$(date -u '+%Y-%m-%d %H:%M:%S')
-          echo 'Thailand:  ' \$(TZ='Asia/Bangkok' date '+%Y-%m-%d %H:%M:%S')
+          echo 'GitHub UTC: ' $(date -u '+%Y-%m-%d %H:%M:%S')
+          echo 'Thailand:  ' $(TZ='Asia/Bangkok' date '+%Y-%m-%d %H:%M:%S')
       - name: Run recorder
         run: python recorder.py
         env:
           CHECK_INTERVAL: 15
-          GH_REPO: \${{ github.repository }}
-          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
-          GH_RUN_ID: \${{ github.run_id }}
-          TEST_MODE: \${{ github.event.inputs.test_mode || '' }}
-          TEST_ROOM: \${{ github.event.inputs.test_room || '344763580' }}
-          TEST_DURATION: \${{ github.event.inputs.test_duration || '60' }}
-          DOUYIN_COOKIE: \${{ secrets.DOUYIN_COOKIE }}
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_RUN_ID: ${{ github.run_id }}
+          TEST_MODE: ${{ github.event.inputs.test_mode || '' }}
+          TEST_ROOM: ${{ github.event.inputs.test_room || '344763580' }}
+          TEST_DURATION: ${{ github.event.inputs.test_duration || '60' }}
+          DOUYIN_COOKIE: ${{ secrets.DOUYIN_COOKIE }}
