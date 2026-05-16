@@ -408,6 +408,73 @@ def upload_now(filepath, room_name):
     except Exception as e:
         log(f"上传异常: {e}")
 
+def transcribe_wav(wav_path, room_id):
+    """Transcribe WAV using SenseVoice and upload TXT/SRT."""
+    try:
+        from funasr import AutoModel
+        model = AutoModel(model='iic/SenseVoiceSmall', vad_model=None, punc_model=None,
+                          spk_model=None, disable_update=True, device='cpu')
+        
+        base = os.path.basename(wav_path).rsplit('.', 1)[0]
+        result = model.generate(input=wav_path, cache={})
+        
+        text_lines = []
+        srt_lines = []
+        srt_idx = 1
+        
+        if isinstance(result, list):
+            for item in result:
+                if isinstance(item, dict):
+                    txt = item.get('text', '') or item.get('sentence', '') or ''
+                    if txt.strip():
+                        text_lines.append(txt.strip())
+                        ts = item.get('timestamp', '')
+                        if ts and isinstance(ts, list):
+                            for seg in ts:
+                                if isinstance(seg, list) and len(seg) >= 3:
+                                    st_ms, et_ms, seg_txt = int(seg[0]), int(seg[1]), seg[2]
+                                    st_s = st_ms // 1000
+                                    et_s = et_ms // 1000
+                                    st_fmt = '%02d:%02d:%02d,%03d' % (st_s//3600, (st_s%3600)//60, st_s%60, st_ms%1000)
+                                    et_fmt = '%02d:%02d:%02d,%03d' % (et_s//3600, (et_s%3600)//60, et_s%60, et_ms%1000)
+                                    srt_lines.append('%d\n%s --> %s\n%s\n' % (srt_idx, st_fmt, et_fmt, seg_txt))
+                                    srt_idx += 1
+                elif isinstance(item, str) and item.strip():
+                    text_lines.append(item.strip())
+        elif isinstance(result, dict):
+            txt = result.get('text', '') or result.get('sentence', '') or ''
+            if txt.strip():
+                text_lines.append(txt.strip())
+        
+        if not text_lines:
+            log(f"[{room_id}] 转录结果为空: {base}")
+            return
+        
+        # Upload TXT
+        txt_text = '\n'.join(text_lines)
+        txt_name = base + '.txt'
+        txt_path = '/tmp/' + txt_name
+        with open(txt_path, 'w', encoding='utf-8') as f:
+            f.write(txt_text)
+        upload_now(txt_path, room_id)
+        log(f"[{room_id}] 转录TXT已上传: {txt_name}")
+        
+        # Upload SRT
+        if srt_lines:
+            srt_text = ''.join(srt_lines)
+            srt_name = base + '.srt'
+            srt_path = '/tmp/' + srt_name
+            with open(srt_path, 'w', encoding='utf-8') as f:
+                f.write(srt_text)
+            upload_now(srt_path, room_id)
+            log(f"[{room_id}] 转录SRT已上传: {srt_name}")
+        
+        os.remove(txt_path)
+        if srt_lines: os.remove(srt_path)
+    except Exception as e:
+        log(f"[{room_id}] 转录失败: {e}")
+
+
 def handle_room_end(rid, recordings, room_names, now):
     rec = recordings.pop(rid)
     if isinstance(now, float): from datetime import datetime; end_ts = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -433,6 +500,10 @@ def handle_room_end(rid, recordings, room_names, now):
                 os.rename(f, new_path)
                 log(f"重命名: {fn} -> {new_fn}")
                 upload_now(new_path, room_names.get(rid, rid))
+                # Transcribe WAV immediately after upload
+                if ext == '.wav':
+                    log(f"[{rid}] 开始转录: {new_fn}")
+                    transcribe_wav(new_path, room_names.get(rid, rid))
             except Exception as e:
                 log(f"[{rid}] upload/rename error: {e}")
     # Keep page open for re-detection (do NOT close)
