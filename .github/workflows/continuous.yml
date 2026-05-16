@@ -75,6 +75,6 @@ jobs:
         if: always()
         run: python3 fallback_upload.py
         env:
-          GH_REPO: \${{ github.repository }}
-          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
-          GH_RUN_ID: \${{ github.run_id }}
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_RUN_ID: ${{ github.run_id }}
