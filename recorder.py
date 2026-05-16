@@ -442,7 +442,7 @@ def handle_room_end(rid, recordings, room_names, now):
                         _body = _json.dumps({"event_type": "transcribe_self_renew"}).encode()
                         _req = _ur.Request("https://api.github.com/repos/" + GH_REPO + "/dispatches",
                             data=_body, headers=_gh, method="POST")
-                        _ur.request.urlopen(_req, timeout=10)
+                        _ur.urlopen(_req, timeout=10)
                         log(f"[{rid}] 触发转录通知")
                     except Exception as _et:
                         log(f"[{rid}] 触发转录通知失败: {_et}")
