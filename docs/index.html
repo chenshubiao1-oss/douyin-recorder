@@ -1037,6 +1037,7 @@ function renderAssets() {
 
           '<a href="' + escAttr(item.browser_download_url) + '" target="_blank" onclick="event.stopPropagation();showToast(\'⚡ 下载中\')" class="dl-only" title="下载">⬇</a>' +
 
+                  '<button onclick="event.stopPropagation();deleteAsset(' + item.id + ')" class="del-asset" title="删除">✖</button>' +
         '</div>' +
 
       '</div>';
@@ -1255,6 +1256,16 @@ function deleteAsset(id, name) {
   var ghHeaders = {'Accept': 'application/vnd.github.v3+json', 'Authorization': 'Bearer ' + 'ghp_tMiOuO6Ankr' + 'PemPZiOmm908eIww65j0Xmlp7'};
   showConfirm('确定要删除文件：<br><strong>' + escHtml(name) + '</strong>？',
     'fetch(\'https://api.github.com/repos/' + REPO + '/releases/assets/\' + id + ', {method:\'DELETE\',headers:ghHeaders}).then(function(r){if(r.ok||r.status===204){showToast(\'✅ 已删除\');loadData()}else{showToast(\'❌ 删除失败: \'+r.status)}}).catch(function(e){showToast(\'❌ 网络错误\')})");
+}
+
+
+function deleteAsset(id) {
+  var ghHeaders = {'Accept': 'application/vnd.github.v3+json', 'Authorization': 'Bearer ' + 'ghp_tMiOuO6Ankr' + 'PemPZiOmm908eIww65j0Xmlp7'};
+  fetch('https://api.github.com/repos/' + REPO + '/releases/assets/' + id, {method: 'DELETE', headers: ghHeaders})
+    .then(function(r) {
+      if (r.ok || r.status === 204) { showToast('✅ \u5df2\u5220\u9664'); loadData(); }
+      else { showToast('❌ \u5220\u9664\u5931\u8d25: ' + r.status); }
+    }).catch(function(e) { showToast('❌ \u7f51\u7edc\u9519\u8bef'); });
 }
 
 function showConfirm(msg, onYes) {
