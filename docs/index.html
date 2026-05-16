@@ -220,7 +220,7 @@ function rp(){
   var q=document.getElementById('si').value.toLowerCase(),af=document.getElementById('af').value,df=document.getElementById('df').value;
   var f=pk.filter(function(p){
     if(af!='all'&&p.an!=af)return false;
-    if(df!='all'&&fl(p.it[0].c)!=df)return false;
+    if(df!='all'&&p.dk!=df)return false;
     if(q&&p.an.toLowerCase().indexOf(q)==-1&&(p.ri||'').indexOf(q)==-1)return false;
     return true;
   });
