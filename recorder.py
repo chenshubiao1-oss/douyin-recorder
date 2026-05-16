@@ -395,15 +395,8 @@ def upload_now(filepath, room_name):
 
 def handle_room_end(rid, recordings, room_names, now):
     rec = recordings.pop(rid)
-    # Upload original files FIRST (before stopping processes, to survive cancel)
-    for key in ["outfile", "audiofile"]:
-        f = rec.get(key)
-        if f and os.path.exists(f):
-            try:
-                upload_now(f, room_names.get(rid, rid))
-            except Exception as e:
-                log(f"[{rid}] upload error: {e}")
-    # Then stop processes (with timeout)
+    end_ts = now.split('.')[0].replace(':', '').replace('-', '').replace(' ', '_')
+    # Stop processes first
     try:
         p = rec.get("proc")
         if p: p.terminate(); p.wait(timeout=5)
@@ -412,11 +405,22 @@ def handle_room_end(rid, recordings, room_names, now):
         ap = rec.get("audio_proc")
         if ap: ap.terminate(); ap.wait(timeout=5)
     except: pass
-    # 实时转录
-    wav_file = rec.get("audiofile")
-    if wav_file and os.path.exists(wav_file):
-        pass  # transcribe disabled    # Keep page open for re-detection (do NOT close)
-    log(f"[{room_names.get(rid,rid)}] recording ended, page kept open for re-detection")
+    # Rename files to include end timestamp, then upload
+    for key, ext in [("outfile", ".mp4"), ("audiofile", ".wav")]:
+        f = rec.get(key)
+        if f and os.path.exists(f):
+            try:
+                dirn, fn = os.path.split(f)
+                base_name = fn.rsplit('.', 1)[0]
+                new_fn = base_name + '~' + end_ts + ext
+                new_path = os.path.join(dirn, new_fn)
+                os.rename(f, new_path)
+                log(f"重命名: {fn} -> {new_fn}")
+                upload_now(new_path, room_names.get(rid, rid))
+            except Exception as e:
+                log(f"[{rid}] upload/rename error: {e}")
+    # Keep page open for re-detection (do NOT close)
+    log(f"[{room_names.get(rid,rid)}] end, page kept open for re-detection")
 
 def run_test():
     # from transcriber import transcribe  # disabled
