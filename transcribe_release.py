@@ -35,7 +35,7 @@ print('Found %d audio file(s) to transcribe' % len(release_jobs))
 # Step 3: Download model (once)
 from funasr import AutoModel
 print('Loading SenseVoiceSmall model...')
-model = AutoModel(model='iic/SenseVoiceSmall', vad_model=None, punc_model=None,
+model = AutoModel(model='iic/SenseVoiceSmall', vad_model=None, punc_model='ct-punc',
                   spk_model=None, disable_update=True, device='cpu')
 print('Model loaded')
 
