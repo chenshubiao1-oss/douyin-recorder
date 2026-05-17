@@ -586,6 +586,8 @@ def run():
                     log(f"  主播昵称: {aname}")
                     update_rooms_nickname(anchor_names)
             _iter_watchdog = None
+            start_time = time.time()
+            last_refresh = start_time
             while True:
                 try:
                     loop_start = time.time()
