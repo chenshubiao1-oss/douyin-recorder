@@ -26,7 +26,8 @@ _renew_triggered = False
 
 def log(msg):
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    print(f"[{ts}] {msg}", flush=True)
+    safe_msg = msg.encode('ascii', errors='replace').decode('ascii')
+    print(f'[{ts}] {safe_msg}', flush=True)
 
 
 def http_check_live(room_id):
