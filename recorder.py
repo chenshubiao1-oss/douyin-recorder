@@ -40,6 +40,9 @@ def log(msg):
 def http_check_live(room_id):
     """HTTP check via curl subprocess - bypasses Python encoding issues entirely."""
     url = 'https://live.douyin.com/' + str(room_id)
+    # Debug: check if cookie is set
+    debug_cookie_available = 'DOUYIN_COOKIE' in os.environ and len(os.environ.get('DOUYIN_COOKIE', '')) > 20
+    log(f'[DBG] {room_id} cookie_avail=' + str(debug_cookie_available))
     ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     cookie_val = os.environ.get("DOUYIN_COOKIE", "")
     cmd = ['curl', '-s', '-L', '--max-time', '25',
@@ -57,6 +60,9 @@ def http_check_live(room_id):
         return (False, 'curl_error:' + str(type(e).__name__), None, None)
 
     if 'flv_pull_url' not in html:
+        # Debug: log snippet of what we got
+        snippet = html[:300].replace('\n', ' ').strip()
+        log(f'[DBG] {room_id} no flv, res=' + repr(snippet))
         return (False, 'no_flv_pull_url', None, None)
 
     found = []
