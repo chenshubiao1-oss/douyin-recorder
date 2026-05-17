@@ -509,7 +509,7 @@ def run_test():
         time.sleep(5)
         test_anchor_name = get_anchor_name(page) or f"room_{TEST_ROOM}"
         log(f"主播昵称: {test_anchor_name}")
-		live, rsn = http_check_live(TEST_ROOM)
+        live, rsn = http_check_live(TEST_ROOM)
         log(f"直播间: {'ONAIR' if live else 'OFF'} ({rsn})")
         if live:
             try:
