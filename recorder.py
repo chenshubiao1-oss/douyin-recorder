@@ -45,10 +45,13 @@ def http_check_live(room_id):
         raw = resp.read()
         html = raw.decode("utf-8", errors="replace")
     except Exception as e:
-        return (False, f'http_error:{e}', None, None)
+        err_str = str(e).encode('ascii', errors='replace').decode('ascii')
+        return (False, f'http_error:{err_str}', None, None)
 
     # Simplest check: flv_pull_url in html = live
     if 'flv_pull_url' not in html:
+        # Log first 150 chars for debug
+        log(f'[DBG] {room_id}: no flv_pull_url, first={repr(html[:150])}')
         return (False, 'no_flv_pull_url', None, None)
 
     # Extract stream URL
@@ -347,7 +350,8 @@ def run():
     # Initial HTTP detection
     for r in rooms:
         live, reason, url, quality = http_check_live(r['id'])
-        log(f"  [{r['name']}] is_live={'ONAIR' if live else 'OFF'} ({reason})")
+        safe_name = r['name'].encode('ascii', errors='replace').decode('ascii')
+        log(f"  [{safe_name}] is_live={'ONAIR' if live else 'OFF'} ({reason})")
         if live:
             log(f"  -> stream: {quality} {url[:80]}...")
         prev_live[r['id']] = live
@@ -421,7 +425,8 @@ def run():
             for rid in sorted(prev_live.keys()):
                 live, reason, url, quality = http_check_live(rid)
                 prev = prev_live.get(rid)
-                log(f"[{room_names.get(rid, rid)}] is_live={'ONAIR' if live else 'OFF'} ({reason})")
+                safe_rid = room_names.get(rid, rid).encode('ascii', errors='replace').decode('ascii')
+                log(f"[{safe_rid}] is_live={'ONAIR' if live else 'OFF'} ({reason})")
                 prev_live[rid] = live
 
                 # Just transitioned to live
