@@ -78,33 +78,21 @@ def http_check_live(room_id):
     return (True, "live_but_no_flv", None, None)
 
 def http_get_anchor_name(room_id):
-    """Get anchor name from SSR HTML."""
+    """Get anchor name from SSR HTML via curl."""
     ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
     try:
-        req = urllib.request.Request(f"https://live.douyin.com/{room_id}",
-            headers={"User-Agent": ua, "Accept": "text/html"})
-        resp = urllib.request.urlopen(req, timeout=URLLIB_TIMEOUT)
-        html = resp.read().decode("utf-8", errors="replace")
+        cmd = ['curl', '-s', '-L', '--max-time', str(URLLIB_TIMEOUT),
+               '-H', 'User-Agent: ' + ua,
+               '-H', 'Accept: text/html,application/xhtml+xml',
+               'https://live.douyin.com/' + str(room_id)]
+        result = subprocess.run(cmd, capture_output=True, timeout=URLLIB_TIMEOUT + 5)
+        html = result.stdout.decode('utf-8', errors='replace')
     except:
         return None
 
-    # Two occurrences: first is placeholder "$undefined", second is real name
-    idx = html.find('"nickname"')
-    if idx > 0:
-        # Skip first ($undefined)
-        idx2 = html.find('"nickname"', idx + 5)
-        if idx2 > 0:
-            # Extract value
-            start = html.find('"', idx2 + 10)
-            if start > 0:
-                end = html.find('"', start + 1)
-                if end > start:
-                    name = html[start+1:end]
-                    if name and name != '$undefined':
-                        return name
-    # Fallback: try escaped format
-    m = re.search(r'nickname[\\]*":\s*[\\]*"([^"\\]+)', html)
-    if m:
+    # Search for nickname in SSR JSON - try both escaped and unescaped formats
+    # Format: ..."nickname":"主播名"... or ...\\"nickname\\":\\"主播名\\"...
+    for m in re.finditer(r'[\\]?"nickname[\\]?"\s*[:=]\s*[\\]?"([^"\\]+)', html):
         name = m.group(1)
         if name and name != '$undefined':
             return name
@@ -144,9 +132,9 @@ def load_rooms_from_github():
             line = line.strip()
             if not line or line.startswith("#"):
                 continue
-            parts = line.split(",", 1)
+            parts = line.split("=", 1)
             if len(parts) < 2:
-                parts = line.split("=", 1)
+                parts = line.split(",", 1)
             rid = parts[0].strip()
             name = parts[1].strip() if len(parts) > 1 else rid
             rooms.append({"id": rid, "name": name})
@@ -174,12 +162,12 @@ def update_rooms_nickname(anchor_names):
             if not line or line.startswith("#"):
                 new_lines.append(line)
                 continue
-            parts = line.split(",", 1)
+            parts = line.split("=", 1)
             if len(parts) < 2:
-                parts = line.split("=", 1)
+                parts = line.split(",", 1)
             rid = parts[0].strip()
             if rid in anchor_names:
-                new_lines.append(f"{rid},{anchor_names[rid]}")
+                new_lines.append(f"{rid} = {anchor_names[rid]}")
             else:
                 new_lines.append(line)
         new_content = "\n".join(new_lines)
@@ -361,7 +349,7 @@ def run():
     # Initial HTTP detection
     for r in rooms:
         live, reason, url, quality = http_check_live(r['id'])
-        safe_name = r['name'].encode('ascii', errors='replace').decode('ascii')
+        safe_name = r['name'][:20]
         log(f"  [{safe_name}] is_live={'ONAIR' if live else 'OFF'} ({reason})")
         if live:
             log(f"  -> stream: {quality} {url[:80]}...")
@@ -444,12 +432,12 @@ def run():
             for rid in sorted(prev_live.keys()):
                 if rid in recordings:
                     # Already recording, skip detection to avoid interrupting
-                    safe_rid = room_names.get(rid, rid).encode('ascii', errors='replace').decode('ascii')
+                    safe_rid = room_names.get(rid, rid)[:20]
                     log('[REC] ' + safe_rid + ' recording, skip detection')
                     continue
 
                 live, reason, url, quality = http_check_live(rid)
-                safe_rid = room_names.get(rid, rid).encode('ascii', errors='replace').decode('ascii')
+                safe_rid = room_names.get(rid, rid)[:20]
                 log('[' + safe_rid + '] is_live=' + ('ONAIR' if live else 'OFF') + ' (' + reason + ')')
                 prev_live[rid] = live
 
