@@ -15,17 +15,15 @@ body{font-family:'Noto Sans SC',-apple-system,sans-serif;background:var(--bg);co
 .header p{color:var(--text-dim);font-size:14px;margin-top:6px}
 .header .back-link{display:inline-block;margin-top:12px;color:var(--accent3);text-decoration:none;font-size:14px}
 .header .back-link:hover{text-decoration:underline}
-.stats-bar{display:flex;gap:20px;margin-top:16px;flex-wrap:wrap}
+.stats-bar{display:flex;gap:20px;margin-top:12px;flex-wrap:wrap}
 .stat-item{font-size:13px;color:var(--text-dim)}
 .stat-item .num{color:var(--text);font-weight:700;font-size:16px}
-
 .loading{text-align:center;padding:60px;color:var(--text-dim);font-size:15px}
 .loading .spinner{display:inline-block;width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--accent3);border-radius:50%;animation:spin .8s linear infinite;margin-bottom:16px}
 @keyframes spin{to{transform:rotate(360deg)}}
 .error-msg{text-align:center;padding:40px;color:var(--accent);font-size:15px}
 .empty-state{text-align:center;padding:60px 20px;color:var(--text-dim)}
 .empty-state .icon{font-size:48px;margin-bottom:16px;opacity:.4}
-
 .anchor-group{margin-bottom:28px}
 .anchor-header{display:flex;align-items:center;gap:12px;padding:14px 18px;background:var(--surface2);border:1px solid var(--border);border-radius:12px;cursor:pointer;user-select:none;transition:all .2s}
 .anchor-header:hover{background:var(--surface3);border-color:var(--accent3)}
@@ -33,10 +31,8 @@ body{font-family:'Noto Sans SC',-apple-system,sans-serif;background:var(--bg);co
 .anchor-header .arrow.open{transform:rotate(90deg)}
 .anchor-header .name{font-size:17px;font-weight:700;color:var(--accent2);flex:1}
 .anchor-header .count{font-size:12px;color:var(--text-dim);background:var(--surface);padding:4px 10px;border-radius:20px}
-
 .anchor-body{padding:12px 0 0 0}
 .anchor-body.hidden{display:none}
-
 .transcript-item{background:var(--surface);border:1px solid var(--border);border-radius:10px;margin-bottom:10px;overflow:hidden;transition:all .2s}
 .transcript-item:hover{border-color:var(--surface3)}
 .item-header{display:flex;align-items:center;gap:12px;padding:14px 16px;cursor:pointer;user-select:none}
@@ -49,7 +45,6 @@ body{font-family:'Noto Sans SC',-apple-system,sans-serif;background:var(--bg);co
 .item-body{padding:0 16px 14px;display:none;font-size:14px;line-height:1.7;color:var(--text);white-space:pre-wrap;word-wrap:break-word}
 .item-body.open{display:block}
 .item-body .txt-content{background:var(--surface2);border-radius:8px;padding:14px;margin-top:8px}
-.item-body .meta-row{display:flex;gap:16px;font-size:12px;color:var(--text-dim);margin-top:10px;flex-wrap:wrap}
 </style>
 </head>
 <body>
@@ -69,107 +64,56 @@ body{font-family:'Noto Sans SC',-apple-system,sans-serif;background:var(--bg);co
 </div>
 
 <script>
-const OWNER = 'tangwei880620-rgb';
-const REPO = 'douyin-recorder';
-const TOKEN = ''; // Leave empty for public repos, GitHub API has rate limits without token
-const GH_HEADERS = TOKEN ? {'Authorization': 'Bearer ' + TOKEN, 'Accept': 'application/vnd.github+json'} : {'Accept': 'application/vnd.github+json'};
-
-// Room ID -> Display Name mapping
-let roomNames = {};
-
-async function api(path) {
-const res = await fetch('https://api.github.com/repos/' + OWNER + '/' + REPO + path, {headers: GH_HEADERS});
-if (!res.ok) throw new Error('API error: ' + res.status);
-return res.json();
-}
-
-function parseRoomsTxt(text) {
-const map = {};
-for (let line of text.split('\n')) {
-line = line.trim();
-if (!line || line.startsWith('#')) continue;
-let parts = line.includes('=') ? line.split('=') : line.split(',');
-let rid = parts[0].trim();
-let name = parts.length > 1 ? parts[1].trim() : rid;
-map[rid] = name;
-}
-return map;
-}
-
-function fmtTime(ts) {
-// ts format: 20260517_083340
-if (ts.length === 15) {
-const y = ts.slice(0,4), m = ts.slice(4,6), d = ts.slice(6,8);
-const h = ts.slice(9,11), min = ts.slice(11,13), s = ts.slice(13,15);
-return y + '-' + m + '-' + d + ' ' + h + ':' + min + ':' + s;
-}
-return ts;
-}
-
-function fmtDate(ts) {
-const y = ts.slice(0,4), m = ts.slice(4,6), d = ts.slice(6,8);
-return y + '-' + m + '-' + d;
-}
-
-function escapeHtml(s) {
-const d = document.createElement('div');
-d.textContent = s;
-return d.innerHTML;
-}
-
 async function load() {
 try {
-// 1. Load rooms
-const roomData = await api('/contents/rooms.txt');
-const roomText = atob(roomData.content);
-roomNames = parseRoomsTxt(roomText);
+const res = await fetch('transcripts_index.json');
+if (!res.ok) throw new Error('HTTP ' + res.status);
+const data = await res.json();
 
-// 2. Load all releases (get .txt assets)
-const releases = await api('/releases?per_page=100');
-
-// Group: roomID -> [{name, url, start, end, download_url, rel_tag}]
-const groups = {};
-let total = 0;
-
-for (const rel of releases) {
-const assets = await api('/releases/' + rel.id + '/assets');
-for (const a of assets) {
-if (!a.name.endsWith('.txt')) continue;
-// roomID_start_end.txt
-// Handle both dot and underscore after start
-let base = a.name.slice(0, -4); // remove .txt
-// Normalize: replace dot with underscore
-let norm = base.replace(/\./g, '_');
-let parts = norm.split('_');
-if (parts.length < 3) continue;
-let rid = parts[0];
-let start_ts = parts[1];
-let end_ts = parts.slice(2).join('_'); // handle edge cases
-
-// Fetch text content via raw github
-const downloadUrl = 'https://raw.githubusercontent.com/' + OWNER + '/' + REPO + '/main/' + rel.tag_name + '/' + a.name;
-
-if (!groups[rid]) groups[rid] = [];
-groups[rid].push({
-name: a.name,
-start_ts: start_ts,
-end_ts: end_ts,
-url: a.url,
-download_url: downloadUrl,
-rel_tag: rel.tag_name,
-ts: start_ts
-});
-total++;
-}
-}
-
-// Sort each group by time descending
-for (const rid in groups) {
-groups[rid].sort((a, b) => b.ts.localeCompare(a.ts));
-}
-
-render(groups, total);
 document.getElementById('loading').classList.add('hidden');
+
+if (!data.anchors || data.anchors.length === 0) {
+document.getElementById('emptyState').classList.remove('hidden');
+return;
+}
+
+document.getElementById('statsBar').innerHTML =
+'<span class="stat-item">主播: <span class="num">' + data.room_count + '</span></span>' +
+'<span class="stat-item">转录文件: <span class="num">' + data.transcript_count + '</span></span>';
+
+const list = document.getElementById('anchorList');
+let html = '';
+
+for (const anchor of data.anchors) {
+const items = anchor.transcripts;
+const firstDate = fmtDate(items[items.length-1].start);
+const lastDate = fmtDate(items[0].start);
+const dateRange = firstDate === lastDate ? firstDate : firstDate + ' ~ ' + lastDate;
+
+html += '<div class="anchor-group">';
+html += '<div class="anchor-header" onclick="toggleAnchor(this)">';
+html += '<span class="arrow">▶</span>';
+html += '<span class="name">' + esc(anchor.name) + '</span>';
+html += '<span class="count">' + items.length + ' 条</span>';
+html += '</div>';
+html += '<div class="anchor-body hidden">';
+
+for (const item of items) {
+html += '<div class="transcript-item">';
+html += '<div class="item-header" onclick="toggleTranscript(this)">';
+html += '<span class="arrow">▶</span>';
+html += '<span class="time">' + fmtTime(item.start) + '</span>';
+if (item.end) html += '<span class="duration">→ ' + fmtTime(item.end) + '</span>';
+html += '<a class="dl-btn" href="' + item.url + '" target="_blank" onclick="event.stopPropagation()">下载</a>';
+html += '</div>';
+html += '<div class="item-body">';
+html += '<div class="txt-content" data-url="' + item.url + '">加载中...</div>';
+html += '</div>';
+html += '</div>';
+}
+html += '</div></div>';
+}
+list.innerHTML = html;
 
 } catch (e) {
 document.getElementById('loading').classList.add('hidden');
@@ -179,58 +123,22 @@ errEl.classList.remove('hidden');
 }
 }
 
-function render(groups, total) {
-const statsBar = document.getElementById('statsBar');
-const anchorCount = Object.keys(groups).length;
-statsBar.innerHTML = '<span class="stat-item">主播: <span class="num">' + anchorCount + '</span></span>' +
-'<span class="stat-item">转录文件: <span class="num">' + total + '</span></span>';
-
-const list = document.getElementById('anchorList');
-if (anchorCount === 0) {
-document.getElementById('emptyState').classList.remove('hidden');
-return;
+function fmtTime(ts) {
+if (ts && ts.length >= 15) {
+return ts.slice(0,4) + '-' + ts.slice(4,6) + '-' + ts.slice(6,8) + ' ' +
+       ts.slice(9,11) + ':' + ts.slice(11,13) + ':' + ts.slice(13,15);
+}
+return ts || '';
 }
 
-// Sort by most recent activity
-const sorted = Object.entries(groups).sort((a, b) => {
-const aLatest = a.value[0]?.ts || '';
-const bLatest = b.value[0]?.ts || '';
-return bLatest.localeCompare(aLatest);
-});
-
-let html = '';
-for (const [rid, items] of sorted) {
-const displayName = roomNames[rid] || rid;
-// First/last record date
-const firstDate = fmtDate(items[items.length-1].ts);
-const lastDate = fmtDate(items[0].ts);
-const dateRange = firstDate === lastDate ? firstDate : firstDate + ' ~ ' + lastDate;
-
-html += '<div class="anchor-group">';
-html += '<div class="anchor-header" onclick="toggleAnchor(this)">';
-html += '<span class="arrow">▶</span>';
-html += '<span class="name">' + escapeHtml(displayName) + '</span>';
-html += '<span class="count">' + items.length + ' 条</span>';
-html += '</div>';
-html += '<div class="anchor-body hidden">';
-
-for (const item of items) {
-html += '<div class="transcript-item">';
-html += '<div class="item-header" onclick="toggleTranscript(this)">';
-html += '<span class="arrow">▶</span>';
-html += '<span class="time">' + fmtTime(item.ts) + '</span>';
-if (item.end_ts) html += '<span class="duration">→ ' + fmtTime(item.end_ts) + '</span>';
-html += '<a class="dl-btn" href="' + item.download_url + '" target="_blank" download onclick="event.stopPropagation()">下载</a>';
-html += '</div>';
-html += '<div class="item-body">';
-html += '<div class="txt-content" data-url="' + item.download_url + '">加载中...</div>';
-html += '</div>';
-html += '</div>';
-}
-html += '</div></div>';
+function fmtDate(ts) {
+return ts.slice(0,4) + '-' + ts.slice(4,6) + '-' + ts.slice(6,8);
 }
 
-list.innerHTML = html;
+function esc(s) {
+const d = document.createElement('div');
+d.textContent = s;
+return d.innerHTML;
 }
 
 function toggleAnchor(el) {
@@ -242,7 +150,6 @@ function toggleTranscript(el) {
 el.querySelector('.arrow').classList.toggle('open');
 const body = el.nextElementSibling;
 body.classList.toggle('open');
-// Lazy load text content
 if (body.classList.contains('open')) {
 const contentDiv = body.querySelector('.txt-content');
 if (contentDiv && contentDiv.textContent === '加载中...') {
@@ -250,7 +157,7 @@ const url = contentDiv.dataset.url;
 fetch(url).then(r => r.text()).then(txt => {
 contentDiv.textContent = txt;
 }).catch(() => {
-contentDiv.textContent = '(加载失败)';
+contentDiv.textContent = '（加载失败）';
 });
 }
 }
