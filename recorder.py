@@ -91,10 +91,10 @@ def http_get_anchor_name(room_id):
         return None
 
     # Search for nickname in SSR JSON - try both escaped and unescaped formats
-    # Format: ..."nickname":"主播名"... or ...\\"nickname\\":\\"主播名\\"...
     for m in re.finditer(r'[\\]?"nickname[\\]?"\s*[:=]\s*[\\]?"([^"]+)', html):
         name = m.group(1)
-        if name and name != '$undefined':
+        name = name.rstrip('\\')
+        if name and name != '$undefined' and len(name) >= 2 and 'undefined' not in name:
             return name
     return None
 
