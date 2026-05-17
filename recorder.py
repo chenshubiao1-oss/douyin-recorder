@@ -208,7 +208,6 @@ def start_recording(url, quality, room_id, anchor_name=""):
         "Connection: keep-alive\r\n"
         + cookie_hdr,
     ]
-"
     logfile = os.path.join(os.path.dirname(outfile), os.path.basename(outfile) + ".ffmpeg.log")
     proc = subprocess.Popen([FFMPEG, "-y", "-loglevel", "info"] + ff_headers + ["-i", url, "-c", "copy",
                              "-movflags", "+faststart+frag_keyframe+empty_moov", "-f", "mp4", outfile],
