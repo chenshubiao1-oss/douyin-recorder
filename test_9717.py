@@ -1,21 +1,20 @@
 import subprocess, sys, re, os, time, json, urllib.request as u, base64 as b
 
 def log(msg):
-    print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}")
+    print(f"[{time.strftime("%Y-%m-%d %H:%M:%S")}] {msg}")
     sys.stdout.flush()
 
 token = os.environ.get("GH_TOKEN", "")
 rid = "97171913600"
 ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+cookie = os.environ.get("DOUYIN_COOKIE", "")
 
 log(f"Testing room {rid}")
 
-import subprocess
-cmd = ["curl", "-s", "-L", "--max-time", "25",
+# Step 1: Get HTML
+result = subprocess.run(["curl", "-s", "-L", "--max-time", "25",
        "-H", "User-Agent: " + ua,
-       "-H", "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-       "https://live.douyin.com/" + rid]
-result = subprocess.run(cmd, capture_output=True, timeout=30)
+       "https://live.douyin.com/" + rid], capture_output=True, timeout=30)
 html = result.stdout.decode("utf-8", errors="replace")
 log(f"HTML size: {len(html)}")
 
@@ -25,62 +24,89 @@ if "flv_pull_url" not in html:
 
 log("LIVE!")
 
-# Extract URL same as http_check_live
+# Step 2: Extract URL
 priority = {"FULL_HD1": 4, "HD1": 3, "SD1": 2, "SD2": 1}
 found = []
-for m in re.finditer(r'["\\]+(FULL_HD1|HD1|SD1|SD2)["\\]+\s*[:=]\s*["\\]+(https?://[^"\\\s,}\]>]+)', html):
-    curl = m.group(2).replace("\\/", "/").replace("\\u0026", "&").replace("\\u003d", "=")
-    if curl.startswith("http"):
-        found.append((m.group(1), curl))
+for m in re.finditer(r'["\\\\]+(FULL_HD1|HD1|SD1|SD2)["\\\\]+\\s*[:=]\\s*["\\\\]+(https?://[^"\\\\\\s,}\}\]>]+)', html):
+    curl_url = m.group(2).replace("\\\\/", "/").replace("\\\\u0026", "&").replace("\\\\u003d", "=")
+    if curl_url.startswith("http"):
+        found.append((m.group(1), curl_url))
 
 if not found:
-    log("No flv URL found in HTML")
+    log("No flv URL found")
     sys.exit(1)
 
 best = max(found, key=lambda x: priority.get(x[0], 0))
 url = best[1]
 log(f"URL ({best[0]}): {url[:120]}")
 
-# Try recording for 90 seconds
-outfile = "/tmp/test_9717.mp4"
-logfile = "/tmp/test_9717_ffmpeg.log"
-cookie_val = os.environ.get("DOUYIN_COOKIE", "")
-cookie_hdr = "Cookie: " + cookie_val + "\r\n" if cookie_val else ""
-ff_headers = ["-headers", "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36\r\nReferer: https://live.douyin.com/\r\nOrigin: https://live.douyin.com\r\nAccept: */*\r\nHost: pull-flv-l1.douyincdn.com\r\n" + cookie_hdr]
-proc = subprocess.Popen(["ffmpeg", "-y", "-loglevel", "info"] + ff_headers + ["-i", url,
-                          "-c", "copy", "-t", "90", "-f", "mp4", outfile],
-                         stdout=subprocess.DEVNULL, stderr=open(logfile, "w"))
+# Step 3: Test curl with browser-like headers (just 1 byte)
+log("=== Trying curl with browser headers ===")
+curl_headers = [
+    "-H", "User-Agent: " + ua,
+    "-H", "Referer: https://live.douyin.com/",
+    "-H", "Origin: https://live.douyin.com",
+]
+if cookie:
+    curl_headers += ["-H", "Cookie: " + cookie]
 
-log(f"ffmpeg PID: {proc.pid}")
-start_ts = time.time()
-check_interval = 5
+# Try with range request (just first byte)
+try:
+    r = subprocess.run(["curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", "--max-time", "10"]
+                       + curl_headers + ["-r", "0-0", url], capture_output=True, timeout=15)
+    http_code = r.stdout.decode().strip()
+    log(f"Range byte test: HTTP {http_code}")
+    # Also try without range
+    r2 = subprocess.run(["curl", "-s", "-o", "/tmp/flv_test", "-w", "%{http_code}", "--max-time", "10"]
+                        + curl_headers + ["--max-filesize", "65536", url], capture_output=True, timeout=15)
+    http_code2 = r2.stdout.decode().strip()
+    sz = os.path.getsize("/tmp/flv_test") if os.path.exists("/tmp/flv_test") else 0
+    log(f"Direct fetch test: HTTP {http_code2}, size={sz}")
+except Exception as e:
+    log(f"Curl test error: {e}")
 
-while True:
-    time.sleep(check_interval)
-    elapsed = time.time() - start_ts
-    ret = proc.poll()
-    if ret is not None:
-        log(f"ffmpeg exited after {elapsed:.0f}s with code {ret}")
-        break
-    
-    if elapsed >= 90:
-        log(f"90s reached, stopping...")
-        proc.terminate()
-        proc.wait(10)
-        break
-    
-    log(f"ffmpeg still running at {elapsed:.0f}s")
+# Step 4: Try ffmpeg with user_agent argument as an alternative
+log("=== Trying ffmpeg with -user_agent ===")
+outfile = "/tmp/test_9717_ua.mp4"
+logfile = "/tmp/test_9717_ffmpeg_ua.log"
+cookie_hdr = "Cookie: " + cookie + "\r\n" if cookie else ""
+headers_arg = "User-Agent: " + ua + "\r\n"
+headers_arg += "Referer: https://live.douyin.com/\r\n"
+headers_arg += "Origin: https://live.douyin.com\r\n"
+headers_arg += "Host: pull-flv-l1.douyincdn.com\r\n"
+headers_arg += cookie_hdr
+proc = subprocess.Popen(["ffmpeg", "-y", "-loglevel", "info",
+            "-headers", headers_arg,
+            "-user_agent", ua,
+            "-i", url,
+            "-c", "copy", "-t", "30", "-f", "mp4", outfile],
+           stdout=subprocess.DEVNULL, stderr=open(logfile, "w"))
 
-# Show ffmpeg log
-log("=== Last 50 lines of ffmpeg log ===")
+proc.wait(35)
+log("=== Last 20 lines of ffmpeg log ===")
 with open(logfile) as f:
     lines = f.readlines()
-    for l in lines[-50:]:
+    for l in lines[-20:]:
         print(l.rstrip())
 
-# Check file
 if os.path.exists(outfile):
     sz = os.path.getsize(outfile)
-    log(f"Output file: {sz} bytes")
+    log(f"Output: {sz} bytes")
 else:
-    log("Output file does not exist!")
+    log("No output")
+
+# Step 5: Try HTTPS version of the URL
+https_url = url.replace("http://", "https://")
+log("=== Trying ffmpeg with HTTPS URL ===")
+proc2 = subprocess.Popen(["ffmpeg", "-y", "-loglevel", "info",
+            "-headers", headers_arg,
+            "-user_agent", ua,
+            "-i", https_url,
+            "-c", "copy", "-t", "15", "-f", "mp4", "/tmp/test_9717_https.mp4"],
+           stdout=subprocess.DEVNULL, stderr=open("/tmp/ffmpeg_https.log", "w"))
+proc2.wait(20)
+if os.path.exists("/tmp/test_9717_https.mp4"):
+    sz = os.path.getsize("/tmp/test_9717_https.mp4")
+    log(f"HTTPS output: {sz} bytes")
+else:
+    log("HTTPS no output")
