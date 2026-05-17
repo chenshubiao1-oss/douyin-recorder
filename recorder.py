@@ -33,7 +33,8 @@ def http_check_live(room_id):
             f"https://live.douyin.com/{room_id}",
             headers={"User-Agent": ua, "Accept": "text/html"})
         resp = urllib.request.urlopen(req, timeout=URLLIB_TIMEOUT)
-        html = resp.read().decode("utf-8", errors="replace")
+        raw = resp.read()
+        html = raw.decode("utf-8", errors="replace")
     except Exception as e:
         return (False, f'http_error:{e}', None, None)
 
@@ -49,35 +50,28 @@ def http_check_live(room_id):
     quality = None
     priority = {"FULL_HD1": 4, "HD1": 3, "SD1": 2, "SD2": 1}
 
-    # find flv_pull_url block
+    # find flv_pull_url using broader patterns
+    found = []
+    # Search entire HTML for ANY quality-URL pattern
+    # Pattern 1: "FULL_HD1":"http..." or \"FULL_HD1\":\"http...
+    for m in re.finditer(r'["\\]+(FULL_HD1|HD1|SD1|SD2)["\\]+\s*[:=]\s*["\\]+(https?://[^"\\\s,}\]>]+)', html):
+        url = m.group(2).replace('\\/', '/').replace('\\u0026', '&').replace('\\u003d', '=')
+        if url.startswith('http'):
+            found.append((m.group(1), url))
+    if found:
+        best = max(found, key=lambda x: priority.get(x[0], 0))
+        return (True, 'ok', best[1], best[0])
+    # Pattern 2: broader - any URL after flv_pull_url
     idx = html.find('flv_pull_url')
     if idx > 0:
-        block = html[idx:idx+2000]
-        # Extract all quality-url pairs
-        found = []
-        for m2 in re.finditer(r'"(FULL_HD1|HD1|SD1|SD2)"\s*:\s*"((?:(?!",).)*)"', block):
-            url = m2.group(2).replace('\\/', '/').replace('\\u0026', '&').replace('\\u003d', '=')
-            found.append((m2.group(1), url))
-        if not found:
-            # Try escaped format: \"FULL_HD1\\":\\"http...
-            for m2 in re.finditer(r'\\(?)"(FULL_HD1|HD1|SD1|SD2)\\(?)"\s*:\s*\\(?)"((?:(?!\\(?)"(?:,|\\})).)*?)\\(?)"', html[idx:idx+3000]):
-                url = m2.group(4).replace('\\/', '/').replace('\\u0026', '&').replace('\\u003d', '=')
-                found.append((m2.group(2), url))
-        # Also try the non-SSR data block (raw JSON in script)
-        if not found:
-            # Try another pattern: parse the full JSON block between "flv_pull_url":{" and "}:...
-            m3 = re.search(r'flv_pull_url[^:]*:\s*\{([^}]+)\}', html)
-            if m3:
-                for m4 in re.finditer(r'"(FULL_HD1|HD1|SD1|SD2)"\s*[:=]\s*"((?:(?!",).)*?)"', m3.group(1)):
-                    url = m4.group(2).replace('\\/', '/').replace('\\u0026', '&').replace('\\u003d', '=')
-                    found.append((m4.group(1), url))
-
+        # Try JSON/JS embedded URLs
+        for m in re.finditer(r'["\\]+(?:FULL_HD1|HD1|SD1|SD2)["\\]+\s*[:=]\s*["\\]*(https?://[^"\\\s,}\]>]+)', html[idx:idx+4000]):
+            url = m.group(1).replace('\\/', '/').replace('\\u0026', '&').replace('\\u003d', '=')
+            if url.startswith('http'):
+                found.append(('SD1', url))
         if found:
-            # Pick best quality
             best = max(found, key=lambda x: priority.get(x[0], 0))
-            stream_url = best[1]
-            quality = best[0]
-            return (True, 'ok', stream_url, quality)
+            return (True, 'ok', best[1], best[0])
 
     # LiveStatus fallback (unreliable, returns normal even when offline)
     return (False, 'no_flv_pull_url', None, None)
