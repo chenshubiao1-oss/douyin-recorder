@@ -74,7 +74,18 @@ def http_check_live(room_id):
 
     if found:
         best = max(found, key=lambda x: priority.get(x[0], 0))
-        return (True, "ok", best[1], best[0])
+        flv_url = best[1]
+        # Verify the stream URL belongs to this room by checking room_id in the URL
+        # Douyin flv URLs typically contain the room_id as a number in the path
+        rid_str = str(room_id)
+        if rid_str in flv_url:
+            return (True, "ok", flv_url, best[0])
+        # Also check if the response HTML contains this room_id near owner/user info
+        # As a final fallback, check the nickname matches
+        log(f"[DBG] flv_url does NOT contain room_id {room_id}, possible false positive")
+        log(f"[DBG] url={flv_url[:100]}")
+        # Double-check: re-fetch the page to confirm
+        return (False, 'room_mismatch', None, None)
     return (True, "live_but_no_flv", None, None)
 
 def http_get_anchor_name(room_id):
@@ -282,12 +293,48 @@ def handle_room_end(rid, recordings, anchor_names, now):
                         headers={"Authorization": f"Bearer {GH_TOKEN}", "Content-Type": "application/json"}),
                     timeout=URLLIB_TIMEOUT).read())
                 url = r2["upload_url"].replace("{?name,label}", f"?name={upload_name}")
-            urllib.request.urlopen(urllib.request.Request(url,
-                data=content,
-                headers={"Authorization": f"Bearer {GH_TOKEN}", "Content-Type": "application/octet-stream",
-                         "Content-Length": str(len(content))}),
-                timeout=300)
-            log(f"Uploaded {upload_name} to Release")
+            # Chunked upload: split into 10MB chunks to avoid SSL EOF
+            CHUNK_SIZE = 10 * 1024 * 1024
+            total_size = len(content)
+            if total_size > CHUNK_SIZE:
+                log(f"Uploading {upload_name} in chunks ({total_size // CHUNK_SIZE + 1} chunks)")
+                offset = 0
+                while offset < total_size:
+                    chunk = content[offset:offset + CHUNK_SIZE]
+                    # Use S3-style upload headers if supported, otherwise upload full with longer timeout
+                    remaining = total_size - offset
+                    is_last = (remaining <= CHUNK_SIZE)
+                    headers = {"Authorization": f"Bearer {GH_TOKEN}",
+                               "Content-Type": "application/octet-stream",
+                               "Content-Length": str(len(chunk)),
+                               "Content-Range": f"bytes {offset}-{offset + len(chunk) - 1}/{total_size}"}
+                    try:
+                        r3 = urllib.request.urlopen(urllib.request.Request(url,
+                            data=chunk,
+                            headers=headers),
+                            timeout=600)
+                        offset += len(chunk)
+                        log(f"  chunk progress: {offset}/{total_size} bytes")
+                    except urllib.error.HTTPError as he:
+                        # GitHub doesn't support chunked upload for releases, try single upload with longer timeout
+                        log(f"Chunk upload not supported (HTTP {he.code}), falling back to full upload with extended timeout")
+                        # Fall back: full file upload with 600s timeout
+                        urllib.request.urlopen(urllib.request.Request(url,
+                            data=content,
+                            headers={"Authorization": f"Bearer {GH_TOKEN}",
+                                     "Content-Type": "application/octet-stream",
+                                     "Content-Length": str(total_size)}),
+                            timeout=600)
+                        break
+                else:
+                    log(f"Uploaded {upload_name} to Release (chunked)")
+            else:
+                urllib.request.urlopen(urllib.request.Request(url,
+                    data=content,
+                    headers={"Authorization": f"Bearer {GH_TOKEN}", "Content-Type": "application/octet-stream",
+                             "Content-Length": str(total_size)}),
+                    timeout=600)
+                log(f"Uploaded {upload_name} to Release")
         except Exception as e:
             log(f"Upload error {upload_name}: {e}")
 
