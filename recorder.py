@@ -29,52 +29,32 @@ def http_check_live(room_id):
     Returns (is_live: bool, reason: str, stream_url: str|None, quality: str|None)"""
     ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     try:
-        req = urllib.request.Request(
-            f"https://live.douyin.com/{room_id}",
-            headers={"User-Agent": ua, "Accept": "text/html"})
-        resp = urllib.request.urlopen(req, timeout=URLLIB_TIMEOUT)
-        raw = resp.read()
-        html = raw.decode("utf-8", errors="replace")
+        import requests
+        resp = requests.get(f"https://live.douyin.com/{room_id}",
+            headers={"User-Agent": ua, "Accept": "text/html"},
+            timeout=URLLIB_TIMEOUT)
+        html = resp.text
     except Exception as e:
         return (False, f'http_error:{e}', None, None)
 
-    # Check web_stream_url
-    m = re.search(r'web_stream_url"\s*:\s*null', html)
-    if m:
-        return (False, 'web_stream_url_null', None, None)
+    # Check web_stream_url - live if it contains flv_pull_url
+    if 'flv_pull_url' not in html:
+        return (False, 'no_flv_pull_url_in_html', None, None)
 
-    # Extract stream URLs from flv_pull_url
-    # Pattern: "FULL_HD1":"http://..." or \u0022FULL_HD1\u0022:\u0022http://...
-    # Try both escaped and unescaped JSON
-    stream_url = None
-    quality = None
-    priority = {"FULL_HD1": 4, "HD1": 3, "SD1": 2, "SD2": 1}
-
-    # find flv_pull_url using broader patterns
+    # Find quality-URL pairs in the full HTML
     found = []
-    # Search entire HTML for ANY quality-URL pattern
-    # Pattern 1: "FULL_HD1":"http..." or \"FULL_HD1\":\"http...
+    priority = {"FULL_HD1": 4, "HD1": 3, "SD1": 2, "SD2": 1}
     for m in re.finditer(r'["\\]+(FULL_HD1|HD1|SD1|SD2)["\\]+\s*[:=]\s*["\\]+(https?://[^"\\\s,}\]>]+)', html):
         url = m.group(2).replace('\\/', '/').replace('\\u0026', '&').replace('\\u003d', '=')
         if url.startswith('http'):
             found.append((m.group(1), url))
+
     if found:
         best = max(found, key=lambda x: priority.get(x[0], 0))
         return (True, 'ok', best[1], best[0])
-    # Pattern 2: broader - any URL after flv_pull_url
-    idx = html.find('flv_pull_url')
-    if idx > 0:
-        # Try JSON/JS embedded URLs
-        for m in re.finditer(r'["\\]+(?:FULL_HD1|HD1|SD1|SD2)["\\]+\s*[:=]\s*["\\]*(https?://[^"\\\s,}\]>]+)', html[idx:idx+4000]):
-            url = m.group(1).replace('\\/', '/').replace('\\u0026', '&').replace('\\u003d', '=')
-            if url.startswith('http'):
-                found.append(('SD1', url))
-        if found:
-            best = max(found, key=lambda x: priority.get(x[0], 0))
-            return (True, 'ok', best[1], best[0])
 
-    # LiveStatus fallback (unreliable, returns normal even when offline)
-    return (False, 'no_flv_pull_url', None, None)
+    return (False, 'no_flv_url_found', None, None)
+
 
 
 def http_get_anchor_name(room_id):
