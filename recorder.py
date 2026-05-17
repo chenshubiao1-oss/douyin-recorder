@@ -38,31 +38,41 @@ def log(msg):
 
 
 def http_check_live(room_id):
-    """HTTP check - use os.system like test_9rooms shell loop."""
-    ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-    tf = '/tmp/dy_chk_' + str(room_id) + '.html'
-    cmd = 'curl -s -L --max-time 25 -o ' + tf + ' -H "User-Agent: ' + ua + '" -H "Accept: text/html" "https://live.douyin.com/' + str(room_id) + '"'
-    ret = os.system(cmd)
-    if ret != 0:
-        return (False, 'os_exit:' + str(ret), None, None)
-    if not os.path.exists(tf):
-        return (False, 'no_file', None, None)
-    with open(tf, 'r', encoding='utf-8', errors='replace') as f:
-        html = f.read()
-    if 'flv_pull_url' not in html:
-        snippet = html[:200].replace('\n', ' ').strip()
-        log('[DBG] ' + str(room_id) + ' no flv len=' + str(len(html)) + ' res=' + repr(snippet))
+    """HTTP check - use urllib like test_douyin.py (proven working)."""
+    ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    cookie_val = ""
+    try:
+        import urllib.request as _ur
+        req = _ur.Request("https://live.douyin.com/" + str(room_id),
+            headers={
+                "User-Agent": ua,
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+            })
+        cookie_val = os.environ.get("DOUYIN_COOKIE", "")
+        if cookie_val:
+            req.add_header("Cookie", cookie_val)
+        resp = _ur.urlopen(req, timeout=URLLIB_TIMEOUT)
+        raw = resp.read()
+        html = raw.decode("utf-8", errors="replace")
+    except Exception as e:
+        return (False, 'urllib_err:' + str(type(e).__name__), None, None)
+
+    if "flv_pull_url" not in html:
+        log("[DBG] " + str(room_id) + " no flv len=" + str(len(html)))
         return (False, 'no_flv', None, None)
+
     found = []
     priority = {"FULL_HD1": 4, "HD1": 3, "SD1": 2, "SD2": 1}
     for m in re.finditer(r'["\\]+(FULL_HD1|HD1|SD1|SD2)["\\]+\s*[:=]\s*["\\]+(https?://[^"\\\s,}\]>]+)', html):
-        curl = m.group(2).replace('\\/', '/').replace('\\u0026', '&').replace('\\u003d', '=')
-        if curl.startswith('http'):
+        curl = m.group(2).replace("\\/", "/").replace("\\u0026", "&").replace("\\u003d", "=")
+        if curl.startswith("http"):
             found.append((m.group(1), curl))
+
     if found:
         best = max(found, key=lambda x: priority.get(x[0], 0))
-        return (True, 'ok', best[1], best[0])
-    return (True, 'live_but_no_flv', None, None)
+        return (True, "ok", best[1], best[0])
+    return (True, "live_but_no_flv", None, None)
 
 def http_get_anchor_name(room_id):
     """Get anchor name from SSR HTML."""
