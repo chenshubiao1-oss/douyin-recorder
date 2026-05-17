@@ -27,6 +27,9 @@ def log(msg):
 def http_check_live(room_id):
     """HTTP check - simple: flv_pull_url in html = live."""
     import urllib.request as _ur
+    # Force UTF-8 locale to avoid ascii encoding errors in urllib
+    os.environ["LANG"] = "C.UTF-8"
+    os.environ["LC_ALL"] = "C.UTF-8"
     ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     try:
         req = _ur.Request(f"https://live.douyin.com/{room_id}",
