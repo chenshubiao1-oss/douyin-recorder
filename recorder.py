@@ -774,7 +774,9 @@ def run():
                     log(_tb.format_exc())
                     time.sleep(10)
         except KeyboardInterrupt: log("用户中断")
-        except: pass  # 其他异常
+        except:
+            import traceback as _tb2
+            log(f"[outer fatal] " + _tb2.format_exc())
         finally:
             # 1. 正常结束当前录制任务
             for rid in list(recordings.keys()): handle_room_end(rid, recordings, anchor_names, time.time())
