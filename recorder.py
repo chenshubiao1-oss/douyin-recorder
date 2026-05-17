@@ -687,7 +687,6 @@ def run():
                     # 页面仅在录制时创建，下播后由HTTP检测
                     # HTTP-based detection (no Playwright) with per-room delay
                     for rid in list(pages.keys()):
-                        import time
                         live, live_rsn = http_check_live(rid)
                         time.sleep(2)
                         prev = prev_live.get(rid)
