@@ -45,11 +45,12 @@ def http_check_live(room_id):
     log(f'[DBG] {room_id} cookie_avail=' + str(debug_cookie_available))
     ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     cookie_val = os.environ.get("DOUYIN_COOKIE", "")
+    # Use minimal cookie to avoid issues with full cookie string
+    min_cookie = 'ttwid=1%7CwPcX99XHfWkYs9JBqhma96gL4G7TIqv2wAEzVBtR6zw%7C1778989096%7Cf3244cece7393ea380a47be86334fa5a2e173f9435a83191cbb1d710d53b5b98; sessionid=b5488557e64abd14e1fdf77e72393f04'
     cmd = ['curl', '-s', '-L', '--max-time', '25',
            '-H', 'User-Agent: ' + ua,
            '-H', 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8']
-    if cookie_val:
-        cmd += ['-H', 'Cookie: ' + cookie_val]
+    cmd += ['-H', 'Cookie: ' + min_cookie]
     # Spoof IP to avoid Actions IP being rate-limited
     cmd += ['-H', 'X-Forwarded-For: 58.33.200.1']
     cmd += [url]
