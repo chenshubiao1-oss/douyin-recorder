@@ -608,6 +608,7 @@ def run():
             log('[init] entering main loop')
             start_time = time.time()
             last_refresh = start_time
+            log(f'[pre-while] start_time={start_time}, pages={len(pages)}')
             while True:
                 try:
                     loop_start = time.time()
