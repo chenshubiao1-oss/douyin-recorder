@@ -688,7 +688,7 @@ def run():
                     # HTTP-based detection (no Playwright) with per-room delay
                     for rid in list(pages.keys()):
                         live, live_rsn = http_check_live(rid)
-                        time.sleep(2)
+                        time.sleep(random.uniform(6, 10))
                         prev = prev_live.get(rid)
                         log(f"[{room_names.get(rid,rid)}] is_live={'ONAIR' if live else 'OFF'} ({live_rsn})")
                         prev_live[rid] = live
