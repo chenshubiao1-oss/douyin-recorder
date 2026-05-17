@@ -378,6 +378,7 @@ def run():
         aname = http_get_anchor_name(r['id'])
         if aname:
             anchor_names[r['id']] = aname
+            room_names[r['id']] = aname
             log(f"  nickname: {aname}")
             update_rooms_nickname(anchor_names)
         time.sleep(random.uniform(2, 4))
