@@ -418,7 +418,8 @@ def run():
             for rid in sorted(prev_live.keys()):
                 live, reason, url, quality = http_check_live(rid)
                 prev = prev_live.get(rid)
-                safe_rid = room_names.get(rid, rid).encode('ascii', errors='replace').decode('ascii')\n                log('[' + safe_rid + '] is_live=' + ('ONAIR' if live else 'OFF') + ' (' + reason + ')')
+                safe_rid = room_names.get(rid, rid).encode('ascii', errors='replace').decode('ascii')
+                log('[' + safe_rid + '] is_live=' + ('ONAIR' if live else 'OFF') + ' (' + reason + ')')
                 prev_live[rid] = live
 
                 # Just transitioned to live
