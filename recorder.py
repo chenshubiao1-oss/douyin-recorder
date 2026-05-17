@@ -433,10 +433,23 @@ def run():
                 rooms = new_rooms
                 last_refresh = now
 
-            # HTTP detection for all rooms
+            # Check for recording process exit first (independent of detection)
+            for rid in list(recordings.keys()):
+                rec = recordings[rid]
+                proc = rec.get("proc")
+                if proc and proc.poll() is not None:
+                    log("[REC] " + str(room_names.get(rid, rid)) + " ffmpeg exited")
+                    handle_room_end(rid, recordings, anchor_names, now)
+
+            # HTTP detection for non-recording rooms only
             for rid in sorted(prev_live.keys()):
+                if rid in recordings:
+                    # Already recording, skip detection to avoid interrupting
+                    safe_rid = room_names.get(rid, rid).encode('ascii', errors='replace').decode('ascii')
+                    log('[REC] ' + safe_rid + ' recording, skip detection')
+                    continue
+
                 live, reason, url, quality = http_check_live(rid)
-                prev = prev_live.get(rid)
                 safe_rid = room_names.get(rid, rid).encode('ascii', errors='replace').decode('ascii')
                 log('[' + safe_rid + '] is_live=' + ('ONAIR' if live else 'OFF') + ' (' + reason + ')')
                 prev_live[rid] = live
@@ -448,13 +461,6 @@ def run():
                         proc, outfile, audio_proc, audiofile = start_recording(url, quality, rid, aname)
                         recordings[rid] = {"proc": proc, "outfile": outfile, "audio_proc": audio_proc,
                                             "audiofile": audiofile, "start": time.time()}
-
-                # Check if recording ended
-                if rid in recordings:
-                    rec = recordings[rid]
-                    proc = rec.get("proc")
-                    if (proc and proc.poll() is not None) or (rid in recordings and not live):
-                        handle_room_end(rid, recordings, anchor_names, now)
 
                 time.sleep(random.uniform(6, 10))
 
