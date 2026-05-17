@@ -48,8 +48,8 @@ def http_check_live(room_id):
         raw = resp.read()
         html = raw.decode("utf-8", errors="replace")
     except Exception as e:
-        err_str = str(e).encode('ascii', errors='replace').decode('ascii')
-        return (False, 'http_error:' + err_str, None, None)
+        err_msg = str(e).encode('ascii', errors='replace').decode('ascii')
+        return (False, 'http_error:' + err_msg, None, None)
 
     if 'flv_pull_url' not in html:
         return (False, 'no_flv_pull_url', None, None)
