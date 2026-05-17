@@ -75,16 +75,19 @@ def http_check_live(room_id):
     if found:
         best = max(found, key=lambda x: priority.get(x[0], 0))
         flv_url = best[1]
-        # Verify the stream URL belongs to this room by checking room_id in the URL
-        # Douyin flv URLs typically contain the room_id as a number in the path
+        # Verify this is actually THIS room's stream by checking room_id in SSR JSON.
+        # Douyin flv URLs do NOT contain room_id, but the SSR HTML has a room_id field.
         rid_str = str(room_id)
-        if rid_str in flv_url:
+        # Search for room_id match in SSR HTML (escaped and unescaped formats)
+        room_id_found = False
+        for rm in re.finditer(r'[\"]*room_id[\"]*\s*[:=]\s*[\"]*' + rid_str + r'[\"]*', html):
+            room_id_found = True
+            break
+        if room_id_found:
             return (True, "ok", flv_url, best[0])
-        # Also check if the response HTML contains this room_id near owner/user info
-        # As a final fallback, check the nickname matches
-        log(f"[DBG] flv_url does NOT contain room_id {room_id}, possible false positive")
+        # room_id not found in SSR - this is likely a cross-room stream leak
+        log(f"[DBG] room_id {room_id} NOT found in SSR HTML, possible false positive")
         log(f"[DBG] url={flv_url[:100]}")
-        # Double-check: re-fetch the page to confirm
         return (False, 'room_mismatch', None, None)
     return (True, "live_but_no_flv", None, None)
 
