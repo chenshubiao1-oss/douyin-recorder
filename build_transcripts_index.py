@@ -1,4 +1,4 @@
-import urllib.request as u, base64 as b, json, os, sys
+import urllib.request as u, base64 as b, json, os, sys, time
 
 GH_TOKEN = os.environ.get('GH_TOKEN', '')
 OWNER = 'tangwei880620-rgb'
@@ -89,7 +89,6 @@ result = {
 
 print(json.dumps({'updated': result['updated'], 'room_count': result['room_count'], 'transcript_count': result['transcript_count']}))
 
-import time
 # Write output
 out_path = sys.argv[1] if len(sys.argv) > 1 else 'transcripts_index.json'
 with open(out_path, 'w', encoding='utf-8') as f:
