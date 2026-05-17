@@ -575,16 +575,16 @@ def run():
         prev_live = {}
         # model_obj = None  # transcribe disabled
         try:
-			# Initial detection - pure HTTP, no Playwright
-			for r in rooms:
-				live, reason = http_check_live(r["id"])
-				log(f"  [{r['name']}] is_live={'ONAIR' if live else 'OFF'} ({reason})")
-				prev_live[r["id"]] = live
-				aname = http_get_anchor_name(r["id"])
-				if aname:
-					anchor_names[r["id"]] = aname
-					log(f"  主播昵称: {aname}")
-					update_rooms_nickname(anchor_names)
+                        # Initial detection - pure HTTP, no Playwright
+                        for r in rooms:
+                                live, reason = http_check_live(r["id"])
+                                log(f"  [{r['name']}] is_live={'ONAIR' if live else 'OFF'} ({reason})")
+                                prev_live[r["id"]] = live
+                                aname = http_get_anchor_name(r["id"])
+                                if aname:
+                                        anchor_names[r["id"]] = aname
+                                        log(f"  主播昵称: {aname}")
+                                        update_rooms_nickname(anchor_names)
             start_time = last_refresh = time.time()
             _iter_watchdog = None
             while True:
@@ -611,7 +611,7 @@ def run():
                                 log(f"  主播昵称: {aname}")
                                 update_rooms_nickname(anchor_names)
                                 try:
-								new_live, new_rsn = http_check_live(nr["id"])
+                                                                new_live, new_rsn = http_check_live(nr["id"])
                                 except:
                                     new_live = False
                                 log(f"[{room_names.get(nr['id'],nr['id'])}] is_live={'ONAIR' if new_live else 'OFF'} ({new_rsn})")
@@ -644,7 +644,7 @@ def run():
                                 anchor_names.pop(rid, None)
                                 prev_live.pop(rid, None)
                         last_refresh = now
-					# 页面仅在录制时创建，下播后由HTTP检测
+                                        # 页面仅在录制时创建，下播后由HTTP检测
                     for rid in list(prev_live.keys()):
                         if rid not in pages:
                             log(f"[{room_names.get(rid,rid)}] 重新打开页面检查...")
@@ -654,31 +654,31 @@ def run():
                                 pages[rid] = new_p
                             except:
                                 log(f"[{room_names.get(rid,rid)}] 页面打开失败")
-					# HTTP-based detection (no Playwright)
-					for rid in list(pages.keys()):
-						live, live_rsn = http_check_live(rid)
-						prev = prev_live.get(rid)
-						log(f"[{room_names.get(rid,rid)}] is_live={'ONAIR' if live else 'OFF'} ({live_rsn})")
-						prev_live[rid] = live
-						if live and rid not in recordings:
-							log(f"[{room_names.get(rid,rid)}] 检测到开播!")
-							# Create Playwright page lazily to get stream URL
-							if rid not in pages or pages[rid] is None:
-								try:
-									new_pg = context.new_page()
-									navigate_page(new_pg, rid)
-									pages[rid] = new_pg
-									time.sleep(3)
-									aname = get_anchor_name(new_pg) or http_get_anchor_name(rid) or room_names.get(rid, rid)
-									if aname and re.match(r'^\d+$', aname):
-										aname = anchor_names.get(rid, room_names.get(rid, rid))
-									anchor_names[rid] = aname
-								except Exception as _e:
-									log(f"[{rid}] 创建页面失败: {_e}")
-									pages[rid] = None
-							if rid in pages and pages[rid]:
-								_safe_reload(pages[rid])
-								for attempt in range(8):
-									quality, url = get_stream_url(pages[rid], rid)
-									if url: break
-									log(f"[{rid}] 等待推流地址... ({attempt+1}/8)"); time.sleep(3)
+                                        # HTTP-based detection (no Playwright)
+                                        for rid in list(pages.keys()):
+                                                live, live_rsn = http_check_live(rid)
+                                                prev = prev_live.get(rid)
+                                                log(f"[{room_names.get(rid,rid)}] is_live={'ONAIR' if live else 'OFF'} ({live_rsn})")
+                                                prev_live[rid] = live
+                                                if live and rid not in recordings:
+                                                        log(f"[{room_names.get(rid,rid)}] 检测到开播!")
+                                                        # Create Playwright page lazily to get stream URL
+                                                        if rid not in pages or pages[rid] is None:
+                                                                try:
+                                                                        new_pg = context.new_page()
+                                                                        navigate_page(new_pg, rid)
+                                                                        pages[rid] = new_pg
+                                                                        time.sleep(3)
+                                                                        aname = get_anchor_name(new_pg) or http_get_anchor_name(rid) or room_names.get(rid, rid)
+                                                                        if aname and re.match(r'^\d+$', aname):
+                                                                                aname = anchor_names.get(rid, room_names.get(rid, rid))
+                                                                        anchor_names[rid] = aname
+                                                                except Exception as _e:
+                                                                        log(f"[{rid}] 创建页面失败: {_e}")
+                                                                        pages[rid] = None
+                                                        if rid in pages and pages[rid]:
+                                                                _safe_reload(pages[rid])
+                                                                for attempt in range(8):
+                                                                        quality, url = get_stream_url(pages[rid], rid)
+                                                                        if url: break
+                                                                        log(f"[{rid}] 等待推流地址... ({attempt+1}/8)"); time.sleep(3)
