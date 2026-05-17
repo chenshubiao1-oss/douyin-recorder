@@ -382,7 +382,7 @@ def run():
             anchor_names[r['id']] = aname
             log(f"  nickname: {aname}")
             update_rooms_nickname(anchor_names)
-        time.sleep(random.uniform(6, 10))
+        time.sleep(random.uniform(2, 4))
 
     # Start recordings for any live rooms
     for r in rooms:
@@ -481,7 +481,7 @@ def run():
                         recordings[rid] = {"proc": proc, "outfile": outfile, "audio_proc": audio_proc,
                                             "audiofile": audiofile, "start": time.time()}
 
-                time.sleep(random.uniform(6, 10))
+                time.sleep(random.uniform(2, 4))
 
             # Force-end recordings that exceeded max duration
             for rid in list(recordings.keys()):
