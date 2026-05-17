@@ -145,6 +145,8 @@ def load_rooms_from_github():
             if not line or line.startswith("#"):
                 continue
             parts = line.split(",", 1)
+            if len(parts) < 2:
+                parts = line.split("=", 1)
             rid = parts[0].strip()
             name = parts[1].strip() if len(parts) > 1 else rid
             rooms.append({"id": rid, "name": name})
@@ -173,6 +175,8 @@ def update_rooms_nickname(anchor_names):
                 new_lines.append(line)
                 continue
             parts = line.split(",", 1)
+            if len(parts) < 2:
+                parts = line.split("=", 1)
             rid = parts[0].strip()
             if rid in anchor_names:
                 new_lines.append(f"{rid},{anchor_names[rid]}")
