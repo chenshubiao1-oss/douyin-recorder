@@ -25,7 +25,7 @@ def log(msg):
 
 
 def http_check_live(room_id):
-    """HTTP check via urllib (like v#200). Returns (is_live, reason, stream_url, quality)."""
+    """HTTP check - simple: flv_pull_url in html = live."""
     import urllib.request as _ur
     ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     try:
@@ -39,21 +39,16 @@ def http_check_live(room_id):
         if cookie_val:
             req.add_header("Cookie", cookie_val)
         resp = _ur.urlopen(req, timeout=URLLIB_TIMEOUT)
-        html = resp.read().decode("utf-8", errors="replace")
+        raw = resp.read()
+        html = raw.decode("utf-8", errors="replace")
     except Exception as e:
         return (False, f'http_error:{e}', None, None)
 
-    # Detect: web_stream_url:null or web_stream_url:{...}
-    if 'web_stream_url' not in html:
-        return (False, 'no_web_stream_url', None, None)
-    
-    idx = html.find('web_stream_url')
-    snippet = html[idx:idx+60]
-    
-    if ':null' in snippet or ':null' in html[idx:idx+10]:
-        return (False, 'web_stream_null', None, None)
-    
-    # Live! Try to extract flv URL
+    # Simplest check: flv_pull_url in html = live
+    if 'flv_pull_url' not in html:
+        return (False, 'no_flv_pull_url', None, None)
+
+    # Extract stream URL
     found = []
     priority = {"FULL_HD1": 4, "HD1": 3, "SD1": 2, "SD2": 1}
     for m in re.finditer(r'["\\]+(FULL_HD1|HD1|SD1|SD2)["\\]+\s*[:=]\s*["\\]+(https?://[^"\\\s,}\]>]+)', html):
