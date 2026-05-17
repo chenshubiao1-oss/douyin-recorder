@@ -24,56 +24,59 @@ if "flv_pull_url" not in html:
 
 log("LIVE!")
 
-# Extract URL: find flv_pull_url area
+# Extract flv_pull_url block exactly as in JSON (with \\u escapes preserved)
 idx = html.find("flv_pull_url")
 chunk = html[idx:idx+2000]
-log(f"flv_pull_url block: {chunk[:500]}")
 
-# Find first http URL
-m = re.search(r'https?://[^\s"\'\\,}\]]+', chunk)
+# Find FULL_HD1 URL and extract the ENTIRE value including \\u0026 params
+m = re.search(r'FULL_HD1["\\\\]*\s*[:=]\s*["\\\\]*(http[^"\\\\]+?)["\\\\]', chunk)
 if not m:
-    log("No URL found")
+    log("Could not extract FULL_HD1 URL")
     sys.exit(1)
-url = m.group(0)
-log(f"URL: {url[:120]}")
 
-# Step 3: curl with ALL possible headers + dump response body
-log("=== curl with full browser imitation ===")
-curl_cmd = ["curl", "-v", "-o", "/tmp/flv_body.txt", "-w", "%{http_code}",
+raw_url = m.group(1)
+# Convert \\u0026 -> &, \\u003d -> =, \\/ -> /
+raw_url = raw_url.replace("\\u0026", "&").replace("\\u003d", "=").replace("\\/", "/").replace("\\\\", "")
+log(f"Full decoded URL: {raw_url[:200]}")
+
+# Step 3: curl with the REAL full URL (with wsSecret & wsTime)
+log("=== curl with FULL URL (including signature) ===")
+curl_cmd = ["curl", "-s", "-o", "/tmp/flv_data.bin", "-w", "%{http_code}",
             "--max-time", "10",
             "-H", "User-Agent: " + ua,
             "-H", "Referer: https://live.douyin.com/",
-            "-H", "Origin: https://live.douyin.com",
-            "-H", "Accept: */*",
-            "-H", "Accept-Language: zh-CN,zh;q=0.9,en;q=0.8",
-            "-H", "Accept-Encoding: gzip, deflate",
-            "-H", "Connection: keep-alive",
-            "-H", "Sec-Fetch-Dest: empty",
-            "-H", "Sec-Fetch-Mode: cors",
-            "-H", "Sec-Fetch-Site: cross-site",
-            "-H", "Pragma: no-cache",
-            "-H", "Cache-Control: no-cache",
     ]
 if cookie:
     curl_cmd += ["-H", "Cookie: " + cookie]
 
 try:
-    r = subprocess.run(curl_cmd + [url], capture_output=True, timeout=15)
-    log(f"curl HTTP: {r.stdout.decode().strip()}")
-    if os.path.exists("/tmp/flv_body.txt"):
-        sz = os.path.getsize("/tmp/flv_body.txt")
-        log(f"Response size: {sz}")
-        with open("/tmp/flv_body.txt", "rb") as f:
-            content = f.read(500)
-        log(f"Response body (first 500 bytes): {repr(content)}")
-    # Also show verbose output
-    log(f"Verbose: {r.stderr.decode()[-2000:]}")
+    r = subprocess.run(curl_cmd + [raw_url], capture_output=True, timeout=15)
+    http_code = r.stdout.decode().strip()
+    sz = os.path.getsize("/tmp/flv_data.bin") if os.path.exists("/tmp/flv_data.bin") else 0
+    log(f"curl result: HTTP {http_code}, size={sz}")
+    if sz > 0:
+        log(f"First 100 bytes hex: {repr(open('/tmp/flv_data.bin','rb').read(100))}")
 except Exception as e:
     log(f"curl error: {e}")
 
-# Step 4: Try with ttwid in URL if present
-log("=== Checking for signature/token in URL ===")
-if "?" in url:
-    log(f"URL params: {url.split('?')[1]}")
+# Step 4: ffmpeg with the full decoded URL
+log("=== ffmpeg with full URL (including signature) ===")
+outfile = "/tmp/test_9717_full.mp4"
+logfile = "/tmp/test_9717_full.log"
+cookie_hdr = "Cookie: " + cookie + "\\r\\n" if cookie else ""
+headers_arg = "User-Agent: " + ua + "\\r\\nReferer: https://live.douyin.com/\\r\\n" + cookie_hdr
+proc = subprocess.Popen(
+    ["ffmpeg", "-y", "-loglevel", "info",
+     "-headers", headers_arg,
+     "-user_agent", ua,
+     "-i", raw_url,
+     "-c", "copy", "-t", "30", "-f", "mp4", outfile],
+    stdout=subprocess.DEVNULL, stderr=open(logfile, "w"))
+proc.wait(35)
+with open(logfile) as f:
+    log_lines = f.read()
+    log(log_lines[-1500:])
+if os.path.exists(outfile):
+    log(f"ffmpeg output: {os.path.getsize(outfile)} bytes")
 else:
-    log("No URL params")
+    log("ffmpeg no output")
