@@ -1,0 +1,28 @@
+name: Test 9 rooms sequentially
+on: workflow_dispatch
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check all 9 rooms
+        run: |
+          for rid in 215933010618 636171657211 673814862790 74481436171 7819906986 877992805909 961019695933 31463759296 30972107798; do
+            echo "--- Room $rid ---"
+            curl -s -L --max-time 25 \
+              -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" \
+              -H "Accept: text/html" \
+              "https://live.douyin.com/$rid" \
+              -o /tmp/r_$rid.html
+            echo "Size: $(wc -c < /tmp/r_$rid.html)"
+            grep -o "flv_pull_url" /tmp/r_$rid.html || echo "flv: NOT FOUND"
+            sleep 5
+          done
+          echo ""
+          echo "=== Now check 6738 AGAIN after all rooms ==="
+          curl -s -L --max-time 25 \
+            -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" \
+            -H "Accept: text/html" \
+            "https://live.douyin.com/673814862790" \
+            -o /tmp/r_6738_again.html
+          echo "Size: $(wc -c < /tmp/r_6738_again.html)"
+          grep -o "flv_pull_url" /tmp/r_6738_again.html || echo "flv: NOT FOUND"
