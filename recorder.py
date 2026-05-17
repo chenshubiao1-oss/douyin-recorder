@@ -50,6 +50,8 @@ def http_check_live(room_id):
            '-H', 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8']
     if cookie_val:
         cmd += ['-H', 'Cookie: ' + cookie_val]
+    # Spoof IP to avoid Actions IP being rate-limited
+    cmd += ['-H', 'X-Forwarded-For: 58.33.200.1']
     cmd += [url]
     try:
         res = subprocess.run(cmd, capture_output=True, timeout=30)
