@@ -189,14 +189,23 @@ def get_stream_url(page, room_id):
     return (None, None)
 
 def is_live_page(page):
+    """Returns (bool, str) - (is_live, reason)"""
     try:
-        if not page.evaluate("""() => {const s=document.querySelectorAll('script:not([src])');for(const x of s){if((x.textContent||'').includes('flv_pull_url'))return true}return false}"""):
-            return False
+        has_flv = page.evaluate("""() => {const s=document.querySelectorAll('script:not([src])');for(const x of s){if((x.textContent||'').includes('flv_pull_url'))return true}return false}""")
+        if not has_flv:
+            return (False, 'no_flv_script')
         text = page.evaluate("document.body?.innerText?.slice(0,300)||''")
-        for w in ['直播已结束','主播暂时离开','下播了','主播不在','当前没有直播','主播正在赶来的路上']:
-            if w in text: return False
-        return page.evaluate("!!document.querySelector('video')")
-    except: return False
+        offline_keywords = ['直播已结束', '主播暂时离开', '下播了', '主播不在', '当前没有直播', '主播正在赶来的路上']
+        for w in offline_keywords:
+            if w in text:
+                return (False, 'keyword_offline')
+        has_video = page.evaluate("!!document.querySelector('video')")
+        if has_video:
+            return (True, 'ok')
+        return (False, 'no_video_element')
+    except Exception as e:
+        log(f"[is_live_page] exception: {e}")
+        return (False, 'exception')
 
 def get_anchor_name(page):
     """从抖音直播页面获取主播真实昵称"""
@@ -462,8 +471,8 @@ def run_test():
         time.sleep(5)
         test_anchor_name = get_anchor_name(page) or f"room_{TEST_ROOM}"
         log(f"主播昵称: {test_anchor_name}")
-        live = is_live_page(page)
-        log(f"直播间: {'ONAIR' if live else 'OFF'}")
+        live, rsn = is_live_page(page)
+        log(f"直播间: {'ONAIR' if live else 'OFF'} ({rsn})")
         if live:
             try:
                 page.reload(wait_until="domcontentloaded", timeout=20000)
@@ -563,10 +572,10 @@ def run():
                                 log(f"  主播昵称: {aname}")
                                 update_rooms_nickname(anchor_names)
                                 try:
-                                    new_live = is_live_page(new_page)
+                                    new_live, new_rsn = is_live_page(new_page)
                                 except:
                                     new_live = False
-                                log(f"[{room_names.get(nr['id'],nr['id'])}] is_live={'ONAIR' if new_live else 'OFF'}")
+                                log(f"[{room_names.get(nr['id'],nr['id'])}] is_live={'ONAIR' if new_live else 'OFF'} ({new_rsn})")
                                 prev_live[nr['id']] = new_live
                                 if new_live:
                                     log(f"[{room_names.get(nr['id'],nr['id'])}] 检测到开播!")
@@ -607,12 +616,11 @@ def run():
                             except:
                                 log(f"[{room_names.get(rid,rid)}] 页面打开失败")
                     for rid, page in list(pages.items()):
-                        try: live = is_live_page(page)
-                        except: live = False
+                        try: live, live_rsn = is_live_page(page)
+                        except: live, live_rsn = False, "exception"
                         prev = prev_live.get(rid)
-                        if prev is None or prev != live:
-                            log(f"[{room_names.get(rid,rid)}] is_live={'ONAIR' if live else 'OFF'}")
-                            prev_live[rid] = live
+                        log(f"[{room_names.get(rid,rid)}] is_live={'ONAIR' if live else 'OFF'} ({live_rsn})")
+                        prev_live[rid] = live
                         if live and rid not in recordings:
                             log(f"[{room_names.get(rid,rid)}] 检测到开播!")
                             _safe_reload(page)
@@ -646,18 +654,28 @@ def run():
                     if elapsed > 270*60 and not _renew_triggered:
                         try:
                             import urllib.request, json
-                            wf_id = os.environ.get("GH_RUN_ID", "")
                             repo = os.environ.get("GH_REPO", "")
                             token = os.environ.get("GH_TOKEN", "")
                             if repo and token:
-                                req = urllib.request.Request(
-                                    f"https://api.github.com/repos/{repo}/actions/workflows/275535928/dispatches",
-                                    data=json.dumps({"ref":"main"}).encode(),
-                                    headers={"Authorization":f"Bearer {token}","Content-Type":"application/json"},
-                                    method="POST"
+                                _check_req = urllib.request.Request(
+                                    f"https://api.github.com/repos/{repo}/actions/workflows/275535928/runs?per_page=5&status=in_progress",
+                                    headers={"Authorization":f"Bearer {token}"},
                                 )
-                                urllib.request.urlopen(req, timeout=30)
-                                log(f"续命成功: 触发新任务 (运行{elapsed/60:.0f}分)")
+                                _existing = json.loads(urllib.request.urlopen(_check_req, timeout=15).read())
+                                _existing_ids = [r["run_number"] for r in _existing.get("workflow_runs", [])]
+                                _self_id = os.environ.get("GH_RUN_ID", "0")
+                                _existing_ids = [i for i in _existing_ids if str(i) != str(_self_id)]
+                                if len(_existing_ids) > 0:
+                                    log(f"续命跳过: 已有 {len(_existing_ids)} 个其他 in_progress 任务: {_existing_ids}")
+                                else:
+                                    _trigger_req = urllib.request.Request(
+                                        f"https://api.github.com/repos/{repo}/actions/workflows/275535928/dispatches",
+                                        data=json.dumps({"ref":"main"}).encode(),
+                                        headers={"Authorization":f"Bearer {token}","Content-Type":"application/json"},
+                                        method="POST"
+                                    )
+                                    urllib.request.urlopen(_trigger_req, timeout=30)
+                                    log(f"续命成功: 触发新任务 (运行{elapsed/60:.0f}分)")
                         except Exception as e:
                             log(f"续命失败: {e}")
                         _renew_triggered = True
