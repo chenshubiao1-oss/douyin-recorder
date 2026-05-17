@@ -53,6 +53,9 @@ def http_check_live(room_id):
         best = max(found, key=lambda x: priority.get(x[0], 0))
         return (True, 'ok', best[1], best[0])
 
+    log(f'[DBG] {room_id}: flv_pull_url found but no URL matched. First flv context:')
+    idx_flv = html.find('flv_pull_url')
+    log(repr(html[max(0,idx_flv-20):idx_flv+150]))
     return (False, 'no_flv_url_found', None, None)
 
 
