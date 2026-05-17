@@ -29,7 +29,6 @@ jobs:
             ~/.cache/torch
             ~/.cache/modelscope
             ~/.cache/huggingface
-            ~/.cache/ms-playwright
           key: deps-v3-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
           restore-keys: |
             deps-v3-${{ runner.os }}-
@@ -44,10 +43,8 @@ jobs:
           python -m pip install --upgrade pip
           pip install --timeout 120 torch --index-url https://download.pytorch.org/whl/cpu
           pip install --timeout 120 torchaudio --index-url https://download.pytorch.org/whl/cpu
-          pip install --timeout 120 playwright
           pip install --timeout 120 funasr
           pip install --timeout 120 requests
-          python -m playwright install chromium --with-deps
           mkdir -p /tmp/recordings /tmp/transcripts
       - name: Show TH time
         run: |
@@ -63,7 +60,6 @@ jobs:
           TEST_MODE: ${{ github.event.inputs.test_mode || '' }}
           TEST_ROOM: ${{ github.event.inputs.test_room || '344763580' }}
           TEST_DURATION: ${{ github.event.inputs.test_duration || '60' }}
-          DOUYIN_COOKIE: ${{ secrets.DOUYIN_COOKIE }}
       - name: Fallback upload to Release (dedup)
         if: always()
         run: python3 fallback_upload.py
