@@ -605,6 +605,7 @@ def run():
             for r in rooms:
                 if r['id'] not in pages:
                     pages[r['id']] = None
+            log('[init] entering main loop')
             start_time = time.time()
             last_refresh = start_time
             while True:
