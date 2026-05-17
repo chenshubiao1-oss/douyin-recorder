@@ -457,8 +457,14 @@ def upload_now(filepath, room_name):
 
 def handle_room_end(rid, recordings, room_names, now):
     rec = recordings.pop(rid)
-    if isinstance(now, float): from datetime import datetime; end_ts = datetime.now().strftime('%Y%m%d_%H%M%S')
-    else: end_ts = now.split('.')[0].replace(':', '').replace('-', '').replace(' ', '_')
+    # Use file mtime for end timestamp (ffmpeg exit time = last write)
+    outfile = rec.get('outfile')
+    if outfile and os.path.exists(outfile):
+        from datetime import datetime
+        end_ts = datetime.fromtimestamp(os.path.getmtime(outfile)).strftime('%Y%m%d_%H%M%S')
+    else:
+        from datetime import datetime
+        end_ts = datetime.now().strftime('%Y%m%d_%H%M%S')
     # Stop processes first
     try:
         p = rec.get("proc")
