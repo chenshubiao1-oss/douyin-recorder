@@ -51,6 +51,15 @@ def http_check_live(room_id):
     if 'flv_pull_url' not in html:
         log(f'[DBG] {room_id}: no flv_pull_url, len={len(html)}, status={resp.status_code}')
         log(f'[DBG] first 200: {repr(html[:200])}')
+        # Check key data markers
+        for kw in ['initialState', 'RENDER_DATA', 'SIGI_STATE', 'room_id', 'web_stream_url', 'stream_url']:
+            log(f'[DBG]   {kw}={"YES" if kw in html else "no"}')
+        # Show flv_pull_url position if found via other encoding
+        enc_forms = ['flv_pull_url', 'flv_pull_url', 'flv%5Fpull%5Furl', 'flvpull', 'flv-url', 'pull-flv', 'stage/stream']
+        for ef in enc_forms:
+            if ef in html:
+                idx = html.find(ef)
+                log(f'[DBG]   found_alt={ef} at {idx}: {repr(html[max(0,idx-20):idx+60])}')
         return (False, 'no_flv_pull_url_in_html', None, None)
 
     found = []
