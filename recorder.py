@@ -38,25 +38,23 @@ def log(msg):
 
 
 def http_check_live(room_id):
-    """HTTP check - simple: flv_pull_url in html = live."""
-    import urllib.request as _ur
-    ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    """HTTP check via curl subprocess - bypasses Python encoding issues entirely."""
+    url = 'https://live.douyin.com/' + str(room_id)
+    ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    cookie_val = os.environ.get("DOUYIN_COOKIE", "")
+    cmd = ['curl', '-s', '-L', '--max-time', '25',
+           '-H', 'User-Agent: ' + ua,
+           '-H', 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8']
+    if cookie_val:
+        cmd += ['-H', 'Cookie: ' + cookie_val]
+    cmd += [url]
     try:
-        req = _ur.Request('https://live.douyin.com/' + str(room_id),
-            headers={
-                "User-Agent": ua,
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-            })
-        cookie_val = os.environ.get("DOUYIN_COOKIE")
-        if cookie_val:
-            req.add_header("Cookie", cookie_val)
-        resp = _ur.urlopen(req, timeout=URLLIB_TIMEOUT)
-        raw = resp.read()
-        html = raw.decode("utf-8", errors="replace")
+        res = subprocess.run(cmd, capture_output=True, timeout=30)
+        if res.returncode != 0:
+            return (False, 'curl_exit:' + str(res.returncode), None, None)
+        html = res.stdout.decode('utf-8', errors='replace')
     except Exception as e:
-        err_msg = str(e).encode('ascii', errors='replace').decode('ascii')
-        return (False, 'http_error:' + err_msg, None, None)
+        return (False, 'curl_error:' + str(type(e).__name__), None, None)
 
     if 'flv_pull_url' not in html:
         return (False, 'no_flv_pull_url', None, None)
@@ -73,7 +71,6 @@ def http_check_live(room_id):
         return (True, 'ok', best[1], best[0])
 
     return (True, 'live_but_no_flv_url', None, None)
-
 
 def http_get_anchor_name(room_id):
     """Get anchor name from SSR HTML."""
