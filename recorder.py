@@ -166,14 +166,14 @@ def http_check_live(room_id):
         )
         resp = urllib.request.urlopen(req, timeout=30)
         html = resp.read().decode("utf-8", errors="replace")
-        m = re.search(r'"liveStatus"\s*:\s*"(\w+)"', html)
+        m = re.search(r'\\?"liveStatus\\?"\s*:\s*\\?"(\w+)\\?"', html)
         if not m:
             import time
             time.sleep(3)
             try:
                 resp = urllib.request.urlopen(req, timeout=30)
                 html = resp.read().decode("utf-8", errors="replace")
-                m = re.search(r'"liveStatus"\s*:\s*"(\w+)"', html)
+                m = re.search(r'\\?"liveStatus\\?"\s*:\s*\\?"(\w+)\\?"', html)
             except:
                 pass
         if not m:
