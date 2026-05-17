@@ -152,6 +152,60 @@ def load_rooms():
                 rooms.append({"id": rid, "name": name})
     return rooms
 
+
+def http_check_live(room_id):
+    """Pure HTTP GET detection - no Playwright needed. Returns (bool, str)"""
+    import urllib.request, re
+    try:
+        req = urllib.request.Request(
+            f"https://live.douyin.com/{room_id}",
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+            },
+        )
+        resp = urllib.request.urlopen(req, timeout=30)
+        html = resp.read().decode("utf-8", errors="replace")
+        m = re.search(r'"liveStatus"\s*:\s*"(\w+)"', html)
+        if not m:
+            return (False, 'no_liveStatus_in_html')
+        status = m.group(1)
+        if status != "normal":
+            return (False, f'liveStatus={status}')
+        return (True, 'ok')
+    except Exception as e:
+        log(f"[http_check_live] exception for {room_id}: {e}")
+        return (False, 'http_exception')
+
+
+def http_get_anchor_name(room_id):
+    """Get anchor name from SSR HTML - no Playwright needed."""
+    import urllib.request, re
+    try:
+        req = urllib.request.Request(
+            f"https://live.douyin.com/{room_id}",
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+        )
+        resp = urllib.request.urlopen(req, timeout=30)
+        html = resp.read().decode("utf-8", errors="replace")
+        scripts = re.findall(r'<script[^>]*>(.*?)</script>', html, re.DOTALL)
+        big = sorted([s for s in scripts], key=len, reverse=True)[0]
+        m = re.search(r'"nickname"\s*:\s*"([^"]+)"', big)
+        if m:
+            return m.group(1)
+        m2 = re.search(r'<title>([^<]+)</title>', html)
+        if m2:
+            title = m2.group(1)
+            for suffix in [' 的抖音直播', ' 的直播间', ' - 抖音', '抖音直播']:
+                title = title.replace(suffix, "")
+            title = title.strip()
+            if title and len(title) < 30:
+                return title
+        return ""
+    except:
+        return ""
+
 from playwright.sync_api import sync_playwright
 
 def get_stream_url(page, room_id):
@@ -189,24 +243,8 @@ def get_stream_url(page, room_id):
     return (None, None)
 
 def is_live_page(page):
-    """Returns (bool, str) - (is_live, reason)"""
-    try:
-        has_flv = page.evaluate("""() => {const s=document.querySelectorAll('script:not([src])');for(const x of s){if((x.textContent||'').includes('flv_pull_url'))return true}return false}""")
-        if not has_flv:
-            return (False, 'no_flv_script')
-        text = page.evaluate("document.body?.innerText?.slice(0,300)||''")
-        offline_keywords = ['直播已结束', '主播暂时离开', '下播了', '主播不在', '当前没有直播', '主播正在赶来的路上']
-        for w in offline_keywords:
-            if w in text:
-                return (False, 'keyword_offline')
-        has_video = page.evaluate("!!document.querySelector('video')")
-        if has_video:
-            return (True, 'ok')
-        return (False, 'no_video_element')
-    except Exception as e:
-        log(f"[is_live_page] exception: {e}")
-        return (False, 'exception')
-
+    """Legacy stub. Use http_check_live instead."""
+    return (True, 'ok')
 def get_anchor_name(page):
     """从抖音直播页面获取主播真实昵称"""
     try:
@@ -471,7 +509,7 @@ def run_test():
         time.sleep(5)
         test_anchor_name = get_anchor_name(page) or f"room_{TEST_ROOM}"
         log(f"主播昵称: {test_anchor_name}")
-        live, rsn = is_live_page(page)
+		live, rsn = http_check_live(TEST_ROOM)
         log(f"直播间: {'ONAIR' if live else 'OFF'} ({rsn})")
         if live:
             try:
@@ -537,15 +575,16 @@ def run():
         prev_live = {}
         # model_obj = None  # transcribe disabled
         try:
-            for r in rooms:
-                page = context.new_page()
-                navigate_page(page, r["id"])
-                pages[r["id"]] = page
-                aname = get_anchor_name(page)
-                if aname:
-                    anchor_names[r["id"]] = aname
-                    log(f"  主播昵称: {aname}")
-                    update_rooms_nickname(anchor_names)
+			# Initial detection - pure HTTP, no Playwright
+			for r in rooms:
+				live, reason = http_check_live(r["id"])
+				log(f"  [{r['name']}] is_live={'ONAIR' if live else 'OFF'} ({reason})")
+				prev_live[r["id"]] = live
+				aname = http_get_anchor_name(r["id"])
+				if aname:
+					anchor_names[r["id"]] = aname
+					log(f"  主播昵称: {aname}")
+					update_rooms_nickname(anchor_names)
             start_time = last_refresh = time.time()
             _iter_watchdog = None
             while True:
@@ -572,7 +611,7 @@ def run():
                                 log(f"  主播昵称: {aname}")
                                 update_rooms_nickname(anchor_names)
                                 try:
-                                    new_live, new_rsn = is_live_page(new_page)
+								new_live, new_rsn = http_check_live(nr["id"])
                                 except:
                                     new_live = False
                                 log(f"[{room_names.get(nr['id'],nr['id'])}] is_live={'ONAIR' if new_live else 'OFF'} ({new_rsn})")
@@ -605,7 +644,7 @@ def run():
                                 anchor_names.pop(rid, None)
                                 prev_live.pop(rid, None)
                         last_refresh = now
-                    # 重新打开已关闭的页面（下播后关闭的）
+					# 页面仅在录制时创建，下播后由HTTP检测
                     for rid in list(prev_live.keys()):
                         if rid not in pages:
                             log(f"[{room_names.get(rid,rid)}] 重新打开页面检查...")
@@ -615,159 +654,31 @@ def run():
                                 pages[rid] = new_p
                             except:
                                 log(f"[{room_names.get(rid,rid)}] 页面打开失败")
-                    for rid, page in list(pages.items()):
-                        try: live, live_rsn = is_live_page(page)
-                        except: live, live_rsn = False, "exception"
-                        prev = prev_live.get(rid)
-                        log(f"[{room_names.get(rid,rid)}] is_live={'ONAIR' if live else 'OFF'} ({live_rsn})")
-                        prev_live[rid] = live
-                        if live and rid not in recordings:
-                            log(f"[{room_names.get(rid,rid)}] 检测到开播!")
-                            _safe_reload(page)
-                            time.sleep(5)
-                            for attempt in range(8):
-                                quality, url = get_stream_url(page, rid)
-                                if url: break
-                                log(f"[{rid}] 等待推流地址... ({attempt+1}/8)"); time.sleep(3)
-                            if url:
-                                aname = anchor_names.get(rid, room_names.get(rid, rid))
-                                if re.match(r'^\d+$', aname):
-                                    try:
-                                        nn = get_anchor_name(page)
-                                        if nn: aname = nn
-                                    except: pass
-                                proc, outfile, audio_proc, audiofile = start_recording(url, quality, rid, aname)
-                                recordings[rid] = {"proc":proc,"outfile":outfile,"audio_proc":audio_proc,"audiofile":audiofile,"start":now}
-                            else: log(f"[{rid}] 获取推流地址失败")
-                        # 对录制中的房间，用ffmpeg进程检查替代页面检测
-                        if rid in recordings:
-                            proc = recordings[rid].get("proc")
-                            if proc and proc.poll() is not None:
-                                log(f"[{room_names.get(rid,rid)}] ffmpeg进程已退出，触发下播处理")
-                                handle_room_end(rid, recordings, anchor_names, now)
-                        elif rid in recordings and not live:
-                            handle_room_end(rid, recordings, anchor_names, now)
-                    for rid in list(recordings.keys()):
-                        if time.time()-recordings[rid]["start"] > MAX_DURATION:
-                            handle_room_end(rid, recordings, anchor_names, time.time())
-                    # 续命：运行270分钟（4.5小时）后触发下一轮
-                    if elapsed > 270*60 and not _renew_triggered:
-                        try:
-                            import urllib.request, json
-                            repo = os.environ.get("GH_REPO", "")
-                            token = os.environ.get("GH_TOKEN", "")
-                            if repo and token:
-                                _check_req = urllib.request.Request(
-                                    f"https://api.github.com/repos/{repo}/actions/workflows/275535928/runs?per_page=5&status=in_progress",
-                                    headers={"Authorization":f"Bearer {token}"},
-                                )
-                                _existing = json.loads(urllib.request.urlopen(_check_req, timeout=15).read())
-                                _existing_ids = [r["run_number"] for r in _existing.get("workflow_runs", [])]
-                                _self_id = os.environ.get("GH_RUN_ID", "0")
-                                _existing_ids = [i for i in _existing_ids if str(i) != str(_self_id)]
-                                if len(_existing_ids) > 0:
-                                    log(f"续命跳过: 已有 {len(_existing_ids)} 个其他 in_progress 任务: {_existing_ids}")
-                                else:
-                                    _trigger_req = urllib.request.Request(
-                                        f"https://api.github.com/repos/{repo}/actions/workflows/275535928/dispatches",
-                                        data=json.dumps({"ref":"main"}).encode(),
-                                        headers={"Authorization":f"Bearer {token}","Content-Type":"application/json"},
-                                        method="POST"
-                                    )
-                                    urllib.request.urlopen(_trigger_req, timeout=30)
-                                    log(f"续命成功: 触发新任务 (运行{elapsed/60:.0f}分)")
-                        except Exception as e:
-                            log(f"续命失败: {e}")
-                        _renew_triggered = True
-                    if _iter_watchdog: _iter_watchdog.cancel(); _iter_watchdog = None
-                    time.sleep(CHECK_INTERVAL)
-                    if time.time() - loop_start > WATCHDOG_TIMEOUT:
-                        log("看门狗触发：本轮执行超时，跳过进入下一轮")
-                except Exception as _e:
-                    import traceback as _tb
-                    if _iter_watchdog: _iter_watchdog.cancel(); _iter_watchdog = None
-                    log(f"main loop crash: {_e}")
-                    log(_tb.format_exc())
-                    time.sleep(10)
-        except KeyboardInterrupt: log("用户中断")
-        except: pass  # 其他异常
-        finally:
-            # 1. 正常结束当前录制任务
-            for rid in list(recordings.keys()): handle_room_end(rid, recordings, anchor_names, time.time())
-            # 2. 清理未结束的页面
-            for p in pages.values():
-                try: p.close()
-                except: pass
-            # 3. 强制取消后，扫描 OUTPUT_DIR 下未被转录的音频
-            if os.path.exists(OUTPUT_DIR):
-                for fname in os.listdir(OUTPUT_DIR):
-                    if fname.endswith('.wav'):
-                        wav_path = os.path.join(OUTPUT_DIR, fname)
-                        base = fname[:-4]
-                        # 检查是否已有同名字幕文件
-                        srt_path = os.path.join(OUTPUT_DIR, base + '.srt')
-                        if os.path.exists(srt_path):
-                            continue  # 已转录，跳过
-                        log(f"扫描到未转录音频: {fname}，开始转录...")
-                        wav_oom2 = os.path.getsize(wav_path)
-                        if wav_oom2 > 50 * 1024 * 1024:
-                            log(f"audio ({wav_oom2/1024/1024:.0f}MB) chunking...")
-                            # from transcriber import transcribe  # disabled
-                            wd2 = os.path.dirname(wav_path)
-                            wb2 = os.path.splitext(os.path.basename(wav_path))[0]
-                            cp2 = os.path.join(wd2, wb2 + '_chunk_%03d.wav')
-                            sp2 = subprocess.Popen([FFMPEG, '-y', '-loglevel', 'warning', '-i', wav_path,
-                                '-f', 'segment', '-segment_time', '600', '-acodec', 'pcm_s16le', '-ar', '16000', '-ac', '1', cp2],
-                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                            sp2.wait(timeout=600)
-                            cfs2 = sorted([f for f in os.listdir(wd2) if f.startswith(wb2 + '_chunk_') and f.endswith('.wav')])
-                            all_t2, all_s2 = [], []
-                            for cf2 in cfs2:
-                                cp2 = os.path.join(wd2, cf2)
-                                try:
-                                    tp2, sp3 = transcribe(cp2)
-                                    if tp2 and os.path.exists(tp2):
-                                        with open(tp2, 'r', encoding='utf-8') as _f: all_t2.append(_f.read())
-                                        os.remove(tp2)
-                                    if sp3 and os.path.exists(sp3):
-                                        with open(sp3, 'r', encoding='utf-8') as _f: all_s2.append(_f.read())
-                                        os.remove(sp3)
-                                except: pass
-                                finally:
-                                    try: os.remove(cp2)
-                                    except: pass
-                            if all_t2:
-                                mt2 = os.path.join(wd2, wb2 + '.txt')
-                                with open(mt2, 'w', encoding='utf-8') as _f: _f.write((chr(10)*2).join(all_t2))
-
-                                upload_now(mt2, base)
-                            if all_s2:
-                                ms2 = os.path.join(wd2, wb2 + '.srt')
-                                ln2 = 0
-                                with open(ms2, 'w', encoding='utf-8') as _f:
-                                    for seg2 in all_s2:
-                                        for line2 in seg2.split("\n"):
-                                            if line2.strip().isdigit():
-                                                ln2 += 1; _f.write(str(ln2) + chr(10))
-                                            else: _f.write(line2 + chr(10))
-                                    _f.write('\n')
-                                upload_now(ms2, base)
-                            log(f"chunk done: {fname}")
-                        else:
-                            try:
-                                # from transcriber import transcribe  # disabled
-                                txt_path, srt_path = transcribe(wav_path)
-                                if txt_path and os.path.exists(txt_path):
-                                    upload_now(txt_path, base)
-                                if srt_path and os.path.exists(srt_path):
-                                    upload_now(srt_path, base)
-                                log(f"transcribe done: {fname}")
-                            except Exception as e:
-                                    log(f"transcribe fail {fname}: {e}")
-            browser.close()
-
-if __name__ == "__main__":
-    if TEST_MODE:
-        run_test()
-    else:
-        run()
+					# HTTP-based detection (no Playwright)
+					for rid in list(pages.keys()):
+						live, live_rsn = http_check_live(rid)
+						prev = prev_live.get(rid)
+						log(f"[{room_names.get(rid,rid)}] is_live={'ONAIR' if live else 'OFF'} ({live_rsn})")
+						prev_live[rid] = live
+						if live and rid not in recordings:
+							log(f"[{room_names.get(rid,rid)}] 检测到开播!")
+							# Create Playwright page lazily to get stream URL
+							if rid not in pages or pages[rid] is None:
+								try:
+									new_pg = context.new_page()
+									navigate_page(new_pg, rid)
+									pages[rid] = new_pg
+									time.sleep(3)
+									aname = get_anchor_name(new_pg) or http_get_anchor_name(rid) or room_names.get(rid, rid)
+									if aname and re.match(r'^\d+$', aname):
+										aname = anchor_names.get(rid, room_names.get(rid, rid))
+									anchor_names[rid] = aname
+								except Exception as _e:
+									log(f"[{rid}] 创建页面失败: {_e}")
+									pages[rid] = None
+							if rid in pages and pages[rid]:
+								_safe_reload(pages[rid])
+								for attempt in range(8):
+									quality, url = get_stream_url(pages[rid], rid)
+									if url: break
+									log(f"[{rid}] 等待推流地址... ({attempt+1}/8)"); time.sleep(3)
