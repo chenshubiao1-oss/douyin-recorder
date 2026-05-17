@@ -26,42 +26,33 @@ def log(msg):
 
 def http_check_live(room_id):
     """Pure HTTP: check live status AND extract stream URL if live.
+    Uses web_stream_url detection like v#200.
     Returns (is_live: bool, reason: str, stream_url: str|None, quality: str|None)"""
     ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     try:
         import requests
         sess = requests.Session()
-        # Try to get a ttwid cookie by visiting douyin.com first
         try:
             sess.get("https://www.douyin.com/",
                 headers={"User-Agent": ua}, timeout=10)
         except:
             pass
-        # Use explicit cookie if available
         cookie_val = os.environ.get("DOUYIN_COOKIE")
         if cookie_val:
             sess.headers.update({"Cookie": cookie_val})
         resp = sess.get(f"https://live.douyin.com/{room_id}",
-            headers={"User-Agent": ua, "Accept": "text/html"},
+            headers={"User-Agent": ua, "Accept": "text/html", "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8"},
             timeout=URLLIB_TIMEOUT)
         html = resp.text
     except Exception as e:
         return (False, f'http_error:{e}', None, None)
 
-    if 'flv_pull_url' not in html:
-        log(f'[DBG] {room_id}: no flv_pull_url, len={len(html)}, status={resp.status_code}')
-        log(f'[DBG] first 200: {repr(html[:200])}')
-        # Check key data markers
-        for kw in ['initialState', 'RENDER_DATA', 'SIGI_STATE', 'room_id', 'web_stream_url', 'stream_url']:
-            log(f'[DBG]   {kw}={"YES" if kw in html else "no"}')
-        # Show flv_pull_url position if found via other encoding
-        enc_forms = ['flv_pull_url', 'flv_pull_url', 'flv%5Fpull%5Furl', 'flvpull', 'flv-url', 'pull-flv', 'stage/stream']
-        for ef in enc_forms:
-            if ef in html:
-                idx = html.find(ef)
-                log(f'[DBG]   found_alt={ef} at {idx}: {repr(html[max(0,idx-20):idx+60])}')
-        return (False, 'no_flv_pull_url_in_html', None, None)
+    # Check web_stream_url: null = not live, not null = live
+    web_null = re.search(r'web_stream_url["\\]*\s*:\s*null', html)
+    if web_null:
+        return (False, 'web_stream_url_null', None, None)
 
+    # Live! Try to extract flv_pull_url
     found = []
     priority = {"FULL_HD1": 4, "HD1": 3, "SD1": 2, "SD2": 1}
     for m in re.finditer(r'["\\]+(FULL_HD1|HD1|SD1|SD2)["\\]+\s*[:=]\s*["\\]+(https?://[^"\\\s,}\]>]+)', html):
@@ -73,7 +64,8 @@ def http_check_live(room_id):
         best = max(found, key=lambda x: priority.get(x[0], 0))
         return (True, 'ok', best[1], best[0])
 
-    return (False, 'no_flv_url_found', None, None)
+    # Live but no flv URL yet - return live anyway
+    return (True, 'web_stream_ok_but_no_flv', None, None)
 
 
 def http_get_anchor_name(room_id):
