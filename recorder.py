@@ -695,12 +695,12 @@ def run():
                                     pages[rid] = new_pg
                                     time.sleep(3)
                                     try:
-                                aname = get_anchor_name(new_pg) or http_get_anchor_name(rid) or room_names.get(rid, rid)
-                                if aname and '验证码' in aname:
-                                    aname = anchor_names.get(rid, room_names.get(rid, rid))
-                                except:
-                                aname = anchor_names.get(rid, room_names.get(rid, rid))
-                                    if aname and re.match(r'^\d+$', aname):
+                                        aname = get_anchor_name(new_pg) or http_get_anchor_name(rid) or room_names.get(rid, rid)
+                                        if aname and '验证码' in aname:
+                                            aname = None
+                                    except:
+                                        aname = None
+                                    if not aname or re.match(r'^\d+$', aname):
                                         aname = anchor_names.get(rid, room_names.get(rid, rid))
                                     anchor_names[rid] = aname
                                 except Exception as _e:
