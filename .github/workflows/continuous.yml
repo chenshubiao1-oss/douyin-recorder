@@ -56,6 +56,13 @@ jobs:
           sudo update-locale LANG=en_US.UTF-8 || true
           echo LANG=en_US.UTF-8 >> "${GITHUB_ENV}"
           echo LC_ALL=en_US.UTF-8 >> "${GITHUB_ENV}"
+      - name: Debug curl
+        run: |
+          curl -s -L --max-time 25 -H 'User-Agent: Mozilla/5.0' -H 'Accept: text/html' 'https://live.douyin.com/673814862790' -o /tmp/curl_debug.html
+          echo 'Curl exit:' $?
+          head -c 300 /tmp/curl_debug.html
+          echo ''
+          wc -c /tmp/curl_debug.html
       - name: Run recorder
         run: python recorder.py
         env:
