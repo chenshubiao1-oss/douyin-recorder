@@ -166,22 +166,20 @@ def http_check_live(room_id):
         )
         resp = urllib.request.urlopen(req, timeout=30)
         html = resp.read().decode("utf-8", errors="replace")
-        m = re.search(r'\\?"liveStatus\\?"\s*:\s*\\?"(\w+)\\?"', html)
-        if not m:
-            import time
-            time.sleep(3)
-            try:
-                resp = urllib.request.urlopen(req, timeout=30)
-                html = resp.read().decode("utf-8", errors="replace")
-                m = re.search(r'\\?"liveStatus\\?"\s*:\s*\\?"(\w+)\\?"', html)
-            except:
-                pass
-        if not m:
-            return (False, 'no_liveStatus_in_html')
-        status = m.group(1)
-        if status != "normal":
-            return (False, f'liveStatus={status}')
-        return (True, 'ok')
+        # liveStatus is always "normal" regardless of actual live state.
+        # Check web_stream_url instead: null = not live, object with flv_pull_url = live
+        m = re.search(r'\\?"web_stream_url\\?"\s*:\s*null', html)
+        if m:
+            return (False, 'web_stream_url_null')
+        # Has web_stream_url, check if it contains flv_pull_url
+        m2 = re.search(r'\\?"web_stream_url\\?"\s*:\s*\\?\{[^}]*?flv_pull_url', html)
+        if m2:
+            return (True, 'ok')
+        # Fallback: check liveStatus (but it's unreliable)
+        m3 = re.search(r'\\?"liveStatus\\?"\s*:\s*\\?"(\w+)\\"', html)
+        if m3 and m3.group(1) == "normal":
+            return (True, 'ok')
+        return (False, 'no_stream_url')
     except Exception as e:
         log(f"[http_check_live] exception for {room_id}: {e}")
         return (False, 'http_exception')
