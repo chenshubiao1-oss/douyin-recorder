@@ -38,33 +38,33 @@ def log(msg):
 
 
 def http_check_live(room_id):
-    """HTTP check via curl subprocess - bypasses Python encoding issues entirely."""
+    """HTTP check - write to temp file then read (avoids pipe issues)."""
+    import tempfile, os
+
     url = 'https://live.douyin.com/' + str(room_id)
-    # Debug: check if cookie is set
     debug_cookie_available = 'DOUYIN_COOKIE' in os.environ and len(os.environ.get('DOUYIN_COOKIE', '')) > 20
     log(f'[DBG] {room_id} cookie_avail=' + str(debug_cookie_available))
     ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    cookie_val = os.environ.get("DOUYIN_COOKIE", "")
-    # Use minimal cookie to avoid issues with full cookie string
-    min_cookie = 'ttwid=1%7CwPcX99XHfWkYs9JBqhma96gL4G7TIqv2wAEzVBtR6zw%7C1778989096%7Cf3244cece7393ea380a47be86334fa5a2e173f9435a83191cbb1d710d53b5b98; sessionid=b5488557e64abd14e1fdf77e72393f04'
+
+    tf = '/tmp/dy_check_' + str(room_id) + '.html'
     cmd = ['curl', '-s', '-L', '--max-time', '25',
+           '-o', tf,
            '-H', 'User-Agent: ' + ua,
-           '-H', 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8']
+           '-H', 'Accept: text/html']
+    # Use minimal cookie
+    min_cookie = 'ttwid=1%7CwPcX99XHfWkYs9JBqhma96gL4G7TIqv2wAEzVBtR6zw%7C1778989096%7Cf3244cece7393ea380a47be86334fa5a2e173f9435a83191cbb1d710d53b5b98; sessionid=b5488557e64abd14e1fdf77e72393f04'
     cmd += ['-H', 'Cookie: ' + min_cookie]
-    # Spoof IP to avoid Actions IP being rate-limited
-    cmd += ['-H', 'X-Forwarded-For: 58.33.200.1']
     cmd += [url]
     try:
         res = subprocess.run(cmd, capture_output=True, timeout=30)
-        if res.returncode != 0:
-            return (False, 'curl_exit:' + str(res.returncode), None, None)
-        html = res.stdout.decode('utf-8', errors='replace')
-        log(f'[DBG] {room_id} curl got: exit=0 stdout_len=' + str(len(res.stdout)) + ' flv_in_raw=' + str(b'flv_pull_url' in res.stdout))
+        if not os.path.exists(tf):
+            return (False, 'curl_no_output_file', None, None)
+        with open(tf, 'r', encoding='utf-8', errors='replace') as f:
+            html = f.read()
     except Exception as e:
         return (False, 'curl_error:' + str(type(e).__name__), None, None)
 
     if 'flv_pull_url' not in html:
-        # Debug: log snippet of what we got
         snippet = html[:300].replace('\n', ' ').strip()
         log(f'[DBG] {room_id} no flv, res=' + repr(snippet))
         return (False, 'no_flv_pull_url', None, None)
@@ -72,14 +72,12 @@ def http_check_live(room_id):
     found = []
     priority = {"FULL_HD1": 4, "HD1": 3, "SD1": 2, "SD2": 1}
     for m in re.finditer(r'["\\]+(FULL_HD1|HD1|SD1|SD2)["\\]+\s*[:=]\s*["\\]+(https?://[^"\\\s,}\]>]+)', html):
-        url = m.group(2).replace('\\/', '/').replace('\\u0026', '&').replace('\\u003d', '=')
-        if url.startswith('http'):
-            found.append((m.group(1), url))
-
+        curl = m.group(2).replace('\\/', '/').replace('\\u0026', '&').replace('\\u003d', '=')
+        if curl.startswith('http'):
+            found.append((m.group(1), curl))
     if found:
         best = max(found, key=lambda x: priority.get(x[0], 0))
         return (True, 'ok', best[1], best[0])
-
     return (True, 'live_but_no_flv_url', None, None)
 
 def http_get_anchor_name(room_id):
