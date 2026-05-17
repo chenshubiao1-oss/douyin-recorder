@@ -78,11 +78,15 @@ def http_check_live(room_id):
         # Verify this is actually THIS room's stream by checking room_id in SSR JSON.
         # Douyin flv URLs do NOT contain room_id, but the SSR HTML has a room_id field.
         rid_str = str(room_id)
-        # Search for room_id match in SSR HTML (escaped and unescaped formats)
+        # Search for room_id or web_rid in SSR HTML (escaped and unescaped formats)
+        # Douyin uses webrid/web_rid in the SSR JSON, not always room_id
         room_id_found = False
-        for rm in re.finditer(r'[\"]*room_id[\"]*\s*[:=]\s*[\"]*' + rid_str + r'[\"]*', html):
-            room_id_found = True
-            break
+        for field in ['room_id', 'webrid', 'web_rid']:
+            for rm in re.finditer(r'[\"]*' + field + r'[\"]*\s*[:=]\s*[\"]*' + rid_str + r'[\"]*', html):
+                room_id_found = True
+                break
+            if room_id_found:
+                break
         if room_id_found:
             return (True, "ok", flv_url, best[0])
         # room_id not found in SSR - this is likely a cross-room stream leak
