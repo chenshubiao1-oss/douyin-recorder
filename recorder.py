@@ -278,12 +278,18 @@ def handle_room_end(rid, recordings, anchor_names, now):
         except Exception as e:
             log(f"Upload error {upload_name}: {e}")
 
-    if outfile and os.path.exists(new_mp4 if 'new_mp4' in dir() else outfile):
-        fpath = new_mp4 if 'new_mp4' in dir() else outfile
-        upload(fpath, os.path.basename(fpath))
-    if audiofile and os.path.exists(new_wav if 'new_wav' in dir() else audiofile):
-        fpath2 = new_wav if 'new_wav' in dir() else audiofile
-        upload(fpath2, os.path.basename(fpath2))
+    # Upload using base_new filename (with start_end ts)
+    if outfile:
+        new_mp4_path = os.path.join(os.path.dirname(outfile), base_new + ".mp4")
+        new_wav_path = os.path.join(os.path.dirname(outfile), base_new + ".wav")
+        if os.path.exists(new_mp4_path):
+            upload(new_mp4_path, base_new + ".mp4")
+        elif os.path.exists(outfile):
+            upload(outfile, os.path.basename(outfile))
+        if os.path.exists(new_wav_path):
+            upload(new_wav_path, base_new + ".wav")
+        elif os.path.exists(audiofile):
+            upload(audiofile, os.path.basename(audiofile))
 
     # Trigger transcription via repository_dispatch
     if GH_REPO and GH_TOKEN:
@@ -421,13 +427,20 @@ def run():
                 rooms = new_rooms
                 last_refresh = now
 
-            # Check for recording process exit first (independent of detection)
+            # Check for recording process exit first
             for rid in list(recordings.keys()):
                 rec = recordings[rid]
                 proc = rec.get("proc")
                 if proc and proc.poll() is not None:
                     log("[REC] " + str(room_names.get(rid, rid)) + " ffmpeg exited")
-                    handle_room_end(rid, recordings, anchor_names, now)
+                    # Check if room is still live before ending
+                    still_live, l_reason, l_url, l_q = http_check_live(rid)
+                    if still_live and l_url:
+                        log("[REC] " + str(room_names.get(rid, rid)) + " still live, restarting recording")
+                        handle_room_end(rid, recordings, anchor_names, now)
+                        # Will be re-detected in the next detection loop
+                    else:
+                        handle_room_end(rid, recordings, anchor_names, now)
 
             # HTTP detection for non-recording rooms only
             for rid in sorted(prev_live.keys()):
