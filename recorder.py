@@ -679,9 +679,11 @@ def run():
                                 prev_live.pop(rid, None)
                         last_refresh = now
                     # 页面仅在录制时创建，下播后由HTTP检测
-                    # HTTP-based detection (no Playwright)
+                    # HTTP-based detection (no Playwright) with per-room delay
                     for rid in list(pages.keys()):
+                        import time
                         live, live_rsn = http_check_live(rid)
+                        time.sleep(2)
                         prev = prev_live.get(rid)
                         log(f"[{room_names.get(rid,rid)}] is_live={'ONAIR' if live else 'OFF'} ({live_rsn})")
                         prev_live[rid] = live
