@@ -24,80 +24,56 @@ if "flv_pull_url" not in html:
 
 log("LIVE!")
 
-# Simple extraction: just search for the string fragment
-idx = html.find('"FULL_HD1"')
-if idx < 0:
-    idx = html.find('"HD1"')
-if idx < 0:
-    idx = html.find('flv_pull_url')
-    # Search around that area
-    chunk = html[idx:idx+500]
-    # find first http 
-    import re
-    m = re.search(r'https?://[^\s"\'\\,}\]]+', chunk)
-    if m:
-        url = m.group(0)
-    else:
-        log("Could not find URL")
-        sys.exit(1)
-else:
-    # find the URL after FULL_HD1
-    chunk = html[idx:idx+300]
-    m = re.search(r'https?://[^\s"\'\\,}\]]+', chunk)
-    if m:
-        url = m.group(0)
-    else:
-        log("Could not find URL in chunk")
-        sys.exit(1)
+# Extract URL: find flv_pull_url area
+idx = html.find("flv_pull_url")
+chunk = html[idx:idx+2000]
+log(f"flv_pull_url block: {chunk[:500]}")
 
+# Find first http URL
+m = re.search(r'https?://[^\s"\'\\,}\]]+', chunk)
+if not m:
+    log("No URL found")
+    sys.exit(1)
+url = m.group(0)
 log(f"URL: {url[:120]}")
 
-# Step 3: Test curl
-log("=== curl test ===")
-curl_headers = [
-    "-H", "User-Agent: " + ua,
-    "-H", "Referer: https://live.douyin.com/",
-    "-H", "Origin: https://live.douyin.com",
-]
+# Step 3: curl with ALL possible headers + dump response body
+log("=== curl with full browser imitation ===")
+curl_cmd = ["curl", "-v", "-o", "/tmp/flv_body.txt", "-w", "%{http_code}",
+            "--max-time", "10",
+            "-H", "User-Agent: " + ua,
+            "-H", "Referer: https://live.douyin.com/",
+            "-H", "Origin: https://live.douyin.com",
+            "-H", "Accept: */*",
+            "-H", "Accept-Language: zh-CN,zh;q=0.9,en;q=0.8",
+            "-H", "Accept-Encoding: gzip, deflate",
+            "-H", "Connection: keep-alive",
+            "-H", "Sec-Fetch-Dest: empty",
+            "-H", "Sec-Fetch-Mode: cors",
+            "-H", "Sec-Fetch-Site: cross-site",
+            "-H", "Pragma: no-cache",
+            "-H", "Cache-Control: no-cache",
+    ]
 if cookie:
-    curl_headers += ["-H", "Cookie: " + cookie]
+    curl_cmd += ["-H", "Cookie: " + cookie]
 
 try:
-    r = subprocess.run(["curl", "-s", "-o", "/tmp/flv_data.bin", "-w", "%{http_code}",
-                        "--max-time", "10"] + curl_headers + [url], capture_output=True, timeout=15)
-    http_code = r.stdout.decode().strip()
-    sz = os.path.getsize("/tmp/flv_data.bin") if os.path.exists("/tmp/flv_data.bin") else 0
-    log(f"curl result: HTTP {http_code}, size={sz}")
-    if sz > 0 and sz < 1000:
-        log("First bytes:" + repr(open("/tmp/flv_data.bin","rb").read(100)))
+    r = subprocess.run(curl_cmd + [url], capture_output=True, timeout=15)
+    log(f"curl HTTP: {r.stdout.decode().strip()}")
+    if os.path.exists("/tmp/flv_body.txt"):
+        sz = os.path.getsize("/tmp/flv_body.txt")
+        log(f"Response size: {sz}")
+        with open("/tmp/flv_body.txt", "rb") as f:
+            content = f.read(500)
+        log(f"Response body (first 500 bytes): {repr(content)}")
+    # Also show verbose output
+    log(f"Verbose: {r.stderr.decode()[-2000:]}")
 except Exception as e:
     log(f"curl error: {e}")
 
-# Step 4: Try ffmpeg
-log("=== ffmpeg with -user_agent + headers ===")
-outfile = "/tmp/test_9717_ff.mp4"
-logfile = "/tmp/test_9717_ff.log"
-cookie_hdr = "Cookie: " + cookie + "\\r\\n" if cookie else ""
-headers_arg = "User-Agent: " + ua + "\\r\\n" + "Referer: https://live.douyin.com/\\r\\n" + cookie_hdr
-proc = subprocess.Popen(
-    ["ffmpeg", "-y", "-loglevel", "info", "-headers", headers_arg, "-user_agent", ua,
-     "-i", url, "-c", "copy", "-t", "30", "-f", "mp4", outfile],
-    stdout=subprocess.DEVNULL, stderr=open(logfile, "w"))
-proc.wait(35)
-with open(logfile) as f:
-    print(f.read()[-2000:])
-if os.path.exists(outfile):
-    log(f"ffmpeg output: {os.path.getsize(outfile)} bytes")
-
-# Step 5: Try HTTPS
-log("=== ffmpeg with HTTPS URL ===")
-https_url = url.replace("http://", "https://")
-proc2 = subprocess.Popen(
-    ["ffmpeg", "-y", "-loglevel", "info", "-headers", headers_arg, "-user_agent", ua,
-     "-i", https_url, "-c", "copy", "-t", "15", "-f", "mp4", "/tmp/test_9717_https.mp4"],
-    stdout=subprocess.DEVNULL, stderr=open("/tmp/ff_https.log", "w"))
-proc2.wait(20)
-if os.path.exists("/tmp/test_9717_https.mp4"):
-    log(f"HTTPS output: {os.path.getsize('/tmp/test_9717_https.mp4')} bytes")
+# Step 4: Try with ttwid in URL if present
+log("=== Checking for signature/token in URL ===")
+if "?" in url:
+    log(f"URL params: {url.split('?')[1]}")
 else:
-    log("HTTPS failed")
+    log("No URL params")
