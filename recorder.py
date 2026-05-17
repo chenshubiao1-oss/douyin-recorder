@@ -195,12 +195,13 @@ def start_recording(url, quality, room_id, anchor_name=""):
         json.dump({"room_id": room_id, "anchor_name": anchor_name,
                    "filename": f"{base}.mp4", "audio": f"{base}.wav", "quality": quality}, f)
     log(f"Start recording: {anchor_name}/{base}.mp4 [{quality}] + audio")
-    proc = subprocess.Popen([FFMPEG, "-y", "-loglevel", "warning", "-i", url, "-c", "copy",
+    logfile = os.path.join(os.path.dirname(outfile), os.path.basename(outfile) + ".ffmpeg.log")
+    proc = subprocess.Popen([FFMPEG, "-y", "-loglevel", "info", "-i", url, "-c", "copy",
                              "-movflags", "+faststart+frag_keyframe+empty_moov", "-f", "mp4", outfile],
-                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    audio_proc = subprocess.Popen([FFMPEG, "-y", "-loglevel", "warning", "-i", url, "-vn",
+                            stdout=subprocess.DEVNULL, stderr=open(logfile, 'w'))
+    audio_proc = subprocess.Popen([FFMPEG, "-y", "-loglevel", "info", "-i", url, "-vn",
                                     "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1", audiofile],
-                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                                   stdout=subprocess.DEVNULL, stderr=open(logfile + ".audio", 'w'))
     return proc, outfile, audio_proc, audiofile
 
 
