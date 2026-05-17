@@ -25,9 +25,16 @@ _renew_triggered = False
 
 
 def log(msg):
-    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    safe_msg = msg.encode('ascii', errors='replace').decode('ascii')
-    print(f'[{ts}] {safe_msg}', flush=True)
+    # Bypass stdout encoding - use buffer write directly to avoid ascii errors
+    try:
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        line = f"[{ts}] {msg}\n"
+        sys.stdout.buffer.write(line.encode("utf-8"))
+        sys.stdout.buffer.flush()
+    except Exception:
+        # Ultimate fallback: raw bytes
+        import os
+        os.write(1, b"[LOGGING_FAILED]\n")
 
 
 def http_check_live(room_id):
