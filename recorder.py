@@ -27,12 +27,9 @@ def log(msg):
 def http_check_live(room_id):
     """HTTP check - simple: flv_pull_url in html = live."""
     import urllib.request as _ur
-    # Force UTF-8 locale to avoid ascii encoding errors in urllib
-    os.environ["LANG"] = "C.UTF-8"
-    os.environ["LC_ALL"] = "C.UTF-8"
     ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     try:
-        req = _ur.Request(f"https://live.douyin.com/{room_id}",
+        req = _ur.Request('https://live.douyin.com/' + str(room_id),
             headers={
                 "User-Agent": ua,
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -46,15 +43,11 @@ def http_check_live(room_id):
         html = raw.decode("utf-8", errors="replace")
     except Exception as e:
         err_str = str(e).encode('ascii', errors='replace').decode('ascii')
-        return (False, f'http_error:{err_str}', None, None)
+        return (False, 'http_error:' + err_str, None, None)
 
-    # Simplest check: flv_pull_url in html = live
     if 'flv_pull_url' not in html:
-        # Log first 150 chars for debug
-        log(f'[DBG] {room_id}: no flv_pull_url, first={repr(html[:150])}')
         return (False, 'no_flv_pull_url', None, None)
 
-    # Extract stream URL
     found = []
     priority = {"FULL_HD1": 4, "HD1": 3, "SD1": 2, "SD2": 1}
     for m in re.finditer(r'["\\]+(FULL_HD1|HD1|SD1|SD2)["\\]+\s*[:=]\s*["\\]+(https?://[^"\\\s,}\]>]+)', html):
@@ -425,8 +418,7 @@ def run():
             for rid in sorted(prev_live.keys()):
                 live, reason, url, quality = http_check_live(rid)
                 prev = prev_live.get(rid)
-                safe_rid = room_names.get(rid, rid).encode('ascii', errors='replace').decode('ascii')
-                log(f"[{safe_rid}] is_live={'ONAIR' if live else 'OFF'} ({reason})")
+                safe_rid = room_names.get(rid, rid).encode('ascii', errors='replace').decode('ascii')\n                log('[' + safe_rid + '] is_live=' + ('ONAIR' if live else 'OFF') + ' (' + reason + ')')
                 prev_live[rid] = live
 
                 # Just transitioned to live
