@@ -8,6 +8,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install deps
         run: pip install -q -r requirements.txt 2>$null || echo "no deps"
+      - name: Install ffmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
       - name: Run test
         run: python3 test_9717.py
         env:
