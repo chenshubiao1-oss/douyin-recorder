@@ -47,9 +47,9 @@ def http_check_live(room_id):
     except Exception as e:
         return (False, f'http_error:{e}', None, None)
 
-    # Check web_stream_url: null = not live, not null = live
-    web_null = re.search(r'web_stream_url["\\]*\s*:\s*null', html)
-    if web_null:
+    # Check web_stream_url: null or {{}} = not live
+    m_ws = re.search(r'web_stream_url["\\]*\s*:\s*(null|\{\})', html)
+    if m_ws:
         return (False, 'web_stream_url_null', None, None)
 
     # Live! Try to extract flv_pull_url
