@@ -56,9 +56,19 @@ def http_check_live(room_id):
     except Exception as e:
         return (False, 'err:' + str(type(e).__name__), None, None)
     if 'flv_pull_url' not in html:
-        snippet = html[:300].replace('\n', ' ').strip()
-        log(f'[DBG] {room_id} no flv, len=' + str(len(html)) + ' res=' + repr(snippet))
-        return (False, 'no_flv', None, None)
+        # Retry once after 3s - CDN nodes may differ
+        import time as _t
+        _t.sleep(3)
+        subprocess.run(cmd, capture_output=False, timeout=30)
+        if os.path.exists(tf):
+            with open(tf, 'r', encoding='utf-8', errors='replace') as _f:
+                html = _f.read()
+        if 'flv_pull_url' in html:
+            log(f'[DBG] {room_id} flv found on retry')
+        else:
+            snippet = html[:300].replace('\n', ' ').strip()
+            log(f'[DBG] {room_id} no flv (confirmed), len=' + str(len(html)) + ' res=' + repr(snippet))
+            return (False, 'no_flv', None, None)
     found = []
     priority = {"FULL_HD1": 4, "HD1": 3, "SD1": 2, "SD2": 1}
     for m in re.finditer(r'["\\]+(FULL_HD1|HD1|SD1|SD2)["\\]+\s*[:=]\s*["\\]+(https?://[^"\\\s,}\]>]+)', html):
