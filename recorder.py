@@ -168,6 +168,15 @@ def http_check_live(room_id):
         html = resp.read().decode("utf-8", errors="replace")
         m = re.search(r'"liveStatus"\s*:\s*"(\w+)"', html)
         if not m:
+            import time
+            time.sleep(3)
+            try:
+                resp = urllib.request.urlopen(req, timeout=30)
+                html = resp.read().decode("utf-8", errors="replace")
+                m = re.search(r'"liveStatus"\s*:\s*"(\w+)"', html)
+            except:
+                pass
+        if not m:
             return (False, 'no_liveStatus_in_html')
         status = m.group(1)
         if status != "normal":
@@ -612,7 +621,12 @@ def run():
                                 new_page = context.new_page()
                                 navigate_page(new_page, nr["id"])
                                 pages[nr["id"]] = new_page
-                                aname = get_anchor_name(new_page)
+                                try:
+                                    aname = get_anchor_name(new_page)
+                                    if aname and '验证码' in aname:
+                                        aname = None
+                                except:
+                                    aname = None
                                 anchor_names[nr["id"]] = aname if aname else nr["name"]
                                 room_names[nr["id"]] = nr["name"]
                                 log(f"  主播昵称: {aname}")
