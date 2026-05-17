@@ -1,0 +1,69 @@
+name: Debug compare curl methods
+on: workflow_dispatch
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Compare shell vs subprocess
+        run: |
+          rid="7819906986"
+          echo "=== Method 1: bash curl ==="
+          curl -s -L --max-time 25 \
+            -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" \
+            -H "Accept: text/html" \
+            "https://live.douyin.com/$rid" -o /tmp/m1.html
+          echo "Size: $(wc -c < /tmp/m1.html)"
+          grep -o "flv_pull_url" /tmp/m1.html || echo "NOT FOUND"
+          grep -oP 'data-cluster="[^"]*"' /tmp/m1.html || echo "NO CLUSTER"
+          echo ""
+          echo "=== Method 2: Python subprocess ==="
+          python3 -c "
+import subprocess, os, re
+ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+rid = '7819906986'
+cmd = ['curl', '-s', '-L', '--max-time', '25', '-o', '/tmp/m2.html', '-H', 'User-Agent: ' + ua, '-H', 'Accept: text/html', 'https://live.douyin.com/' + rid]
+subprocess.run(cmd, timeout=30)
+if os.path.exists('/tmp/m2.html'):
+    size = os.path.getsize('/tmp/m2.html')
+    with open('/tmp/m2.html', encoding='utf-8', errors='replace') as f:
+        h = f.read()
+    flv = 'flv_pull_url' in h
+    cl = re.search(r'data-cluster="([^"]+)"', h)
+    print(f'Size: {size}')
+    print(f'flv: {str(flv)}')
+    print(f'Cluster: {cl.group(0) if cl else "N/A"}')
+"
+          echo ""
+          echo "=== Method 3: Python os.system ==="
+          python3 -c "
+import os, re
+ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+rid = '7819906986'
+c = 'curl -s -L --max-time 25 -o /tmp/m3.html -H "User-Agent: ' + ua + '" -H "Accept: text/html" "https://live.douyin.com/' + rid + '"'
+ret = os.system(c)
+print(f'return: {ret}')
+if os.path.exists('/tmp/m3.html'):
+    size = os.path.getsize('/tmp/m3.html')
+    with open('/tmp/m3.html', encoding='utf-8', errors='replace') as f:
+        h = f.read()
+    flv = 'flv_pull_url' in h
+    cl = re.search(r'data-cluster="([^"]+)"', h)
+    print(f'Size: {size}')
+    print(f'flv: {str(flv)}')
+    print(f'Cluster: {cl.group(0) if cl else "N/A"}')
+"
+          echo ""
+          echo "=== Method 4: Python subprocess check_output ==="
+          python3 -c "
+import subprocess
+ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+rid = '7819906986'
+res = subprocess.check_output(['curl', '-s', '-L', '--max-time', '25', '-H', 'User-Agent: ' + ua, '-H', 'Accept: text/html', 'https://live.douyin.com/' + rid], timeout=30)
+h = res.decode('utf-8', errors='replace')
+flv = 'flv_pull_url' in h
+import re
+cl = re.search(r'data-cluster="([^"]+)"', h)
+print(f'Size: {len(h)}')
+print(f'flv: {str(flv)}')
+print(f'Cluster: {cl.group(0) if cl else "N/A"}')
+"
