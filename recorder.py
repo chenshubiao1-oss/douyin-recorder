@@ -589,7 +589,7 @@ def run():
             while True:
                 try:
                     loop_start = time.time()
-                    _iter_watchdog = threading.Timer(WATCHDOG_ITER_SEC, lambda pg=page: _iter_timeout_hard(pg))
+                    _iter_watchdog = threading.Timer(WATCHDOG_ITER_SEC, lambda pg=None: _iter_timeout_hard(pg))
                     _iter_watchdog.daemon = True
                     _iter_watchdog.start()
                     now = time.time()
