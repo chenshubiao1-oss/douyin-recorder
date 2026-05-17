@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """Douyin live recorder - pure HTTP detection + ffmpeg recording. No Playwright."""
 import os, sys, json, threading, time, subprocess, re, urllib.request, base64, signal, base64, random
+
+# Force UTF-8 for all I/O to avoid ascii encoding errors in Actions
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
 from datetime import datetime
 
 WATCHDOG_TIMEOUT = 180
