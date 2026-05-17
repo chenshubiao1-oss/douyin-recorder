@@ -263,7 +263,7 @@ def handle_room_end(rid, recordings, anchor_names, now):
         try:
             with open(fpath, 'rb') as f:
                 content = f.read()
-            tag = f"{upload_name}_{start_ts}"
+            tag = f"{upload_name}_{start_ts_fmt}"
             release_url = f"https://api.github.com/repos/{GH_REPO}/releases"
             rel = json.loads(urllib.request.urlopen(
                 urllib.request.Request(release_url + "?per_page=5",
