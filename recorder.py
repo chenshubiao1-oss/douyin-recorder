@@ -38,37 +38,21 @@ def log(msg):
 
 
 def http_check_live(room_id):
-    """HTTP check - exact same as test_curl.yml Test 1."""
+    """HTTP check - use os.system like test_9rooms shell loop."""
     ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-    import tempfile, os
     tf = '/tmp/dy_chk_' + str(room_id) + '.html'
-    cmd = ['curl', '-s', '-L', '--max-time', '25',
-           '-o', tf,
-           '-H', 'User-Agent: ' + ua,
-           '-H', 'Accept: text/html',
-           'https://live.douyin.com/' + str(room_id)]
-    try:
-        subprocess.run(cmd, capture_output=False, timeout=30)
-        if not os.path.exists(tf):
-            return (False, 'no_file', None, None)
-        with open(tf, 'r', encoding='utf-8', errors='replace') as f:
-            html = f.read()
-    except Exception as e:
-        return (False, 'err:' + str(type(e).__name__), None, None)
+    cmd = 'curl -s -L --max-time 25 -o ' + tf + ' -H "User-Agent: ' + ua + '" -H "Accept: text/html" "https://live.douyin.com/' + str(room_id) + '"'
+    ret = os.system(cmd)
+    if ret != 0:
+        return (False, 'os_exit:' + str(ret), None, None)
+    if not os.path.exists(tf):
+        return (False, 'no_file', None, None)
+    with open(tf, 'r', encoding='utf-8', errors='replace') as f:
+        html = f.read()
     if 'flv_pull_url' not in html:
-        # Retry once after 3s - CDN nodes may differ
-        import time as _t
-        _t.sleep(3)
-        subprocess.run(cmd, capture_output=False, timeout=30)
-        if os.path.exists(tf):
-            with open(tf, 'r', encoding='utf-8', errors='replace') as _f:
-                html = _f.read()
-        if 'flv_pull_url' in html:
-            log(f'[DBG] {room_id} flv found on retry')
-        else:
-            snippet = html[:300].replace('\n', ' ').strip()
-            log(f'[DBG] {room_id} no flv (confirmed), len=' + str(len(html)) + ' res=' + repr(snippet))
-            return (False, 'no_flv', None, None)
+        snippet = html[:200].replace('\n', ' ').strip()
+        log('[DBG] ' + str(room_id) + ' no flv len=' + str(len(html)) + ' res=' + repr(snippet))
+        return (False, 'no_flv', None, None)
     found = []
     priority = {"FULL_HD1": 4, "HD1": 3, "SD1": 2, "SD2": 1}
     for m in re.finditer(r'["\\]+(FULL_HD1|HD1|SD1|SD2)["\\]+\s*[:=]\s*["\\]+(https?://[^"\\\s,}\]>]+)', html):
