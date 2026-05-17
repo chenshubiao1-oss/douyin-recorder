@@ -67,7 +67,7 @@ def http_check_live(room_id):
 
     found = []
     priority = {"FULL_HD1": 4, "HD1": 3, "SD1": 2, "SD2": 1}
-    for m in re.finditer(r'["\\]+(FULL_HD1|HD1|SD1|SD2)["\\]+\s*[:=]\s*["\\]+(https?://[^"]+)', html):
+    for m in re.finditer(r'["\\]+(FULL_HD1|HD1|SD1|SD2[^"]+e.finditer(r'["\\]+(FULL_HD1|HD1|SD1|SD2)["\\]+\s*[:=]\s*["\\]+(https?://[^"]+)', html):
         curl = m.group(2).replace("\\/", "/").replace("\\u0026", "&").replace("\\u003d", "=")
         if curl.startswith("http"):
             found.append((m.group(1), curl))
@@ -92,7 +92,7 @@ def http_get_anchor_name(room_id):
 
     # Search for nickname in SSR JSON - try both escaped and unescaped formats
     # Format: ..."nickname":"主播名"... or ...\\"nickname\\":\\"主播名\\"...
-    for m in re.finditer(r'[\\]?"nickname[\\]?"\s*[:=]\s*[\\]?"([^"\\]+)', html):
+    for m in re.finditer(r'[\\]?"nickname[\\]?"\s*[:=]\s*[\\]?"([^"]+)', html):
         name = m.group(1)
         if name and name != '$undefined':
             return name
