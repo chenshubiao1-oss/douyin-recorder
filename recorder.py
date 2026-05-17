@@ -601,6 +601,10 @@ def run():
                     log(f"  主播昵称: {aname}")
                     update_rooms_nickname(anchor_names)
             _iter_watchdog = None
+            # Populate pages dict from initial HTTP detection so while loop iterates rooms
+            for r in rooms:
+                if r['id'] not in pages:
+                    pages[r['id']] = None
             start_time = time.time()
             last_refresh = start_time
             while True:
@@ -755,6 +759,9 @@ def run():
                             log(f"续命失败: {e}")
                         _renew_triggered = True
                     if _iter_watchdog: _iter_watchdog.cancel(); _iter_watchdog = None
+                    elapsed_total = elapsed
+                    if int(elapsed_total / 60) != int((elapsed_total - 15) / 60):
+                        log(f'[heartbeat] running {int(elapsed_total/60)}min, rooms={len(pages)}')
                     time.sleep(CHECK_INTERVAL)
                     if time.time() - loop_start > WATCHDOG_TIMEOUT:
                         log("看门狗触发：本轮执行超时，跳过进入下一轮")
