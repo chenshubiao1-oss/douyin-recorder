@@ -31,6 +31,13 @@ def http_check_live(room_id):
     try:
         import requests
         sess = requests.Session()
+        # Try to get a ttwid cookie by visiting douyin.com first
+        try:
+            sess.get("https://www.douyin.com/",
+                headers={"User-Agent": ua}, timeout=10)
+        except:
+            pass
+        # Use explicit cookie if available
         cookie_val = os.environ.get("DOUYIN_COOKIE")
         if cookie_val:
             sess.headers.update({"Cookie": cookie_val})
@@ -42,6 +49,8 @@ def http_check_live(room_id):
         return (False, f'http_error:{e}', None, None)
 
     if 'flv_pull_url' not in html:
+        log(f'[DBG] {room_id}: no flv_pull_url, len={len(html)}, status={resp.status_code}')
+        log(f'[DBG] first 200: {repr(html[:200])}')
         return (False, 'no_flv_pull_url_in_html', None, None)
 
     found = []
