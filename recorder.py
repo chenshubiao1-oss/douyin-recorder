@@ -433,14 +433,16 @@ def run():
                 rec = recordings[rid]
                 proc = rec.get("proc")
                 if proc and proc.poll() is not None:
-                    log("[REC] " + str(room_names.get(rid, rid)) + " ffmpeg exited")
-                    # Check if room is still live before ending
+                    log("[REC] " + str(room_names.get(rid, rid)) + " ffmpeg exited, check if still live")
                     still_live, l_reason, l_url, l_q = http_check_live(rid)
                     if still_live and l_url:
-                        log("[REC] " + str(room_names.get(rid, rid)) + " still live, restarting recording")
+                        log("[REC] " + str(room_names.get(rid, rid)) + " still live -> upload segment and restart")
+                        # Save current segment first (upload + dispatch)
                         handle_room_end(rid, recordings, anchor_names, now)
-                        # Will be re-detected in the next detection loop
+                        # Now recordings[rid] is deleted, next detection will restart
+                        log("[REC] " + str(room_names.get(rid, rid)) + " will restart next cycle")
                     else:
+                        log("[REC] " + str(room_names.get(rid, rid)) + " not live anymore, ending recording")
                         handle_room_end(rid, recordings, anchor_names, now)
 
             # HTTP detection for non-recording rooms only
