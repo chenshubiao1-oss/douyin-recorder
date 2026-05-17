@@ -197,22 +197,17 @@ def start_recording(url, quality, room_id, anchor_name=""):
     log(f"Start recording: {anchor_name}/{base}.mp4 [{quality}] + audio")
     # Build ffmpeg headers for Douyin flv pull authentication
     ff_ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    ff_headers = [
-        "-headers", "User-Agent: " + ff_ua + "
-"
-        "Referer: https://live.douyin.com/
-"
-        "Origin: https://live.douyin.com
-"
-        "Accept: */*
-"
-        "Accept-Language: zh-CN,zh;q=0.9
-"
-        "Connection: keep-alive
-"
-    ]
     cookie_val = os.environ.get("DOUYIN_COOKIE", "")
-    if cookie_val:
+    cookie_hdr = "Cookie: " + cookie_val + "\r\n" if cookie_val else ""
+    ff_headers = [
+        "-headers", "User-Agent: " + ff_ua + "\r\n"
+        "Referer: https://live.douyin.com/\r\n"
+        "Origin: https://live.douyin.com\r\n"
+        "Accept: */*\r\n"
+        "Host: pull-flv-l1.douyincdn.com\r\n"
+        "Connection: keep-alive\r\n"
+        + cookie_hdr,
+    ]
         ff_headers[-1] = ff_headers[-1] + "Cookie: " + cookie_val + "
 "
     logfile = os.path.join(os.path.dirname(outfile), os.path.basename(outfile) + ".ffmpeg.log")
