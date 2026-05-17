@@ -108,13 +108,14 @@ def load_rooms():
                 line = line.strip()
                 if not line or line.startswith('#'):
                     continue
-                parts = line.split(',', 1)
+                parts = line.split('=', 1)
+                if len(parts) < 2:
+                    parts = line.split(',', 1)
                 rid = parts[0].strip()
                 name = parts[1].strip() if len(parts) > 1 else rid
                 rooms.append({"id": rid, "name": name})
     log(f"Loaded {len(rooms)} rooms from {ROOMS_FILE}")
     return rooms
-
 
 def load_rooms_from_github():
     """Load rooms from GitHub API."""
