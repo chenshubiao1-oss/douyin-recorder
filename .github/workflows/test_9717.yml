@@ -14,3 +14,4 @@ jobs:
         run: python3 test_9717.py
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          DOUYIN_COOKIE: ${{ secrets.DOUYIN_COOKIE }}
