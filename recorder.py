@@ -38,28 +38,31 @@ def log(msg):
 
 
 def http_check_live(room_id):
-    """HTTP check - use urllib like test_douyin.py (proven working)."""
+    """HTTP check using shell curl (same as test_9rooms.yml, proven working)."""
     ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    cookie_val = ""
+    cookie_val = os.environ.get("DOUYIN_COOKIE", "")
     try:
-        import urllib.request as _ur
-        req = _ur.Request("https://live.douyin.com/" + str(room_id),
-            headers={
-                "User-Agent": ua,
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-            })
-        cookie_val = os.environ.get("DOUYIN_COOKIE", "")
+        cmd = ['curl', '-s', '-L', '--max-time', str(URLLIB_TIMEOUT)]
         if cookie_val:
-            req.add_header("Cookie", cookie_val)
-        resp = _ur.urlopen(req, timeout=URLLIB_TIMEOUT)
-        raw = resp.read()
-        html = raw.decode("utf-8", errors="replace")
+            cmd.extend(['-H', 'Cookie: ' + cookie_val])
+        cmd.extend(['-H', 'User-Agent: ' + ua])
+        cmd.extend(['-H', 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'])
+        cmd.extend(['-H', 'Accept-Language: zh-CN,zh;q=0.9,en;q=0.8'])
+        cmd.append('https://live.douyin.com/' + str(room_id))
+        result = subprocess.run(cmd, capture_output=True, timeout=URLLIB_TIMEOUT + 5)
+        html = result.stdout.decode('utf-8', errors='replace')
+        if result.returncode != 0:
+            err = result.stderr.decode('utf-8', errors='replace')[:100]
+            return (False, 'curl_err:' + err, None, None)
     except Exception as e:
-        return (False, 'urllib_err:' + str(type(e).__name__), None, None)
+        return (False, 'curl_exc:' + str(type(e).__name__), None, None)
 
     if "flv_pull_url" not in html:
         log("[DBG] " + str(room_id) + " no flv len=" + str(len(html)))
+        # Debug: check cluster
+        m = re.search(r'data-cluster="([^"]+)"', html)
+        cluster = m.group(1) if m else 'none'
+        log("[DBG] " + str(room_id) + " cluster=" + cluster)
         return (False, 'no_flv', None, None)
 
     found = []
