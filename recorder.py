@@ -25,18 +25,11 @@ def log(msg):
 
 
 def http_check_live(room_id):
-    """Pure HTTP: check live status AND extract stream URL if live.
-    Uses web_stream_url detection like v#200.
-    Returns (is_live: bool, reason: str, stream_url: str|None, quality: str|None)"""
+    """HTTP: check live via douyin webcast API. Returns (is_live, reason, stream_url, quality)."""
     ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     try:
         import requests
         sess = requests.Session()
-        try:
-            sess.get("https://www.douyin.com/",
-                headers={"User-Agent": ua}, timeout=10)
-        except:
-            pass
         cookie_val = os.environ.get("DOUYIN_COOKIE")
         if cookie_val:
             sess.headers.update({"Cookie": cookie_val})
@@ -47,25 +40,83 @@ def http_check_live(room_id):
     except Exception as e:
         return (False, f'http_error:{e}', None, None)
 
-    # Check web_stream_url: must contain flv_pull_url to be live
-    m_ws = re.search(r'web_stream_url["\\]*\s*:\s*\{\s*["\\]*flv_pull_url', html)
-    if not m_ws:
-        return (False, 'web_stream_url_no_flv', None, None)
+    # Method 1: Check raw SSR JSON for room_id and stream info
+    # Look for the actual webcast room info in JSON format
+    m_init = re.search(r'<script[^>]*>window\.__INITIAL_STATE__\s*=\s*({.*?});\s*</script>', html, re.DOTALL)
+    if m_init:
+        try:
+            init_data = json.loads(m_init.group(1))
+            room_info = init_data.get('roomStore', {}).get('roomInfo', {})
+            if room_info.get('room', {}).get('status') == 2:  # 2 = live
+                stream_url_obj = room_info.get('room', {}).get('stream_url', {})
+                flv_pull = stream_url_obj.get('flv_pull_url', {})
+                if flv_pull:
+                    found = []
+                    priority = {"FULL_HD1": 4, "HD1": 3, "SD1": 2, "SD2": 1}
+                    for k in ['FULL_HD1', 'HD1', 'SD1', 'SD2']:
+                        v = flv_pull.get(k) or flv_pull.get('\\"' + k + '\\"', flv_pull.get('"' + k + '"'))
+                        if v and v.startswith('http'):
+                            found.append((k, v))
+                    if found:
+                        best = max(found, key=lambda x: priority.get(x[0], 0))
+                        return (True, 'ok', best[1], best[0])
+                    return (True, 'live_no_flv_in_init', None, None)
+                return (True, 'live_no_stream_in_init', None, None)
+            return (False, 'room_status_not_2', None, None)
+        except:
+            pass
 
-    # Live! Try to extract flv_pull_url
-    found = []
-    priority = {"FULL_HD1": 4, "HD1": 3, "SD1": 2, "SD2": 1}
-    for m in re.finditer(r'["\\]+(FULL_HD1|HD1|SD1|SD2)["\\]+\s*[:=]\s*["\\]+(https?://[^"\\\s,}\]>]+)', html):
-        url = m.group(2).replace('\\/', '/').replace('\\u0026', '&').replace('\\u003d', '=')
-        if url.startswith('http'):
-            found.append((m.group(1), url))
+    # Method 2: Check RENDER_DATA for live status
+    m_render = re.search(r'id="RENDER_DATA"[^>]*>({.*?})</script>', html, re.DOTALL)
+    if m_render:
+        try:
+            render_data = json.loads(html[m_render.start(1):m_render.end(1)])
+            status = render_data.get('status', '')
+            if status in ('4', 4):
+                return (True, 'live_status_in_render', None, None)
+            return (False, 'render_status_' + str(status), None, None)
+        except:
+            pass
 
-    if found:
-        best = max(found, key=lambda x: priority.get(x[0], 0))
-        return (True, 'ok', best[1], best[0])
+    # Method 3: Use webcast API endpoint
+    try:
+        api_url = f"https://webcast-hl.douyin.com/webcast/room/web/enter/"
+        params = {"room_id": room_id, "aid": "6383"}
+        api_resp = sess.get(api_url, params=params,
+            headers={"User-Agent": ua, "Referer": f"https://live.douyin.com/{room_id}"},
+            timeout=URLLIB_TIMEOUT)
+        api_data = api_resp.json()
+        if api_data.get('data', {}).get('room', {}).get('status') == 2:
+            flv_pull = api_data.get('data', {}).get('room', {}).get('stream_url', {}).get('flv_pull_url', {})
+            if flv_pull:
+                found = []
+                priority = {"FULL_HD1": 4, "HD1": 3, "SD1": 2, "SD2": 1}
+                for k in ['FULL_HD1', 'HD1', 'SD1', 'SD2']:
+                    v = flv_pull.get(k)
+                    if v and v.startswith('http'):
+                        found.append((k, v))
+                if found:
+                    best = max(found, key=lambda x: priority.get(x[0], 0))
+                    return (True, 'ok', best[1], best[0])
+                return (True, 'live_no_flv_from_api', None, None)
+            return (True, 'live_from_api', None, None)
+        return (False, 'api_status_not_2', None, None)
+    except Exception as e:
+        pass
 
-    # Live but no flv URL yet - return live anyway
-    return (True, 'web_stream_ok_but_no_flv', None, None)
+    # Method 4: Fallback - check web_stream_url not null (original method from v#200)
+    # Use two separate searches to avoid the escape issue
+    if 'web_stream_url' in html:
+        idx = html.find('web_stream_url')
+        after = html[idx:idx+50]
+        if ':null' in after or ': null' in after:
+            return (False, 'web_stream_null', None, None)
+        if 'flv_pull_url' in after or 'flv_pull_url' in html[idx:idx+2000]:
+            return (True, 'ok', None, None)
+        # web_stream_url exists but no flv - maybe live anyway
+        return (True, 'web_stream_non_null', None, None)
+
+    return (False, 'no_data', None, None)
 
 
 def http_get_anchor_name(room_id):
