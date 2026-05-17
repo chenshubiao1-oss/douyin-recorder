@@ -232,16 +232,15 @@ def handle_room_end(rid, recordings, anchor_names, now):
     stop_proc(rec.get("audio_proc"))
     outfile = rec.get("outfile", "")
     audiofile = rec.get("audiofile", "")
-    start_ts = int(rec.get("start", 0))
-    end_ts = int(now)
+    from datetime import datetime as _dt
+    start_ts_fmt = _dt.fromtimestamp(rec.get("start", 0)).strftime("%Y%m%d_%H%M%S")
+    end_ts_fmt = _dt.fromtimestamp(now).strftime("%Y%m%d_%H%M%S")
     if outfile and os.path.exists(outfile):
-        # Use file mtime for more accurate end timestamp
-        end_ts = int(os.path.getmtime(outfile))
+        end_ts_fmt = _dt.fromtimestamp(os.path.getmtime(outfile)).strftime("%Y%m%d_%H%M%S")
     aname = anchor_names.get(rid, rid)
-    base = os.path.splitext(os.path.basename(outfile))[0] if outfile else f"{rid}_{start_ts}"
+    base = os.path.splitext(os.path.basename(outfile))[0] if outfile else f"{rid}_{start_ts_fmt}"
     if outfile:
-        ext = ".mp4"
-        base_new = f"{rid}_{start_ts}.{end_ts}"
+        base_new = f"{rid}_{start_ts_fmt}_{end_ts_fmt}"
         dirname = os.path.dirname(outfile)
         new_mp4 = os.path.join(dirname, f"{base_new}.mp4")
         new_wav = os.path.join(dirname, f"{base_new}.wav")
