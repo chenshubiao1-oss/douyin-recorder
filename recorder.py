@@ -58,6 +58,7 @@ def http_check_live(room_id):
         if res.returncode != 0:
             return (False, 'curl_exit:' + str(res.returncode), None, None)
         html = res.stdout.decode('utf-8', errors='replace')
+        log(f'[DBG] {room_id} curl got: exit=0 stdout_len=' + str(len(res.stdout)) + ' flv_in_raw=' + str(b'flv_pull_url' in res.stdout))
     except Exception as e:
         return (False, 'curl_error:' + str(type(e).__name__), None, None)
 
