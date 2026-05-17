@@ -44,7 +44,8 @@ log(f"URL ({best[0]}): {url[:120]}")
 # Try recording for 90 seconds
 outfile = "/tmp/test_9717.mp4"
 logfile = "/tmp/test_9717_ffmpeg.log"
-proc = subprocess.Popen(["ffmpeg", "-y", "-loglevel", "info", "-i", url,
+ff_headers = ["-headers", "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36\r\nReferer: https://live.douyin.com/\r\nOrigin: https://live.douyin.com\r\nAccept: */*\r\n"]
+proc = subprocess.Popen(["ffmpeg", "-y", "-loglevel", "info"] + ff_headers + ["-i", url,
                           "-c", "copy", "-t", "90", "-f", "mp4", outfile],
                          stdout=subprocess.DEVNULL, stderr=open(logfile, "w"))
 
