@@ -30,18 +30,20 @@ def http_check_live(room_id):
     ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     try:
         import requests
-        resp = requests.get(f"https://live.douyin.com/{room_id}",
+        sess = requests.Session()
+        cookie_val = os.environ.get("DOUYIN_COOKIE")
+        if cookie_val:
+            sess.headers.update({"Cookie": cookie_val})
+        resp = sess.get(f"https://live.douyin.com/{room_id}",
             headers={"User-Agent": ua, "Accept": "text/html"},
             timeout=URLLIB_TIMEOUT)
         html = resp.text
     except Exception as e:
         return (False, f'http_error:{e}', None, None)
 
-    # Check web_stream_url - live if it contains flv_pull_url
     if 'flv_pull_url' not in html:
         return (False, 'no_flv_pull_url_in_html', None, None)
 
-    # Find quality-URL pairs in the full HTML
     found = []
     priority = {"FULL_HD1": 4, "HD1": 3, "SD1": 2, "SD2": 1}
     for m in re.finditer(r'["\\]+(FULL_HD1|HD1|SD1|SD2)["\\]+\s*[:=]\s*["\\]+(https?://[^"\\\s,}\]>]+)', html):
@@ -53,11 +55,7 @@ def http_check_live(room_id):
         best = max(found, key=lambda x: priority.get(x[0], 0))
         return (True, 'ok', best[1], best[0])
 
-    log(f'[DBG] {room_id}: flv_pull_url found but no URL matched. First flv context:')
-    idx_flv = html.find('flv_pull_url')
-    log(repr(html[max(0,idx_flv-20):idx_flv+150]))
     return (False, 'no_flv_url_found', None, None)
-
 
 
 def http_get_anchor_name(room_id):
