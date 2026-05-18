@@ -475,8 +475,7 @@ def run():
                         status_data[rid] = {
                             "live": in_rec or prev_live.get(rid, False),
                             "recording": in_rec,
-                            "since": int(rec_start) if in_rec else None,
-                            "duration_m": int((now_ts - rec_start) / 60) if in_rec and rec_start else 0,
+                            "start_ts": int(rec_start) if in_rec else None,
                             "name": room_names.get(rid, rid),
                             "checked_at": now_ts
                         }
