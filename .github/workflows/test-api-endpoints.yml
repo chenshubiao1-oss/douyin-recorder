@@ -1,0 +1,20 @@
+name: test-api
+on: workflow_dispatch
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          RID="319074168229"
+          echo "=== SSR ==="
+          curl -sL --max-time 12 -H "Mozilla/5.0" "https://live.douyin.com/${RID}" | tee /tmp/s | wc -c
+          grep -o "nickname[^,]*" /tmp/s | head -1
+          grep -o "flv_pull_url[^,]*" /tmp/s | head -2
+          echo "=== enter ==="
+          curl -s --max-time 10 "https://live.douyin.com/webcast/room/web/enter/?room_id=${RID}&type_id=0" | head -c 600
+          echo ""
+          echo "=== reflow ==="
+          curl -s --max-time 10 "https://webcast.amemv.com/webcast/room/reflow/info/?room_id=${RID}&type_id=0" | head -c 600
+          echo ""
+          echo "=== webrid enter ==="
+          curl -sL --max-time 10 "https://live.douyin.com/webcast/room/web/enter/?web_rid=${RID}" | head -c 600
