@@ -82,7 +82,7 @@ def http_check_live(room_id):
         # Douyin uses webrid/web_rid in the SSR JSON, not always room_id
         room_id_found = False
         for field in ['room_id', 'webrid', 'web_rid']:
-            for rm in re.finditer(r'[\"]*' + field + r'[\"]*\s*[:=]\s*[\"]*' + rid_str + r'[\"]*', html):
+            for rm in re.finditer(r'[\\"]*' + field + r'[\\"]*\s*[:=]\s*[\\"]*' + rid_str + r'[\\"]*', html):
                 room_id_found = True
                 break
             if room_id_found:
