@@ -86,11 +86,8 @@ def http_check_live(room_id):
         if len(html) < 50:
             log(f"[限流] {room_id} 空响应 len={len(html)}")
             return (False, "rate_limited:empty", None, None)
-        elif 'captcha' in html_lower or '/verify' in html_lower:
-            log(f"[限流] {room_id} 验证页 len={len(html)}")
-            return (False, "rate_limited:captcha", None, None)
-        elif len(html) < 150 and len(html) >= 50:
-            log(f"[限流] {room_id} 过短 len={len(html)}")
+        elif len(html) < 10000:
+            log(f"[限流] {room_id} 响应过短 len={len(html)}")
             return (False, "rate_limited:short", None, None)
         log("[DBG] " + str(room_id) + " no flv len=" + str(len(html)))
         # Debug: check cluster
