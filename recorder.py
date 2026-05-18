@@ -374,21 +374,26 @@ def run():
     anchor_names = {}
     room_names = {r['id']: r['name'] for r in rooms}
 
-    # Initial HTTP detection
-    for r in rooms:
-        live, reason, url, quality = http_check_live(r['id'])
+    # Initial HTTP detection - PARALLEL
+    t0 = time.time()
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(rooms)) as ex:
+        def init_check(r):
+            live, reason, url, quality = http_check_live(r['id'])
+            aname = http_get_anchor_name(r['id'])
+            return (r, live, reason, url, quality, aname)
+        init_results = list(ex.map(init_check, rooms))
+    for r, live, reason, url, quality, aname in init_results:
         safe_name = r['name'][:20]
         log(f"  [{safe_name}] is_live={'ONAIR' if live else 'OFF'} ({reason})")
-        if live:
+        if live and url:
             log(f"  -> stream: {quality} {url[:80]}...")
         prev_live[r['id']] = live
-        aname = http_get_anchor_name(r['id'])
         if aname:
             anchor_names[r['id']] = aname
             room_names[r['id']] = aname
             log(f"  nickname: {aname}")
             update_rooms_nickname(anchor_names)
-        time.sleep(random.uniform(2, 4))
+    log(f'[init] initial check of {len(rooms)} rooms done in {time.time()-t0:.1f}s')
 
     # Start recordings for any live rooms
     for r in rooms:
