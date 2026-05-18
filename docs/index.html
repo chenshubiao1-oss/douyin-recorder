@@ -448,7 +448,7 @@ body{font-family:'Noto Sans SC',-apple-system,sans-serif;background:var(--bg);co
 
 
 
-</style>
+.dur{display:inline-block;margin-top:4px;font-size:13px;color:var(--accent3);background:var(--bg);padding:2px 8px;border-radius:8px;}</style>
 
 
 
@@ -1394,7 +1394,7 @@ function rp(){
 
 
 
-    h+='<div class="time-range">'+(p.st?ft(p.st,p.et):(p.st?'':p.dk.slice(5)))+'</div><div>';
+    h+='<div class="time-range">'+(p.st?ft(p.st,p.et):(p.st?'':p.dk.slice(5)))+'</div>';if(p.st&&p.et){var ds=parseInt(p.et)-parseInt(p.st);if(ds>0){var dh=Math.floor(ds/3600),dm=Math.floor((ds%3600)/60);h+='<div class="dur">'+(dh>0?dh+"h"+dm+"m":dm+"m")+'</div>';}}else{h+='<div class="dur">--</div>';}h+='<div>';
 
 
 
