@@ -524,10 +524,8 @@ def _upload_worker():
                 break
             fpath, fname = _upload_queue.pop(0)
         ok = _upload_file(fpath, fname)
-        # Trigger transcription dispatch after wav upload (last in queue)
-        with _upload_lock:
-            is_last = (len(_upload_queue) == 0)
-        if ok and is_last and GH_REPO and GH_TOKEN:
+        # Trigger transcription dispatch right after wav upload
+        if ok and fname.endswith('.wav') and GH_REPO and GH_TOKEN:
             try:
                 dispatch = urllib.request.Request(
                     f"https://api.github.com/repos/{GH_REPO}/dispatches",
