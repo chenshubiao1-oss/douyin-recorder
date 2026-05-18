@@ -1394,7 +1394,7 @@ function rp(){
 
 
 
-    h+='<div class="time-range">'+(p.st?ft(p.st,p.et):(p.st?'':p.dk.slice(5)))+'</div>';if(p.st&&p.et){var ds=parseInt(p.et)-parseInt(p.st);if(ds>0){var dh=Math.floor(ds/3600),dm=Math.floor((ds%3600)/60);h+='<div class="dur">'+(dh>0?dh+"h"+dm+"m":dm+"m")+'</div>';}}else{h+='<div class="dur">--</div>';}h+='<div>';
+    h+='<div class="time-range">'+(p.st?ft(p.st,p.et):(p.st?'':p.dk.slice(5)))+'</div>';if(p.st&&p.et){var ts=p.st.match(/(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/),te=p.et.match(/(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/);if(ts&&te){var ds=new Date(te[1],te[2]-1,te[3],te[4],te[5],te[6])-new Date(ts[1],ts[2]-1,ts[3],ts[4],ts[5],ts[6]);ds=Math.floor(ds/1000);if(ds>0){var dh=Math.floor(ds/3600),dm=Math.floor((ds%3600)/60);h+='<div class="dur">'+(dh>0?dh+"h "+dm+"m":dm+"m")+'</div>';}}}else{h+='<div class="dur">--</div>';}h+='<div>';
 
 
 
