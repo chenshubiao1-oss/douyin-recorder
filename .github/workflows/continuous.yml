@@ -68,7 +68,7 @@ jobs:
         env:
           CHECK_INTERVAL: 15
           GH_REPO: ${{ github.repository }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
           GH_RUN_ID: ${{ github.run_id }}
           DOUYIN_COOKIE: ${{ secrets.DOUYIN_COOKIE }}
           TEST_MODE: ${{ github.event.inputs.test_mode || '' }}
@@ -79,13 +79,21 @@ jobs:
         run: python3 fallback_upload.py
         env:
           GH_REPO: ${{ github.repository }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
           GH_RUN_ID: ${{ github.run_id }}
-      - name: Self-renew (trigger next run)
+      - name: Self-renew (trigger next run, dedup)
         if: always()
         run: |
-          curl -s -X POST "https://api.github.com/repos/${{ github.repository }}/actions/workflows/continuous.yml/dispatches" \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            -H "User-Agent: renew" \
-            --data "{\"ref\":\"main\"}" && echo "Renew OK" || echo "Renew FAIL"
+          EXISTING=$(curl -s -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.GH_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/continuous.yml/runs?per_page=5&status=in_progress")
+          IN_PROGRESS=$(echo "${EXISTING}" | python3 -c "import sys,json; runs=json.load(sys.stdin).get(\"workflow_runs\",[]); current=\"${{ github.run_id }}\"; other=[r[\"run_number\"] for r in runs if str(r[\"id\"])!=current]; print(len(other))" 2>/dev/null || echo "0")
+          if [ "${IN_PROGRESS}" -gt "0" ]; then
+            echo "Skipped: ${IN_PROGRESS} other in-progress run(s) exist"
+          else
+            curl -s -X POST "https://api.github.com/repos/${{ github.repository }}/actions/workflows/continuous.yml/dispatches" \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${{ secrets.GH_TOKEN }}" \
+              -H "User-Agent: renew" \
+              --data '{"ref":"main"}' && echo "Renew OK" || echo "Renew FAIL"
+          fi
