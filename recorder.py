@@ -290,7 +290,8 @@ def handle_room_end(rid, recordings, anchor_names, now):
             os.rename(audiofile, new_wav)
         except:
             new_wav = audiofile
-        upload_files.append((new_wav, os.path.basename(new_wav)))
+        # wav goes FIRST in upload queue (before mp4 segments)
+        upload_files.insert(0, (new_wav, os.path.basename(new_wav)))
 
     if upload_files:
         log(f"[{aname}] Recording ended, enqueuing {len(upload_files)} file(s) for upload")
