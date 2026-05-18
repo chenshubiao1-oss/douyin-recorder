@@ -526,7 +526,7 @@ def run():
                 except Exception as _se:
                     log(f'status write error: {_se}')
 
-            time.sleep(random.uniform(20, 30))
+            time.sleep(random.uniform(10, 20))
 
         except Exception as _e:
             import traceback as _tb
