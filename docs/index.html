@@ -322,7 +322,7 @@ body{font-family:'Noto Sans SC',-apple-system,sans-serif;background:var(--bg);co
   </div>
 
 
-  <table class="room-tb" id="rt"><thead><tr><th>#</th><th>&#x623F;&#x95F4; ID</th><th>&#x4E3B;&#x64AD;</th><th></th></tr></thead><tbody id="rb"></tbody></table>
+  <table class="room-tb" id="rt"><thead><tr><th>#</th><th>&#x623F;&#x95F4; ID</th><th>&#x4E3B;&#x64AD;</th><th>&#x72B6;&#x6001;</th><th>&#x65F6;&#x957F;</th><th></th></tr></thead><tbody id="rb"></tbody></table>
 
 
   <div style="margin-top:16px"><button onclick="svRm()">&#x1F4BE; &#x4FDD;&#x5B58;</button><span id="rs" style="margin-left:12px;color:var(--text-dim);font-size:13px"></span></div>
@@ -850,7 +850,7 @@ function sw(t){
 
 
 function rrb(){
-  var h='<tr><th>#</th><th>主播ID</th><th>主播名</th><th>直播状态</th><th>时长</th><th></th></tr>';
+  var h='';
   rm.forEach(function(r,i){
     var st=ls&&ls[r.id];
     var dot='\u26AA',sl='',dur='';
