@@ -66,7 +66,23 @@ def http_check_live(room_id):
         m = re.search(r'data-cluster="([^"]+)"', html)
         cluster = m.group(1) if m else 'none'
         log("[DBG] " + str(room_id) + " cluster=" + cluster)
-        return (False, 'no_flv', None, None)
+        # Retry once on empty body (rate limited)
+        if len(html) < 100:
+            import random as _rnd
+            delay = _rnd.uniform(3, 5)
+            log(f"[RETRY] {room_id} len={len(html)}, retry in {delay:.0f}s")
+            time.sleep(delay)
+            try:
+                result = subprocess.run(cmd, capture_output=True, timeout=URLLIB_TIMEOUT + 5)
+                html2 = result.stdout.decode('utf-8', errors='replace')
+                if "flv_pull_url" in html2:
+                    log(f"[RETRY] {room_id} success on retry")
+                    html = html2  # use retry result
+                    retried = True
+            except:
+                pass
+        if "flv_pull_url" not in html:
+            return (False, 'no_flv', None, None)
 
     found = []
     priority = {"FULL_HD1": 4, "HD1": 3, "SD1": 2, "SD2": 1}
@@ -450,7 +466,7 @@ def run():
                         recordings[rid] = {"proc": proc, "outfile": outfile, "audio_proc": audio_proc,
                                             "audiofile": audiofile, "start": time.time()}
 
-                time.sleep(random.uniform(2, 4))
+                time.sleep(random.uniform(4, 6))
 
             # Force-end recordings that exceeded max duration
             for rid in list(recordings.keys()):
