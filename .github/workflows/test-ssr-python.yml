@@ -1,0 +1,10 @@
+name: test-ssr-python
+on: workflow_dispatch
+jobs:
+  t:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run SSR detection test
+        run: python3 test_actions_recording.py
