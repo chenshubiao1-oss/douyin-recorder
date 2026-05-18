@@ -528,7 +528,7 @@ def run():
                         rate_limit_hits = 0  # 防止重复触发
                 else:
                     rate_limit_hits = 0
-                                log(f'  {len(detect_rooms)} non-rec, next in 300s')
+                log(f'  {len(detect_rooms)} non-rec, next in 300s')
 
             # Recording rooms: skip detection
             for rid in sorted(recordings.keys()):
