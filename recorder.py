@@ -22,6 +22,9 @@ GH_REPO = os.environ.get("GH_REPO", "")
 GH_TOKEN = os.environ.get("GH_TOKEN", "")
 GH_RUN_ID = os.environ.get("GH_RUN_ID", "0")
 _renew_triggered = False
+_upload_queue = []
+_upload_thread = None
+_upload_lock = threading.Lock()
 
 
 def log(msg):
@@ -82,7 +85,7 @@ def http_check_live(room_id):
         # Douyin uses webrid/web_rid in the SSR JSON, not always room_id
         room_id_found = False
         for field in ['room_id', 'webrid', 'web_rid']:
-            for rm in re.finditer(r'[\\"]*' + field + r'[\\"]*\s*[:=]\s*[\\"]*' + rid_str + r'[\\"]*', html):
+            for rm in re.finditer(r'[\"]*' + field + r'[\"]*\s*[:=]\s*[\"]*' + rid_str + r'[\"]*', html):
                 room_id_found = True
                 break
             if room_id_found:
@@ -275,101 +278,8 @@ def handle_room_end(rid, recordings, anchor_names, now):
                 pass
         log(f"[{aname}] Recording ended, saved as {base_new}")
 
-    # Upload
-    def upload(fpath, upload_name):
-        if not os.path.exists(fpath) or not GH_REPO or not GH_TOKEN:
-            return
-        try:
-            with open(fpath, 'rb') as f:
-                content = f.read()
-            tag = f"{upload_name}_{start_ts_fmt}"
-            release_url = f"https://api.github.com/repos/{GH_REPO}/releases"
-            rel = json.loads(urllib.request.urlopen(
-                urllib.request.Request(release_url + "?per_page=5",
-                    headers={"Authorization": f"Bearer {GH_TOKEN}", "Accept": "application/vnd.github+json"}),
-                timeout=URLLIB_TIMEOUT).read())
-            existing = [r for r in rel if r.get("tag_name") == tag]
-            if existing:
-                log(f"Uploading {upload_name} to existing release {tag}")
-                url = existing[0]["upload_url"].replace("{?name,label}", f"?name={upload_name}")
-            else:
-                log(f"Creating release {tag}")
-                r2 = json.loads(urllib.request.urlopen(
-                    urllib.request.Request(release_url,
-                        data=json.dumps({"tag_name": tag, "name": tag, "prerelease": True}).encode(),
-                        headers={"Authorization": f"Bearer {GH_TOKEN}", "Content-Type": "application/json"}),
-                    timeout=URLLIB_TIMEOUT).read())
-                url = r2["upload_url"].replace("{?name,label}", f"?name={upload_name}")
-            # Chunked upload: split into 10MB chunks to avoid SSL EOF
-            CHUNK_SIZE = 10 * 1024 * 1024
-            total_size = len(content)
-            if total_size > CHUNK_SIZE:
-                log(f"Uploading {upload_name} in chunks ({total_size // CHUNK_SIZE + 1} chunks)")
-                offset = 0
-                while offset < total_size:
-                    chunk = content[offset:offset + CHUNK_SIZE]
-                    # Use S3-style upload headers if supported, otherwise upload full with longer timeout
-                    remaining = total_size - offset
-                    is_last = (remaining <= CHUNK_SIZE)
-                    headers = {"Authorization": f"Bearer {GH_TOKEN}",
-                               "Content-Type": "application/octet-stream",
-                               "Content-Length": str(len(chunk)),
-                               "Content-Range": f"bytes {offset}-{offset + len(chunk) - 1}/{total_size}"}
-                    try:
-                        r3 = urllib.request.urlopen(urllib.request.Request(url,
-                            data=chunk,
-                            headers=headers),
-                            timeout=600)
-                        offset += len(chunk)
-                        log(f"  chunk progress: {offset}/{total_size} bytes")
-                    except urllib.error.HTTPError as he:
-                        # GitHub doesn't support chunked upload for releases, try single upload with longer timeout
-                        log(f"Chunk upload not supported (HTTP {he.code}), falling back to full upload with extended timeout")
-                        # Fall back: full file upload with 600s timeout
-                        urllib.request.urlopen(urllib.request.Request(url,
-                            data=content,
-                            headers={"Authorization": f"Bearer {GH_TOKEN}",
-                                     "Content-Type": "application/octet-stream",
-                                     "Content-Length": str(total_size)}),
-                            timeout=600)
-                        break
-                else:
-                    log(f"Uploaded {upload_name} to Release (chunked)")
-            else:
-                urllib.request.urlopen(urllib.request.Request(url,
-                    data=content,
-                    headers={"Authorization": f"Bearer {GH_TOKEN}", "Content-Type": "application/octet-stream",
-                             "Content-Length": str(total_size)}),
-                    timeout=600)
-                log(f"Uploaded {upload_name} to Release")
-        except Exception as e:
-            log(f"Upload error {upload_name}: {e}")
-
-    # Upload using base_new filename (with start_end ts)
-    if outfile:
-        new_mp4_path = os.path.join(os.path.dirname(outfile), base_new + ".mp4")
-        new_wav_path = os.path.join(os.path.dirname(outfile), base_new + ".wav")
-        if os.path.exists(new_mp4_path):
-            upload(new_mp4_path, base_new + ".mp4")
-        elif os.path.exists(outfile):
-            upload(outfile, os.path.basename(outfile))
-        if os.path.exists(new_wav_path):
-            upload(new_wav_path, base_new + ".wav")
-        elif os.path.exists(audiofile):
-            upload(audiofile, os.path.basename(audiofile))
-
-    # Trigger transcription via repository_dispatch
-    if GH_REPO and GH_TOKEN:
-        try:
-            dispatch = urllib.request.Request(
-                f"https://api.github.com/repos/{GH_REPO}/dispatches",
-                data=json.dumps({"event_type": "transcribe_ready"}).encode(),
-                headers={"Authorization": f"Bearer {GH_TOKEN}", "Content-Type": "application/json"},
-                method="POST")
-            urllib.request.urlopen(dispatch, timeout=URLLIB_TIMEOUT)
-            log("Triggered transcription dispatch")
-        except Exception as e:
-            log(f"Trigger dispatch error: {e}")
+    # Enqueue upload + dispatch to background thread
+    _enqueue_upload_chain(outfile, new_mp4_path, new_wav_path, audiofile, base_new, start_ts_fmt)
 
     del recordings[rid]
 
@@ -562,7 +472,155 @@ def run():
     for rid in list(recordings.keys()):
         handle_room_end(rid, recordings, anchor_names, time.time())
 
+    # Wait for pending uploads to finish
+    _wait_uploads()
     log("Recorder finished")
+
+
+def _enqueue_upload_chain(outfile, new_mp4_path, new_wav_path, audiofile, base_new, start_ts_fmt):
+    """Enqueue upload + transcription dispatch to a background thread (serial queue)."""
+    global _upload_queue, _upload_thread
+    # Collect files to upload in order: mp4 first, then wav
+    files = []
+    if outfile:
+        if new_mp4_path and os.path.exists(new_mp4_path):
+            files.append((new_mp4_path, base_new + ".mp4"))
+        elif os.path.exists(outfile):
+            files.append((outfile, os.path.basename(outfile)))
+    if audiofile:
+        if new_wav_path and os.path.exists(new_wav_path):
+            files.append((new_wav_path, base_new + ".wav"))
+        elif os.path.exists(audiofile):
+            files.append((audiofile, os.path.basename(audiofile)))
+
+    with _upload_lock:
+        _upload_queue.append((files, start_ts_fmt))
+        _start_upload_worker()
+
+
+def _start_upload_worker():
+    global _upload_thread
+    if _upload_thread and _upload_thread.is_alive():
+        return  # worker already running, queue will drain automatically
+    t = threading.Thread(target=_upload_worker, daemon=True)
+    t.start()
+    _upload_thread = t
+
+
+def _upload_worker():
+    """Background worker: upload files serially, then trigger transcription dispatch."""
+    while True:
+        with _upload_lock:
+            if not _upload_queue:
+                break
+            files, start_ts_fmt = _upload_queue.pop(0)
+        all_ok = True
+        for fpath, fname in files:
+            ok = _upload_file(fpath, fname, start_ts_fmt)
+            if not ok:
+                all_ok = False
+        # Trigger transcription dispatch if at least one file uploaded successfully
+        if all_ok and GH_REPO and GH_TOKEN:
+            try:
+                dispatch = urllib.request.Request(
+                    f"https://api.github.com/repos/{GH_REPO}/dispatches",
+                    data=json.dumps({"event_type": "transcribe_ready"}).encode(),
+                    headers={"Authorization": f"Bearer {GH_TOKEN}", "Content-Type": "application/json"},
+                    method="POST")
+                urllib.request.urlopen(dispatch, timeout=URLLIB_TIMEOUT)
+                log("Triggered transcription dispatch")
+            except Exception as e:
+                log(f"Trigger dispatch error: {e}")
+
+
+def _upload_file(fpath, upload_name, start_ts_fmt):
+    """Upload a single file to Release. Returns True on success."""
+    if not os.path.exists(fpath) or not GH_REPO or not GH_TOKEN:
+        return False
+    try:
+        with open(fpath, 'rb') as f:
+            content = f.read()
+        tag = f"{upload_name}_{start_ts_fmt}"
+        release_url = f"https://api.github.com/repos/{GH_REPO}/releases"
+        rel = json.loads(urllib.request.urlopen(
+            urllib.request.Request(release_url + "?per_page=5",
+                headers={"Authorization": f"Bearer {GH_TOKEN}", "Accept": "application/vnd.github+json"}),
+            timeout=URLLIB_TIMEOUT).read())
+        existing = [r for r in rel if r.get("tag_name") == tag]
+        if existing:
+            log(f"Uploading {upload_name} to existing release {tag}")
+            url = existing[0]["upload_url"].replace("{?name,label}", f"?name={upload_name}")
+        else:
+            log(f"Creating release {tag}")
+            r2 = json.loads(urllib.request.urlopen(
+                urllib.request.Request(release_url,
+                    data=json.dumps({"tag_name": tag, "name": tag, "prerelease": True}).encode(),
+                    headers={"Authorization": f"Bearer {GH_TOKEN}", "Content-Type": "application/json"}),
+                timeout=URLLIB_TIMEOUT).read())
+            url = r2["upload_url"].replace("{?name,label}", f"?name={upload_name}")
+        # Chunked upload: split into 10MB chunks to avoid SSL EOF
+        CHUNK_SIZE = 10 * 1024 * 1024
+        total_size = len(content)
+        if total_size > CHUNK_SIZE:
+            log(f"Uploading {upload_name} in chunks ({total_size // CHUNK_SIZE + 1} chunks)")
+            offset = 0
+            while offset < total_size:
+                chunk = content[offset:offset + CHUNK_SIZE]
+                remaining = total_size - offset
+                is_last = (remaining <= CHUNK_SIZE)
+                headers = {"Authorization": f"Bearer {GH_TOKEN}",
+                           "Content-Type": "application/octet-stream",
+                           "Content-Length": str(len(chunk)),
+                           "Content-Range": f"bytes {offset}-{offset + len(chunk) - 1}/{total_size}"}
+                try:
+                    r3 = urllib.request.urlopen(urllib.request.Request(url,
+                        data=chunk,
+                        headers=headers),
+                        timeout=600)
+                    offset += len(chunk)
+                    log(f"  chunk progress: {offset}/{total_size} bytes")
+                except urllib.error.HTTPError as he:
+                    # GitHub doesn't support chunked upload for releases, try single upload with longer timeout
+                    log(f"Chunk upload not supported (HTTP {he.code}), falling back to full upload")
+                    urllib.request.urlopen(urllib.request.Request(url,
+                        data=content,
+                        headers={"Authorization": f"Bearer {GH_TOKEN}", "Content-Type": "application/octet-stream",
+                                 "Content-Length": str(total_size)}),
+                        timeout=600)
+                    break
+        else:
+            urllib.request.urlopen(urllib.request.Request(url,
+                data=content,
+                headers={"Authorization": f"Bearer {GH_TOKEN}", "Content-Type": "application/octet-stream",
+                         "Content-Length": str(total_size)}),
+                timeout=600)
+        log(f"Uploaded {upload_name} to Release")
+        return True
+    except Exception as e:
+        log(f"Upload error {upload_name}: {e}")
+        return False
+
+
+def _wait_uploads():
+    """Wait for all queued background uploads to finish."""
+    global _upload_thread
+    if _upload_thread and _upload_thread.is_alive():
+        log("Waiting for background uploads to finish...")
+        _upload_thread.join(timeout=1200)
+
+
+def _trigger_dispatch():
+    if GH_REPO and GH_TOKEN:
+        try:
+            dispatch = urllib.request.Request(
+                f"https://api.github.com/repos/{GH_REPO}/dispatches",
+                data=json.dumps({"event_type": "transcribe_ready"}).encode(),
+                headers={"Authorization": f"Bearer {GH_TOKEN}", "Content-Type": "application/json"},
+                method="POST")
+            urllib.request.urlopen(dispatch, timeout=URLLIB_TIMEOUT)
+            log("Triggered transcription dispatch")
+        except Exception as e:
+            log(f"Trigger dispatch error: {e}")
 
 
 def fallback_upload():
