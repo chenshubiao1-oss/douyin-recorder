@@ -81,7 +81,18 @@ def http_check_live(room_id):
         return (False, 'curl_exc:' + str(type(e).__name__), None, None)
 
     if "flv_pull_url" not in html:
-        log("[DBG] " + str(room_id) + " no flv len=" + str(len(html)))
+        # Rate limit detection by content
+        html_lower = html.lower()
+        if len(html) < 50:
+            log(f"[限流] {room_id} 空响应 len={len(html)}")
+            return (False, "rate_limited:empty", None, None)
+        elif 'captcha' in html_lower or '/verify' in html_lower:
+            log(f"[限流] {room_id} 验证页 len={len(html)}")
+            return (False, "rate_limited:captcha", None, None)
+        elif len(html) < 150 and len(html) >= 50:
+            log(f"[限流] {room_id} 过短 len={len(html)}")
+            return (False, "rate_limited:short", None, None)
+log("[DBG] " + str(room_id) + " no flv len=" + str(len(html)))
         # Debug: check cluster
         m = re.search(r'data-cluster="([^"]+)"', html)
         cluster = m.group(1) if m else 'none'
