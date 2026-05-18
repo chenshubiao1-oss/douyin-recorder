@@ -374,6 +374,8 @@ def run():
     anchor_names = {}
     room_names = {r['id']: r['name'] for r in rooms}
     current_room_idx = 0
+    rate_limit_hits = 0
+    _unexpected_exit = False
 
     # Initial HTTP detection - PARALLEL
     t0 = time.time()
