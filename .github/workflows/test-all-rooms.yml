@@ -1,0 +1,33 @@
+name: test-all-rooms
+on: workflow_dispatch
+jobs:
+  t:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - run: |
+          echo "=== Testing all 10 rooms 5 rounds ==="
+          for rid in 215933010618 636171657211 673814862790 74481436171 7819906986 877992805909 961019695933 31463759296 344763580 319074168229; do
+            body=$(curl -s --max-time 10 -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36 Edg/148.0.0.0" -H "Referer: https://www.douyin.com/" "https://live.douyin.com/$rid" 2>/dev/null)
+            echo "Round 1 rid=$rid len=${#body} flv=$(echo "$body" | grep -c 'flv_pull_url' || true)"
+          done
+          sleep 60
+          for rid in 215933010618 636171657211 673814862790 74481436171 7819906986 877992805909 961019695933 31463759296 344763580 319074168229; do
+            body=$(curl -s --max-time 10 -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36 Edg/148.0.0.0" -H "Referer: https://www.douyin.com/" "https://live.douyin.com/$rid" 2>/dev/null)
+            echo "Round 2 rid=$rid len=${#body} flv=$(echo "$body" | grep -c 'flv_pull_url' || true)"
+          done
+          sleep 60
+          for rid in 215933010618 636171657211 673814862790 74481436171 7819906986 877992805909 961019695933 31463759296 344763580 319074168229; do
+            body=$(curl -s --max-time 10 -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36 Edg/148.0.0.0" -H "Referer: https://www.douyin.com/" "https://live.douyin.com/$rid" 2>/dev/null)
+            echo "Round 3 rid=$rid len=${#body} flv=$(echo "$body" | grep -c 'flv_pull_url' || true)"
+          done
+          sleep 60
+          for rid in 215933010618 636171657211 673814862790 74481436171 7819906986 877992805909 961019695933 31463759296 344763580 319074168229; do
+            body=$(curl -s --max-time 10 -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36 Edg/148.0.0.0" -H "Referer: https://www.douyin.com/" "https://live.douyin.com/$rid" 2>/dev/null)
+            echo "Round 4 rid=$rid len=${#body} flv=$(echo "$body" | grep -c 'flv_pull_url' || true)"
+          done
+          sleep 60
+          for rid in 215933010618 636171657211 673814862790 74481436171 7819906986 877992805909 961019695933 31463759296 344763580 319074168229; do
+            body=$(curl -s --max-time 10 -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36 Edg/148.0.0.0" -H "Referer: https://www.douyin.com/" "https://live.douyin.com/$rid" 2>/dev/null)
+            echo "Round 5 rid=$rid len=${#body} flv=$(echo "$body" | grep -c 'flv_pull_url' || true)"
+          done
