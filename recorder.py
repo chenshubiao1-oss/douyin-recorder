@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """Douyin live recorder - pure HTTP detection + ffmpeg recording. No Playwright."""
 import os, sys, json, threading, time, subprocess, re, urllib.request, urllib.error, base64, signal, random, concurrent.futures
 
@@ -373,6 +373,7 @@ def run():
     recordings = {}
     anchor_names = {}
     room_names = {r['id']: r['name'] for r in rooms}
+    current_room_idx = 0
 
     # Initial HTTP detection - PARALLEL
     t0 = time.time()
@@ -471,25 +472,23 @@ def run():
                         log("[REC] " + str(room_names.get(rid, rid)) + " not live anymore, ending recording")
                         handle_room_end(rid, recordings, anchor_names, now)
 
-            # HTTP detection for non-recording rooms only - PARALLEL BATCH
+            # HTTP detection for non-recording rooms only - SERIAL 1 room/5min to avoid 6285
             detect_rooms = [rid for rid in sorted(prev_live.keys()) if rid not in recordings]
             if detect_rooms:
-                t0 = time.time()
-                with concurrent.futures.ThreadPoolExecutor(max_workers=len(detect_rooms)) as ex:
-                    check_results = list(ex.map(lambda rid: (rid,) + http_check_live(rid), detect_rooms))
-                td = time.time() - t0
-                log(f'[BATCH] checked {len(detect_rooms)} rooms in {td:.1f}s')
-                for rid, live, reason, url, quality in check_results:
-                    safe_rid = room_names.get(rid, rid)[:20]
-                    log('[' + safe_rid + '] is_live=' + ('ONAIR' if live else 'OFF') + ' (' + reason + ')')
-                    prev_live[rid] = live
-                    # Just transitioned to live
-                    if live and rid not in recordings:
-                        if url:
-                            aname = anchor_names.get(rid, room_names.get(rid, rid))
-                            proc, outfile, audio_proc, audiofile = start_recording(url, quality, rid, aname)
-                            recordings[rid] = {"proc": proc, "outfile": outfile, "audio_proc": audio_proc,
-                                                "audiofile": audiofile, "start": time.time()}
+                rid = detect_rooms[current_room_idx % len(detect_rooms)]
+                current_room_idx += 1
+                live, reason, url, quality = http_check_live(rid)
+                safe_rid = room_names.get(rid, rid)[:20]
+                log('[' + safe_rid + '] is_live=' + ('ONAIR' if live else 'OFF') + ' (' + reason + ')')
+                prev_live[rid] = live
+                # Just transitioned to live
+                if live and rid not in recordings:
+                    if url:
+                        aname = anchor_names.get(rid, room_names.get(rid, rid))
+                        proc, outfile, audio_proc, audiofile = start_recording(url, quality, rid, aname)
+                        recordings[rid] = {"proc": proc, "outfile": outfile, "audio_proc": audio_proc,
+                                            "audiofile": audiofile, "start": time.time()}
+                log(f'  {len(detect_rooms)} non-rec, next in 300s')
 
             # Recording rooms: skip detection
             for rid in sorted(recordings.keys()):
