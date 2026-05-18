@@ -618,35 +618,47 @@ def _write_status_json(status_data):
     path = 'docs/live_status.json'
     body = json.dumps(status_data, ensure_ascii=False, indent=2)
     b64 = base64.b64encode(body.encode('utf-8')).decode('utf-8')
-    try:
-        # Get current sha first
-        req = urllib.request.Request(
-            f'https://api.github.com/repos/{GH_REPO}/contents/{path}',
-            headers={'Authorization': f'Bearer {GH_TOKEN}', 'Accept': 'application/vnd.github+json'})
+    for attempt in range(3):
         try:
-            resp = urllib.request.urlopen(req, timeout=15)
-            sha = json.loads(resp.read().decode())['sha']
+            # Get current sha first
+            req = urllib.request.Request(
+                f'https://api.github.com/repos/{GH_REPO}/contents/{path}',
+                headers={'Authorization': f'Bearer {GH_TOKEN}', 'Accept': 'application/vnd.github+json'})
+            try:
+                resp = urllib.request.urlopen(req, timeout=15)
+                sha = json.loads(resp.read().decode())['sha']
+            except urllib.error.HTTPError as he:
+                if he.code == 404:
+                    sha = None
+                else:
+                    log(f'_write_status_json get sha failed: {he.code}')
+                    time.sleep(1)
+                    continue
+            put_data = json.dumps({
+                'message': 'update live status',
+                'content': b64,
+                'sha': sha
+            } if sha else {
+                'message': 'create live status',
+                'content': b64
+            }, ensure_ascii=True).encode('utf-8')
+            put_req = urllib.request.Request(
+                f'https://api.github.com/repos/{GH_REPO}/contents/{path}',
+                data=put_data,
+                headers={'Authorization': f'Bearer {GH_TOKEN}', 'Content-Type': 'application/json'},
+                method='PUT')
+            urllib.request.urlopen(put_req, timeout=30)
+            return  # success
         except urllib.error.HTTPError as he:
-            if he.code == 404:
-                sha = None  # file doesn't exist yet
-            else:
-                return
-        put_data = json.dumps({
-            'message': 'update live status',
-            'content': b64,
-            'sha': sha
-        } if sha else {
-            'message': 'create live status',
-            'content': b64
-        }, ensure_ascii=True).encode('utf-8')
-        put_req = urllib.request.Request(
-            f'https://api.github.com/repos/{GH_REPO}/contents/{path}',
-            data=put_data,
-            headers={'Authorization': f'Bearer {GH_TOKEN}', 'Content-Type': 'application/json'},
-            method='PUT')
-        urllib.request.urlopen(put_req, timeout=30)
-    except Exception as e:
-        log(f'_write_status_json error: {e}')
+            if he.code == 409:
+                log(f'_write_status_json sha conflict, retry {attempt+1}')
+                time.sleep(1)
+                continue
+            log(f'_write_status_json error (attempt {attempt+1}): {he.code}')
+            return
+        except Exception as e:
+            log(f'_write_status_json error (attempt {attempt+1}): {e}')
+            return
 
 
 def fallback_upload():
