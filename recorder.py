@@ -35,7 +35,7 @@ def log(msg):
         sys.stdout.buffer.write(line.encode("utf-8"))
         sys.stdout.buffer.flush()
     except Exception:
-        # Ultimate fallback: raw bytes
+        # Ultimate fallback: raw 字节
         import os
         os.write(1, b"[LOGGING_FAILED]\n")
 
@@ -227,7 +227,7 @@ def update_rooms_nickname(anchor_names):
             headers={"Authorization": f"Bearer {GH_TOKEN}", "Content-Type": "application/json"},
             method="PUT")
         urllib.request.urlopen(put, timeout=URLLIB_TIMEOUT)
-        log("rooms.txt nicknames updated via GitHub API")
+        log("rooms.txt 房间昵称已通过 GitHub API 更新")
     except Exception as e:
         log(f"update nicknames error: {e}")
 
@@ -385,9 +385,9 @@ def run():
         init_results = list(ex.map(init_check, rooms))
     for r, live, reason, url, quality, aname in init_results:
         safe_name = r['name'][:20]
-        log(f"  [{safe_name}] is_live={'ONAIR' if live else 'OFF'} ({reason})")
+        log(f"  [{safe_name}]] 直播状态={'在线' if live else '离线'} ({reason})")
         if live and url:
-            log(f"  -> stream: {quality} {url[:80]}...")
+            log(f"  -> 直播流: {quality} {url[:80]}...")
         prev_live[r['id']] = live
         if aname:
             anchor_names[r['id']] = aname
@@ -419,7 +419,7 @@ def run():
             elapsed = now - start_time
 
             if elapsed > MAX_DURATION:
-                log(f"Time limit ({elapsed/3600:.1f}h) reached, exiting")
+                log(f"Time limit ({elapsed/3600:.1f}h), 退出")
                 break
 
             # Refresh rooms from GitHub
@@ -427,14 +427,14 @@ def run():
                 new_rooms = load_rooms_from_github()
                 for nr in new_rooms:
                     if nr["id"] not in [r["id"] for r in rooms]:
-                        log(f"New room detected: {nr['id']} = {nr['name']}")
+                        log(f"新增房间: {nr['id']} = {nr['name']}")
                         # Initial detection for new room
                         live, reason, url, quality = http_check_live(nr["id"])
                         prev_live[nr["id"]] = live
                         aname = http_get_anchor_name(nr["id"]) or nr["name"]
                         anchor_names[nr["id"]] = aname
                         room_names[nr["id"]] = nr["name"]
-                        log(f"  [{aname}] is_live={'ONAIR' if live else 'OFF'} ({reason})")
+                        log(f"  [{aname}]] 直播状态={'在线' if live else '离线'} ({reason})")
                         if live and url:
                             proc, outfile, audio_proc, audiofile = start_recording(url, quality, nr["id"], aname)
                             recordings[nr["id"]] = {"proc": proc, "outfile": outfile, "audio_proc": audio_proc,
@@ -445,7 +445,7 @@ def run():
                 new_ids = {r["id"] for r in new_rooms}
                 for rid in list(prev_live.keys()):
                     if rid not in new_ids:
-                        log(f"Room removed: {room_names.get(rid, rid)}")
+                        log(f"房间已移除: {room_names.get(rid, rid)}")
                         if rid in recordings:
                             handle_room_end(rid, recordings, anchor_names, now)
                         prev_live.pop(rid, None)
@@ -460,26 +460,26 @@ def run():
                 rec = recordings[rid]
                 proc = rec.get("proc")
                 if proc and proc.poll() is not None:
-                    log("[REC] " + str(room_names.get(rid, rid)) + " ffmpeg exited, check if still live")
+                    log("[REC] " + str(room_names.get(rid, rid)) + " ffmpeg 退出, 检查是否仍直播")
                     still_live, l_reason, l_url, l_q = http_check_live(rid)
                     if still_live and l_url:
-                        log("[REC] " + str(room_names.get(rid, rid)) + " still live -> upload segment and restart")
+                        log("[REC] " + str(room_names.get(rid, rid)) + " 仍直播中 -> 上传分段后重启")
                         # Save current segment first (upload + dispatch)
                         handle_room_end(rid, recordings, anchor_names, now)
                         # Now recordings[rid] is deleted, next detection will restart
-                        log("[REC] " + str(room_names.get(rid, rid)) + " will restart next cycle")
+                        log("[REC] " + str(room_names.get(rid, rid)) + " 将于下一轮重启录制")
                     else:
-                        log("[REC] " + str(room_names.get(rid, rid)) + " not live anymore, ending recording")
+                        log("[REC] " + str(room_names.get(rid, rid)) + " 已下播, 结束录制")
                         handle_room_end(rid, recordings, anchor_names, now)
 
-            # HTTP detection for non-recording rooms only - SERIAL 1 room/5min to avoid 6285
+            # HTTP detection for 非录制房间(串行) - SERIAL 1 room/5min to avoid 6285
             detect_rooms = [rid for rid in sorted(prev_live.keys()) if rid not in recordings]
             if detect_rooms:
                 rid = detect_rooms[current_room_idx % len(detect_rooms)]
                 current_room_idx += 1
                 live, reason, url, quality = http_check_live(rid)
                 safe_rid = room_names.get(rid, rid)[:20]
-                log('[' + safe_rid + '] is_live=' + ('ONAIR' if live else 'OFF') + ' (' + reason + ')')
+                log('[' + safe_rid + ']] 直播状态=' + ('在线' if live else '离线') + ' (' + reason + ')')
                 prev_live[rid] = live
                 # Just transitioned to live
                 if live and rid not in recordings:
@@ -493,7 +493,7 @@ def run():
             # Recording rooms: skip detection
             for rid in sorted(recordings.keys()):
                 safe_rid = room_names.get(rid, rid)[:20]
-                log('[REC] ' + safe_rid + ' recording, skip detection')
+                log('[REC] ' + safe_rid + ' 录制中, 跳过检测')
 
             # Force-end recordings that exceeded max duration
             for rid in list(recordings.keys()):
@@ -505,7 +505,7 @@ def run():
 
             # Heartbeat
             if int(elapsed / 60) != int((elapsed - CHECK_INTERVAL) / 60):
-                log(f'[heartbeat] running {int(elapsed/60)}min, rooms={len(prev_live)}')
+                log(f'[heartbeat] running {int(elapsed/60)}min,  房间数={len(prev_live)}')
 
             # Write live status to GitHub every 60s
             if int(elapsed / 60) != int((elapsed - CHECK_INTERVAL - 1) / 60):
@@ -543,7 +543,7 @@ def run():
 
     # Wait for pending uploads to finish
     _wait_uploads()
-    log("Recorder finished")
+    log("录制结束")
 
 
 def _enqueue_upload_segments(upload_files, start_ts_fmt):
@@ -624,7 +624,7 @@ def _upload_file(fpath, upload_name):
             headers={"Authorization": f"Bearer {GH_TOKEN}", "Content-Type": "application/octet-stream",
                      "Content-Length": str(total_size)}),
             timeout=600)
-        log(f"Uploaded {fname_only} ({total_size/1024/1024:.1f}MB) to Release")
+        log(f"已上传 {fname_only} ({total_size/1024/1024:.1f}MB) to Release")
         return True
     except Exception as e:
         log(f"Upload error {fname_only}: {e}")
