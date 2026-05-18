@@ -1,0 +1,26 @@
+name: quick-test-record
+on: workflow_dispatch
+jobs:
+  t:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ffmpeg
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
+      - name: Live detection + record (10 min)
+        run: |
+          for round in $(seq 1 10); do
+            echo "=== Round $round ==="
+            html=$(curl -s --max-time 10 -H \"User-Agent: Mozilla/5.0\" -H \"Referer: https://www.douyin.com/\" \"https://live.douyin.com/319074168229\")
+            len=${#html}
+            has_flv=$(echo \"html\" | grep -c 'flv_pull_url' || true)
+            echo \"rid=319074168229 len=$len flv=$has_flv"
+            if [\"$has_flv\" -gt \"0\"]; then
+              flv_url=$(echo \"html\" | grep -oP 'FULL_HD1[^,]*' | head -1 | sed 's/FULL_HD1\\\\\":\\\\"//' | sed 's/\\\\u0026/\\&/g' | sed 's/\\\\/\///g' | sed 's/\\\\"//' || true)
+              echo \"FLV: ${flv_url:0:100}\"
+            fi
+            sleep 60
+          done
