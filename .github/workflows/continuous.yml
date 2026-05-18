@@ -63,8 +63,6 @@ jobs:
           head -c 300 /tmp/curl_debug.html
           echo ''
           wc -c /tmp/curl_debug.html
-      - name: Parallel test (12 rooms)
-        run: python3 .github/workflows/test_p.py
       - name: Run recorder
         run: python recorder.py
         env:
