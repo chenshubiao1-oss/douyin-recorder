@@ -1,0 +1,15 @@
+name: test-ssr
+on: workflow_dispatch
+jobs:
+  t:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "=== SSR HTML ==="
+          curl -s --max-time 10 -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" "https://live.douyin.com/319074168229" | wc -c
+          echo ""
+          echo "=== API ==="
+          curl -s --max-time 10 "https://live.douyin.com/webcast/room/web/enter/?web_rid=319074168229&aid=6383" -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" | wc -c
+          echo ""
+          echo "=== SSR + Cookie ==="
+          curl -s --max-time 10 -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" -H "Accept: text/html" "https://live.douyin.com/319074168229" | head -c 200
