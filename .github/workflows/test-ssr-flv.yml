@@ -1,0 +1,22 @@
+name: test-ssr-flv
+on: workflow_dispatch
+jobs:
+  t:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "=== SSR HTML flv check ==="
+          body=$(curl -s --max-time 10 -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36 Edg/148.0.0.0" -H "Referer: https://www.douyin.com/" "https://live.douyin.com/319074168229")
+          echo "len=${#body}"
+          has_flv=$(echo "$body" | grep -c 'flv_pull_url' || true)
+          echo "flv_occurrences=$has_flv"
+          if [ "$has_flv" -gt 0 ]; then
+            echo "$body" | grep -o 'FULL_HD1[^,]*' | head -c 200
+            echo ""
+            echo "flv_pull_url=YES"
+          else
+            echo "flv_pull_url=NO"
+            echo "Checking web_stream_url..."
+            has_ws=$(echo "$body" | grep -c 'web_stream_url' || true)
+            echo "web_stream_url=$has_ws"
+          fi
