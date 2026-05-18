@@ -1058,7 +1058,7 @@ async function lo(){
 
 
 
-    bp();rrb();
+    bp();rrb();ud();
 
 
 
@@ -1682,7 +1682,7 @@ function sw(t){
 
 
 
-  if(t=='rooms')rrb();
+  if(t=='rooms'){rrb();ud()}
 
 
 
@@ -1744,6 +1744,23 @@ function rrb(){
 
 
 
+
+function ud(){
+  if(window._lup)clearInterval(window._lup);
+  window._lup=setInterval(function(){
+    var n2=Math.floor(Date.now()/1000);
+    rm.forEach(function(r){
+      var st=ls&&ls[r.id];
+      if(!st||!st.live||!st.recording||!st.start_ts)return;
+      var el=document.getElementById('dur_'+r.id);
+      if(!el)return;
+      var ss=n2-st.start_ts;
+      if(ss<0)return;
+      var mm=Math.floor(ss/60),ss2=ss%60;
+      el.textContent=mm+':'+(ss2<10?'0':'')+ss2;
+    });
+  },1000);
+}
 function addRm(){
 
 
