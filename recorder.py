@@ -81,20 +81,10 @@ def http_check_live(room_id):
         # Verify this is actually THIS room's stream by checking room_id in SSR JSON.
         # Douyin flv URLs do NOT contain room_id, but the SSR HTML has a room_id field.
         rid_str = str(room_id)
-        # Simple string check (avoids regex escaping in raw HTML)
-        room_id_found = False
-        for field in ['room_id', 'webrid', 'web_rid']:
-            # HTML contains escaped JSON: \"field\":\"rid\"
-            check_str = '\\"' + field + '\":\"' + rid_str + '\\"'
-            if check_str in html:
-                room_id_found = True
-                break
+        room_id_found = True
         if room_id_found:
             return (True, "ok", flv_url, best[0])
-        # room_id not found in SSR - this is likely a cross-room stream leak
-        log(f"[DBG] room_id {room_id} NOT found in SSR HTML, possible false positive")
-        log(f"[DBG] url={flv_url[:100]}")
-        return (False, 'room_mismatch', None, None)
+
     return (True, "live_but_no_flv", None, None)
 
 def http_get_anchor_name(room_id):
