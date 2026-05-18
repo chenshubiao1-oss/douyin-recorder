@@ -15,7 +15,7 @@ URLLIB_TIMEOUT = 30
 FFMPEG = os.environ.get("FFMPEG_PATH", "ffmpeg")
 
 ROOMS_FILE = os.environ.get("ROOMS_FILE", "rooms.txt")
-CHECK_INTERVAL = int(os.environ.get("CHECK_INTERVAL", "15"))
+CHECK_INTERVAL = int(os.environ.get("CHECK_INTERVAL", "60"))
 MAX_DURATION = int(os.environ.get("MAX_DURATION", str(5 * 3600)))
 OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "/tmp/recordings")
 GH_REPO = os.environ.get("GH_REPO", "")
@@ -64,25 +64,13 @@ def http_check_live(room_id):
     ua = _next_ua()
     cookie_val = ""
     try:
-        cmd = ['curl', '-s', '-L', '--max-time', str(URLLIB_TIMEOUT), '--http2']
+        cmd = ['curl', '-s', '-L', '--max-time', str(URLLIB_TIMEOUT)]
         if cookie_val:
             cmd.extend(['-H', 'Cookie: ' + cookie_val])
         cmd.extend(['-H', 'User-Agent: ' + ua])
         cmd.extend(['-H', 'Referer: https://www.douyin.com/'])
         cmd.extend(['-H', 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'])
-        cmd.extend(['-H', 'Accept-Language: zh-CN,zh;q=0.9'])
-        # Randomized headers to appear more like a real browser
-        rnd = random.random()
-        if rnd < 0.3:
-            cmd.extend(['-H', 'Sec-Fetch-Dest: document'])
-            cmd.extend(['-H', 'Sec-Fetch-Mode: navigate'])
-            cmd.extend(['-H', 'Sec-Fetch-Site: none'])
-            cmd.extend(['-H', 'Sec-Fetch-User: ?1'])
-        elif rnd < 0.6:
-            cmd.extend(['-H', 'Sec-Fetch-Dest: document'])
-            cmd.extend(['-H', 'Sec-Fetch-Mode: navigate'])
-            cmd.extend(['-H', 'Sec-Fetch-Site: same-origin'])
-        cmd.extend(['-H', 'Accept-Encoding: gzip, deflate, br'])
+        cmd.extend(['-H', 'Accept-Language: zh-CN,zh;q=0.9,en;q=0.8'])
         cmd.append('https://live.douyin.com/' + str(room_id))
         result = subprocess.run(cmd, capture_output=True, timeout=URLLIB_TIMEOUT + 5)
         html = result.stdout.decode('utf-8', errors='replace')
@@ -110,7 +98,7 @@ def http_check_live(room_id):
                 if "flv_pull_url" in html2:
                     log(f"[RETRY] {room_id} success on retry")
                     html = html2  # use retry result
-                    retried = False  # noqa: F841
+                    retried = True
             except:
                 pass
         if "flv_pull_url" not in html:
@@ -139,11 +127,10 @@ def http_get_anchor_name(room_id):
     """Get anchor name from SSR HTML via curl."""
     ua = _next_ua()
     try:
-        cmd = ['curl', '-s', '-L', '--max-time', str(URLLIB_TIMEOUT), '--http2',
+        cmd = ['curl', '-s', '-L', '--max-time', str(URLLIB_TIMEOUT),
                '-H', 'User-Agent: ' + ua,
                '-H', 'Referer: https://www.douyin.com/',
                '-H', 'Accept: text/html,application/xhtml+xml',
-               '-H', 'Accept-Language: zh-CN,zh;q=0.9',
                'https://live.douyin.com/' + str(room_id)]
         result = subprocess.run(cmd, capture_output=True, timeout=URLLIB_TIMEOUT + 5)
         html = result.stdout.decode('utf-8', errors='replace')
@@ -479,28 +466,30 @@ def run():
                         log("[REC] " + str(room_names.get(rid, rid)) + " not live anymore, ending recording")
                         handle_room_end(rid, recordings, anchor_names, now)
 
-            # HTTP detection for non-recording rooms only
-            for rid in sorted(prev_live.keys()):
-                if rid in recordings:
-                    # Already recording, skip detection to avoid interrupting
+            # HTTP detection for non-recording rooms only - PARALLEL BATCH
+            detect_rooms = [rid for rid in sorted(prev_live.keys()) if rid not in recordings]
+            if detect_rooms:
+                t0 = time.time()
+                with concurrent.futures.ThreadPoolExecutor(max_workers=len(detect_rooms)) as ex:
+                    check_results = list(ex.map(lambda rid: (rid,) + http_check_live(rid), detect_rooms))
+                td = time.time() - t0
+                log(f'[BATCH] checked {len(detect_rooms)} rooms in {td:.1f}s')
+                for rid, live, reason, url, quality in check_results:
                     safe_rid = room_names.get(rid, rid)[:20]
-                    log('[REC] ' + safe_rid + ' recording, skip detection')
-                    continue
+                    log('[' + safe_rid + '] is_live=' + ('ONAIR' if live else 'OFF') + ' (' + reason + ')')
+                    prev_live[rid] = live
+                    # Just transitioned to live
+                    if live and rid not in recordings:
+                        if url:
+                            aname = anchor_names.get(rid, room_names.get(rid, rid))
+                            proc, outfile, audio_proc, audiofile = start_recording(url, quality, rid, aname)
+                            recordings[rid] = {"proc": proc, "outfile": outfile, "audio_proc": audio_proc,
+                                                "audiofile": audiofile, "start": time.time()}
 
-                live, reason, url, quality = http_check_live(rid)
+            # Recording rooms: skip detection
+            for rid in sorted(recordings.keys()):
                 safe_rid = room_names.get(rid, rid)[:20]
-                log('[' + safe_rid + '] is_live=' + ('ONAIR' if live else 'OFF') + ' (' + reason + ')')
-                prev_live[rid] = live
-
-                # Just transitioned to live
-                if live and rid not in recordings:
-                    if url:
-                        aname = anchor_names.get(rid, room_names.get(rid, rid))
-                        proc, outfile, audio_proc, audiofile = start_recording(url, quality, rid, aname)
-                        recordings[rid] = {"proc": proc, "outfile": outfile, "audio_proc": audio_proc,
-                                            "audiofile": audiofile, "start": time.time()}
-
-                time.sleep(random.uniform(3, 9))
+                log('[REC] ' + safe_rid + ' recording, skip detection')
 
             # Force-end recordings that exceeded max duration
             for rid in list(recordings.keys()):
