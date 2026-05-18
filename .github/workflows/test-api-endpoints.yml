@@ -1,0 +1,25 @@
+name: test-api
+on: workflow_dispatch
+jobs:
+  t:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "=== 1-graphql ==="
+          echo "not impl"
+          echo ""
+          echo "=== 2-live-room ==="
+          curl -s --max-time 10 "https://www.douyin.com/aweme/v1/web/live/home/?web_rid=319074168229&aid=6383" | head -c 800
+          echo ""
+          echo "=== 3-live-room-noaid ==="
+          curl -s --max-time 10 "https://www.douyin.com/aweme/v1/web/live/home/?web_rid=319074168229" | head -c 800
+          echo ""
+          echo "=== 4-stream ==="
+          curl -s --max-time 10 "https://www.douyin.com/aweme/v1/web/live/stream/?web_rid=319074168229&aid=6383" | head -c 800
+          echo ""
+          echo "=== 5-aweme-post ==="
+          curl -sL --max-time 10 "https://www.douyin.com/aweme/v1/web/live/home/?room_id=319074168229" | head -c 800
+          echo ""
+          echo "=== 6-followfeed-live ==="
+          curl -s --max-time 10 "https://www.douyin.com/aweme/v1/web/follow/feed/?type=1&aid=6383" | head -c 800
+          echo ""
