@@ -5,7 +5,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: |
-          python3 << 'HEREDOC_END'
+          python3 << 'PYEOF'
 import subprocess, concurrent.futures, time
 rooms = ['215933010618','31463759296','332875188236','344763580','636171657211','673814862790','74481436171','7819906986','877992805909','893399285676','961019695933','97171913600']
 def check(rid):
@@ -21,4 +21,4 @@ print('Total: %.1fs' % (time.time()-t0))
 print('%-16s %-8s %-5s %-5s %s' % ('Room','Len','flv?','nick?','Time'))
 for rid,l,f,n,t in results:
     print('%-16s %-8s %-5s %-5s %.1fs' % (rid,str(l),'YES' if f else 'no','YES' if n else 'no',t))
-HEREDOC_END
+PYEOF
