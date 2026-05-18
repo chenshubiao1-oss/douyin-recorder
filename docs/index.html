@@ -1388,7 +1388,7 @@ function rp(){
 
 
 
-    var dn=p.an;if(dn==='oth')dn='其他主播';h+='<div class="anchor-name">'+eh(dn)+(p.ri?' <span style="font-size:11px;color:var(--text-dim)">'+p.ri+'</span>':'')+'</div>';
+    var dn=p.an;if(dn==='oth')dn='其他主播';h+='<div class="anchor-name">'+eh(dn)+(p.ri?' <a href="https://live.douyin.com/'+p.ri+'" target="_blank" style="font-size:11px;color:var(--accent3);text-decoration:none">'+p.ri+'</a>':'')+'</div>';
 
 
 
@@ -1718,7 +1718,7 @@ function rrb(){
 
     h+='<tr><td>'+(i+1)+'</td>';
 
-    h+='<td class="room-rid">'+eh(r.id)+'</td>';
+    h+='<td class="room-rid"><a href="https://live.douyin.com/'+r.id+'" target="_blank" style="color:var(--accent3);text-decoration:none">'+eh(r.id)+'</a></td>';
 
     h+='<td><input class="room-rid" style="background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:4px 8px;color:var(--text)" value="'+eh(r.name)+'" oninput="rm['+i+'].name=this.value"></td>';
 
