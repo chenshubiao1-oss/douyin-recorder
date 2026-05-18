@@ -501,7 +501,34 @@ def run():
                         proc, outfile, audio_proc, audiofile = start_recording(url, quality, rid, aname)
                         recordings[rid] = {"proc": proc, "outfile": outfile, "audio_proc": audio_proc,
                                             "audiofile": audiofile, "start": time.time()}
-                log(f'  {len(detect_rooms)} non-rec, next in 300s')
+                # 限流检测: rate_limited 则累加
+                if not live and reason and reason.startswith('rate_limited'):
+                    rate_limit_hits += 1
+                    log(f'[限流] 累计 {rate_limit_hits}/3')
+                    if rate_limit_hits >= 3 and not recordings:
+                        # 无录制中, 直接退出
+                        log('限流且无录制, 退出等待下个任务')
+                        break
+                    if rate_limit_hits >= 3:
+                        # 有录制中, 触发新任务但不退出
+                        log('限流! 有录制中, 触发新任务继续录制')
+                        import urllib.request as _ur
+                        _token = "${{ secrets.GH_TOKEN }}"
+                        _repo = "${{ github.repository }}"
+                        _req = _ur.Request(
+                            'https://api.github.com/repos/' + _repo + '/actions/workflows/continuous.yml/dispatches',
+                            data=b'{"ref":"main"}',
+                            headers={'Authorization': 'Bearer ' + _token, 'Content-Type': 'application/json'},
+                            method='POST')
+                        try:
+                            _ur.urlopen(_req, timeout=15)
+                            log('[续命] 新任务已触发')
+                        except Exception as _e:
+                            log(f'[续命] 触发失败: {_e}')
+                        rate_limit_hits = 0  # 防止重复触发
+                else:
+                    rate_limit_hits = 0
+                                log(f'  {len(detect_rooms)} non-rec, next in 300s')
 
             # Recording rooms: skip detection
             for rid in sorted(recordings.keys()):
