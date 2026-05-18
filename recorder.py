@@ -210,12 +210,14 @@ def start_recording(url, quality, room_id, anchor_name=""):
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     base = f"{room_id}_{ts}"
-    outfile = os.path.join(OUTPUT_DIR, f"{base}.mp4")
+    # mp4: segment into 15-min files (~700MB each) to avoid GitHub Release 2GB limit
+    outfile_pattern = os.path.join(OUTPUT_DIR, f"{base}_%03d.mp4")
     audiofile = os.path.join(OUTPUT_DIR, f"{base}.wav")
+    seg_duration = int(os.environ.get("SEGMENT_DURATION", "900"))  # 15 min default
     with open(os.path.join(OUTPUT_DIR, f"{room_id}_meta.json"), "w", encoding="utf-8") as f:
         json.dump({"room_id": room_id, "anchor_name": anchor_name,
-                   "filename": f"{base}.mp4", "audio": f"{base}.wav", "quality": quality}, f)
-    log(f"Start recording: {anchor_name}/{base}.mp4 [{quality}] + audio")
+                   "filename_base": base, "audio": f"{base}.wav", "quality": quality}, f)
+    log(f"Start recording: {anchor_name}/{base}_%03d.mp4 [{quality}] seg={seg_duration}s + audio")
     # Build ffmpeg headers for Douyin flv pull authentication
     ff_ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     cookie_val = os.environ.get("DOUYIN_COOKIE", "")
@@ -230,12 +232,13 @@ def start_recording(url, quality, room_id, anchor_name=""):
         + cookie_hdr,
     ]
     proc = subprocess.Popen([FFMPEG, "-y", "-loglevel", "warning"] + ff_headers + ["-i", url, "-c", "copy",
-                             "-movflags", "+faststart+frag_keyframe+empty_moov", "-f", "mp4", outfile],
+                             "-f", "segment", "-segment_time", str(seg_duration),
+                             "-reset_timestamps", "1", outfile_pattern],
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     audio_proc = subprocess.Popen([FFMPEG, "-y", "-loglevel", "warning"] + ff_headers + ["-i", url, "-vn",
                                     "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1", audiofile],
                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    return proc, outfile, audio_proc, audiofile
+    return proc, outfile_pattern, audio_proc, audiofile
 
 
 def stop_proc(proc):
@@ -253,33 +256,47 @@ def handle_room_end(rid, recordings, anchor_names, now):
     rec = recordings[rid]
     stop_proc(rec.get("proc"))
     stop_proc(rec.get("audio_proc"))
-    outfile = rec.get("outfile", "")
+    outfile_pattern = rec.get("outfile", "")
     audiofile = rec.get("audiofile", "")
     from datetime import datetime as _dt
     start_ts_fmt = _dt.fromtimestamp(rec.get("start", 0)).strftime("%Y%m%d_%H%M%S")
     end_ts_fmt = _dt.fromtimestamp(now).strftime("%Y%m%d_%H%M%S")
-    if outfile and os.path.exists(outfile):
-        end_ts_fmt = _dt.fromtimestamp(os.path.getmtime(outfile)).strftime("%Y%m%d_%H%M%S")
     aname = anchor_names.get(rid, rid)
-    base = os.path.splitext(os.path.basename(outfile))[0] if outfile else f"{rid}_{start_ts_fmt}"
-    if outfile:
-        base_new = f"{rid}_{start_ts_fmt}_{end_ts_fmt}"
-        dirname = os.path.dirname(outfile)
-        new_mp4 = os.path.join(dirname, f"{base_new}.mp4")
-        new_wav = os.path.join(dirname, f"{base_new}.wav")
+    dirname = OUTPUT_DIR
+
+    # Find segment mp4 files (filename base is encoded in the meta.json or pattern)
+    # outfile_pattern is like /tmp/recordings/roomid_ts_%03d.mp4
+    base_prefix = outfile_pattern.replace("_%03d.mp4", "")
+    seg_files = sorted([f for f in os.listdir(dirname)
+                        if f.startswith(os.path.basename(base_prefix))
+                        and f.endswith(".mp4")
+                        and os.path.isfile(os.path.join(dirname, f))])
+
+    # Build upload pairs: (filepath, upload_name)
+    upload_files = []
+    for seg_fname in seg_files:
+        seg_path = os.path.join(dirname, seg_fname)
+        # Use segment's mtime for end timestamp
+        seg_end = _dt.fromtimestamp(os.path.getmtime(seg_path)).strftime("%Y%m%d_%H%M%S")
+        upload_files.append((seg_path, seg_fname))  # filename already has roomid_ts_seq.mp4 format
+
+    # Handle audio file: rename to include end timestamp
+    new_wav = None
+    if audiofile and os.path.exists(audiofile):
+        wav_base = os.path.splitext(os.path.basename(audiofile))[0]
+        new_wav_name = f"{wav_base}_{end_ts_fmt}.wav"
+        new_wav = os.path.join(dirname, new_wav_name)
         try:
-            os.rename(outfile, new_mp4)
+            os.rename(audiofile, new_wav)
         except:
-            pass
-        if audiofile and os.path.exists(audiofile):
-            try:
-                os.rename(audiofile, new_wav)
-            except:
-                pass
-        log(f"[{aname}] Recording ended, saved as {base_new}")
+            new_wav = audiofile
+        upload_files.append((new_wav, os.path.basename(new_wav)))
+
+    if upload_files:
+        log(f"[{aname}] Recording ended, enqueuing {len(upload_files)} file(s) for upload")
 
     # Enqueue upload + dispatch to background thread
-    _enqueue_upload_chain(outfile, new_mp4_path, new_wav_path, audiofile, base_new, start_ts_fmt)
+    _enqueue_upload_segments(upload_files, start_ts_fmt)
 
     del recordings[rid]
 
@@ -477,24 +494,15 @@ def run():
     log("Recorder finished")
 
 
-def _enqueue_upload_chain(outfile, new_mp4_path, new_wav_path, audiofile, base_new, start_ts_fmt):
-    """Enqueue upload + transcription dispatch to a background thread (serial queue)."""
+def _enqueue_upload_segments(upload_files, start_ts_fmt):
+    """Enqueue upload files (segments + wav) to background thread, one by one."""
     global _upload_queue, _upload_thread
-    # Collect files to upload in order: mp4 first, then wav
-    files = []
-    if outfile:
-        if new_mp4_path and os.path.exists(new_mp4_path):
-            files.append((new_mp4_path, base_new + ".mp4"))
-        elif os.path.exists(outfile):
-            files.append((outfile, os.path.basename(outfile)))
-    if audiofile:
-        if new_wav_path and os.path.exists(new_wav_path):
-            files.append((new_wav_path, base_new + ".wav"))
-        elif os.path.exists(audiofile):
-            files.append((audiofile, os.path.basename(audiofile)))
-
+    if not upload_files:
+        return
+    # Each file gets its own queue entry so uploads are serially ordered
     with _upload_lock:
-        _upload_queue.append((files, start_ts_fmt))
+        for fpath, fname in upload_files:
+            _upload_queue.append((fpath, fname))
         _start_upload_worker()
 
 
@@ -508,19 +516,17 @@ def _start_upload_worker():
 
 
 def _upload_worker():
-    """Background worker: upload files serially, then trigger transcription dispatch."""
+    """Background worker: upload files serially, trigger dispatch on wav completion."""
     while True:
         with _upload_lock:
             if not _upload_queue:
                 break
-            files, start_ts_fmt = _upload_queue.pop(0)
-        all_ok = True
-        for fpath, fname in files:
-            ok = _upload_file(fpath, fname, start_ts_fmt)
-            if not ok:
-                all_ok = False
-        # Trigger transcription dispatch if at least one file uploaded successfully
-        if all_ok and GH_REPO and GH_TOKEN:
+            fpath, fname = _upload_queue.pop(0)
+        ok = _upload_file(fpath, fname)
+        # Trigger transcription dispatch after wav upload (last in queue)
+        with _upload_lock:
+            is_last = (len(_upload_queue) == 0)
+        if ok and is_last and GH_REPO and GH_TOKEN:
             try:
                 dispatch = urllib.request.Request(
                     f"https://api.github.com/repos/{GH_REPO}/dispatches",
@@ -533,14 +539,17 @@ def _upload_worker():
                 log(f"Trigger dispatch error: {e}")
 
 
-def _upload_file(fpath, upload_name, start_ts_fmt):
+def _upload_file(fpath, upload_name):
     """Upload a single file to Release. Returns True on success."""
     if not os.path.exists(fpath) or not GH_REPO or not GH_TOKEN:
         return False
     try:
         with open(fpath, 'rb') as f:
             content = f.read()
-        tag = f"{upload_name}_{start_ts_fmt}"
+        # Use the filename (without path) as the release tag base
+        fname_only = os.path.basename(upload_name) if not upload_name.startswith('/') else upload_name
+        # No start_ts needed since seg filename already has timestamp
+        tag = fname_only
         release_url = f"https://api.github.com/repos/{GH_REPO}/releases"
         rel = json.loads(urllib.request.urlopen(
             urllib.request.Request(release_url + "?per_page=5",
@@ -548,8 +557,8 @@ def _upload_file(fpath, upload_name, start_ts_fmt):
             timeout=URLLIB_TIMEOUT).read())
         existing = [r for r in rel if r.get("tag_name") == tag]
         if existing:
-            log(f"Uploading {upload_name} to existing release {tag}")
-            url = existing[0]["upload_url"].replace("{?name,label}", f"?name={upload_name}")
+            log(f"Uploading {fname_only} to existing release {tag}")
+            url = existing[0]["upload_url"].replace("{?name,label}", f"?name={fname_only}")
         else:
             log(f"Creating release {tag}")
             r2 = json.loads(urllib.request.urlopen(
@@ -557,47 +566,18 @@ def _upload_file(fpath, upload_name, start_ts_fmt):
                     data=json.dumps({"tag_name": tag, "name": tag, "prerelease": True}).encode(),
                     headers={"Authorization": f"Bearer {GH_TOKEN}", "Content-Type": "application/json"}),
                 timeout=URLLIB_TIMEOUT).read())
-            url = r2["upload_url"].replace("{?name,label}", f"?name={upload_name}")
-        # Chunked upload: split into 10MB chunks to avoid SSL EOF
-        CHUNK_SIZE = 10 * 1024 * 1024
+            url = r2["upload_url"].replace("{?name,label}", f"?name={fname_only}")
+        # Simple full-file upload (no chunking)
         total_size = len(content)
-        if total_size > CHUNK_SIZE:
-            log(f"Uploading {upload_name} in chunks ({total_size // CHUNK_SIZE + 1} chunks)")
-            offset = 0
-            while offset < total_size:
-                chunk = content[offset:offset + CHUNK_SIZE]
-                remaining = total_size - offset
-                is_last = (remaining <= CHUNK_SIZE)
-                headers = {"Authorization": f"Bearer {GH_TOKEN}",
-                           "Content-Type": "application/octet-stream",
-                           "Content-Length": str(len(chunk)),
-                           "Content-Range": f"bytes {offset}-{offset + len(chunk) - 1}/{total_size}"}
-                try:
-                    r3 = urllib.request.urlopen(urllib.request.Request(url,
-                        data=chunk,
-                        headers=headers),
-                        timeout=600)
-                    offset += len(chunk)
-                    log(f"  chunk progress: {offset}/{total_size} bytes")
-                except urllib.error.HTTPError as he:
-                    # GitHub doesn't support chunked upload for releases, try single upload with longer timeout
-                    log(f"Chunk upload not supported (HTTP {he.code}), falling back to full upload")
-                    urllib.request.urlopen(urllib.request.Request(url,
-                        data=content,
-                        headers={"Authorization": f"Bearer {GH_TOKEN}", "Content-Type": "application/octet-stream",
-                                 "Content-Length": str(total_size)}),
-                        timeout=600)
-                    break
-        else:
-            urllib.request.urlopen(urllib.request.Request(url,
-                data=content,
-                headers={"Authorization": f"Bearer {GH_TOKEN}", "Content-Type": "application/octet-stream",
-                         "Content-Length": str(total_size)}),
-                timeout=600)
-        log(f"Uploaded {upload_name} to Release")
+        urllib.request.urlopen(urllib.request.Request(url,
+            data=content,
+            headers={"Authorization": f"Bearer {GH_TOKEN}", "Content-Type": "application/octet-stream",
+                     "Content-Length": str(total_size)}),
+            timeout=600)
+        log(f"Uploaded {fname_only} ({total_size/1024/1024:.1f}MB) to Release")
         return True
     except Exception as e:
-        log(f"Upload error {upload_name}: {e}")
+        log(f"Upload error {fname_only}: {e}")
         return False
 
 
