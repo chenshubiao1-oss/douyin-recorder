@@ -40,15 +40,35 @@ def log(msg):
         os.write(1, b"[LOGGING_FAILED]\n")
 
 
+_ua_pool = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
+    "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.6261.64 Mobile Safari/537.36",
+]
+_ua_idx = 0
+
+
+def _next_ua():
+    global _ua_idx
+    ua = _ua_pool[_ua_idx % len(_ua_pool)]
+    _ua_idx += 1
+    return ua
+
+
 def http_check_live(room_id):
     """HTTP check using shell curl (same as test_9rooms.yml, proven working)."""
-    ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    ua = _next_ua()
     cookie_val = os.environ.get("DOUYIN_COOKIE", "")
     try:
         cmd = ['curl', '-s', '-L', '--max-time', str(URLLIB_TIMEOUT)]
         if cookie_val:
             cmd.extend(['-H', 'Cookie: ' + cookie_val])
         cmd.extend(['-H', 'User-Agent: ' + ua])
+        cmd.extend(['-H', 'Referer: https://www.douyin.com/'])
         cmd.extend(['-H', 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'])
         cmd.extend(['-H', 'Accept-Language: zh-CN,zh;q=0.9,en;q=0.8'])
         cmd.append('https://live.douyin.com/' + str(room_id))
@@ -105,10 +125,11 @@ def http_check_live(room_id):
 
 def http_get_anchor_name(room_id):
     """Get anchor name from SSR HTML via curl."""
-    ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    ua = _next_ua()
     try:
         cmd = ['curl', '-s', '-L', '--max-time', str(URLLIB_TIMEOUT),
                '-H', 'User-Agent: ' + ua,
+               '-H', 'Referer: https://www.douyin.com/',
                '-H', 'Accept: text/html,application/xhtml+xml',
                'https://live.douyin.com/' + str(room_id)]
         result = subprocess.run(cmd, capture_output=True, timeout=URLLIB_TIMEOUT + 5)
@@ -352,10 +373,6 @@ def run():
     recordings = {}
     anchor_names = {}
     room_names = {r['id']: r['name'] for r in rooms}
-
-    # Warmup delay - wait before first HTTP requests to avoid immediate rate limit
-    log("[init] warmup 30s before first detection...")
-    time.sleep(30)
 
     # Initial HTTP detection
     for r in rooms:
