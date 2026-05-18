@@ -433,7 +433,7 @@ def run():
                         prev_live[nr["id"]] = live
                         aname = http_get_anchor_name(nr["id"]) or nr["name"]
                         anchor_names[nr["id"]] = aname
-                        room_names[nr["id"]] = nr["name"]
+                        room_names[nr["id"]] = aname
                         log(f"  [{aname}]] 直播状态={'在线' if live else '离线'} ({reason})")
                         if live and url:
                             proc, outfile, audio_proc, audiofile = start_recording(url, quality, nr["id"], aname)
