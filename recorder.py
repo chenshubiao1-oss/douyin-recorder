@@ -62,7 +62,7 @@ def _next_ua():
 def http_check_live(room_id):
     """HTTP check using shell curl (same as test_9rooms.yml, proven working)."""
     ua = _next_ua()
-    cookie_val = os.environ.get("DOUYIN_COOKIE", "")
+    cookie_val = ""
     try:
         cmd = ['curl', '-s', '-L', '--max-time', str(URLLIB_TIMEOUT)]
         if cookie_val:
@@ -246,7 +246,7 @@ def start_recording(url, quality, room_id, anchor_name=""):
     log(f"Start recording: {anchor_name}/{base}_%03d.mp4 [{quality}] seg={seg_duration}s + audio")
     # Build ffmpeg headers for Douyin flv pull authentication
     ff_ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    cookie_val = os.environ.get("DOUYIN_COOKIE", "")
+    cookie_val = ""
     cookie_hdr = "Cookie: " + cookie_val + "\r\n" if cookie_val else ""
     ff_headers = [
         "-headers", "User-Agent: " + ff_ua + "\r\n"
