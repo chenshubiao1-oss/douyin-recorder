@@ -353,6 +353,10 @@ def run():
     anchor_names = {}
     room_names = {r['id']: r['name'] for r in rooms}
 
+    # Warmup delay - wait before first HTTP requests to avoid immediate rate limit
+    log("[init] warmup 30s before first detection...")
+    time.sleep(30)
+
     # Initial HTTP detection
     for r in rooms:
         live, reason, url, quality = http_check_live(r['id'])
