@@ -1,6 +1,6 @@
 ﻿#!/usr/bin/env python3
 """Douyin live recorder - pure HTTP detection + ffmpeg recording. No Playwright."""
-import os, sys, json, threading, time, subprocess, re, urllib.request, urllib.error, base64, signal, random
+import os, sys, json, threading, time, subprocess, re, urllib.request, urllib.error, base64, signal, random, concurrent.futures
 
 # Force UTF-8 for all I/O to avoid ascii encoding errors in Actions
 if hasattr(sys.stdout, "reconfigure"):
