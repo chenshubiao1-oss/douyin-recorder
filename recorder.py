@@ -513,8 +513,8 @@ def run():
                         # 有录制中, 触发新任务但不退出
                         log('限流! 有录制中, 触发新任务继续录制')
                         import urllib.request as _ur
-                        _token = "${{ secrets.GH_TOKEN }}"
-                        _repo = "${{ github.repository }}"
+                        _token = os.environ.get('GH_TOKEN', '')
+                        _repo = os.environ.get('GH_REPO', '')
                         _req = _ur.Request(
                             'https://api.github.com/repos/' + _repo + '/actions/workflows/continuous.yml/dispatches',
                             data=b'{"ref":"main"}',
