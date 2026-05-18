@@ -84,7 +84,9 @@ def http_check_live(room_id):
         # Simple string check (avoids regex escaping in raw HTML)
         room_id_found = False
         for field in ['room_id', 'webrid', 'web_rid']:
-            if ('"' + field + '":"' + rid_str + '"') in html:
+            # HTML contains escaped JSON: \"field\":\"rid\"
+            check_str = '\"' + field + '\":\"' + rid_str + '\"'
+            if check_str in html:
                 room_id_found = True
                 break
         if room_id_found:
