@@ -81,10 +81,9 @@ def http_check_live(room_id):
         # Verify this is actually THIS room's stream by checking room_id in SSR JSON.
         # Douyin flv URLs do NOT contain room_id, but the SSR HTML has a room_id field.
         rid_str = str(room_id)
-        # Simple string check (avoids regex escaping issues in raw HTML)
+        # Simple string check (avoids regex escaping in raw HTML)
         room_id_found = False
         for field in ['room_id', 'webrid', 'web_rid']:
-            # Check both JSON format and escaped JSON in SSR
             if ('"' + field + '":"' + rid_str + '"') in html:
                 room_id_found = True
                 break
