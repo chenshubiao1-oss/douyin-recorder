@@ -1,0 +1,10 @@
+name: quick-test-record
+on: workflow_dispatch
+jobs:
+  t:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get install -y ffmpeg
+      - run: python3 test_actions_recording.py
