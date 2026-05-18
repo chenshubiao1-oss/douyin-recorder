@@ -81,14 +81,6 @@ def http_check_live(room_id):
         return (False, 'curl_exc:' + str(type(e).__name__), None, None)
 
     if "flv_pull_url" not in html:
-        # Rate limit detection by content (catches 6285/empty/captcha)
-        html_lower = html.lower()
-        if len(html) < 50:
-            log(f"[限流] {room_id} 空响应 len={len(html)}")
-            return (False, "rate_limited:empty", None, None)
-        elif len(html) < 10000:
-            log(f"[限流] {room_id} 响应过短 len={len(html)}")
-            return (False, "rate_limited:short", None, None)
         log("[DBG] " + str(room_id) + " no flv len=" + str(len(html)))
         # Debug: check cluster
         m = re.search(r'data-cluster="([^"]+)"', html)
@@ -372,7 +364,7 @@ def run():
     log(f"Loaded {len(rooms)} rooms:")
     for r in rooms:
         log(f"  {r['id']} = {r['name']}")
-    log(f"Check interval: {CHECK_INTERVAL}s | Max duration: {MAX_DURATION//3600}h")
+    log(f"Room check: ~10-20s per room (serial) | Max duration: {MAX_DURATION//3600}h")
     if GH_REPO and GH_TOKEN:
         log("Self-renewal + upload: enabled")
 
@@ -382,8 +374,6 @@ def run():
     anchor_names = {}
     room_names = {r['id']: r['name'] for r in rooms}
     current_room_idx = 0
-    rate_limit_hits = 0
-    _unexpected_exit = False
 
     # Initial HTTP detection - PARALLEL
     t0 = time.time()
@@ -498,34 +488,7 @@ def run():
                         proc, outfile, audio_proc, audiofile = start_recording(url, quality, rid, aname)
                         recordings[rid] = {"proc": proc, "outfile": outfile, "audio_proc": audio_proc,
                                             "audiofile": audiofile, "start": time.time()}
-                # 限流检测: rate_limited 则累加
-                if not live and reason and reason.startswith('rate_limited'):
-                    rate_limit_hits += 1
-                    log(f'[限流] 累计 {rate_limit_hits}/3')
-                    if rate_limit_hits >= 3 and not recordings:
-                        # 无录制中, 直接退出
-                        log('限流且无录制, 退出等待下个任务')
-                        break
-                    if rate_limit_hits >= 3:
-                        # 有录制中, 触发新任务但不退出
-                        log('限流! 有录制中, 触发新任务继续录制')
-                        import urllib.request as _ur
-                        _token = os.environ.get('GH_TOKEN', '')
-                        _repo = os.environ.get('GH_REPO', '')
-                        _req = _ur.Request(
-                            'https://api.github.com/repos/' + _repo + '/actions/workflows/continuous.yml/dispatches',
-                            data=b'{"ref":"main"}',
-                            headers={'Authorization': 'Bearer ' + _token, 'Content-Type': 'application/json'},
-                            method='POST')
-                        try:
-                            _ur.urlopen(_req, timeout=15)
-                            log('[续命] 新任务已触发')
-                        except Exception as _e:
-                            log(f'[续命] 触发失败: {_e}')
-                        rate_limit_hits = 0  # 防止重复触发
-                else:
-                    rate_limit_hits = 0
-                log(f'  {len(detect_rooms)} non-rec, next in 300s')
+                log(f'  {len(detect_rooms)} non-rec, next in 10-20s')
 
             # Recording rooms: skip detection
             for rid in sorted(recordings.keys()):
