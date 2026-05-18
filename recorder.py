@@ -64,13 +64,25 @@ def http_check_live(room_id):
     ua = _next_ua()
     cookie_val = ""
     try:
-        cmd = ['curl', '-s', '-L', '--max-time', str(URLLIB_TIMEOUT)]
+        cmd = ['curl', '-s', '-L', '--max-time', str(URLLIB_TIMEOUT), '--http2']
         if cookie_val:
             cmd.extend(['-H', 'Cookie: ' + cookie_val])
         cmd.extend(['-H', 'User-Agent: ' + ua])
         cmd.extend(['-H', 'Referer: https://www.douyin.com/'])
         cmd.extend(['-H', 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'])
-        cmd.extend(['-H', 'Accept-Language: zh-CN,zh;q=0.9,en;q=0.8'])
+        cmd.extend(['-H', 'Accept-Language: zh-CN,zh;q=0.9'])
+        # Randomized headers to appear more like a real browser
+        rnd = random.random()
+        if rnd < 0.3:
+            cmd.extend(['-H', 'Sec-Fetch-Dest: document'])
+            cmd.extend(['-H', 'Sec-Fetch-Mode: navigate'])
+            cmd.extend(['-H', 'Sec-Fetch-Site: none'])
+            cmd.extend(['-H', 'Sec-Fetch-User: ?1'])
+        elif rnd < 0.6:
+            cmd.extend(['-H', 'Sec-Fetch-Dest: document'])
+            cmd.extend(['-H', 'Sec-Fetch-Mode: navigate'])
+            cmd.extend(['-H', 'Sec-Fetch-Site: same-origin'])
+        cmd.extend(['-H', 'Accept-Encoding: gzip, deflate, br'])
         cmd.append('https://live.douyin.com/' + str(room_id))
         result = subprocess.run(cmd, capture_output=True, timeout=URLLIB_TIMEOUT + 5)
         html = result.stdout.decode('utf-8', errors='replace')
@@ -98,7 +110,7 @@ def http_check_live(room_id):
                 if "flv_pull_url" in html2:
                     log(f"[RETRY] {room_id} success on retry")
                     html = html2  # use retry result
-                    retried = True
+                    retried = False  # noqa: F841
             except:
                 pass
         if "flv_pull_url" not in html:
@@ -127,10 +139,11 @@ def http_get_anchor_name(room_id):
     """Get anchor name from SSR HTML via curl."""
     ua = _next_ua()
     try:
-        cmd = ['curl', '-s', '-L', '--max-time', str(URLLIB_TIMEOUT),
+        cmd = ['curl', '-s', '-L', '--max-time', str(URLLIB_TIMEOUT), '--http2',
                '-H', 'User-Agent: ' + ua,
                '-H', 'Referer: https://www.douyin.com/',
                '-H', 'Accept: text/html,application/xhtml+xml',
+               '-H', 'Accept-Language: zh-CN,zh;q=0.9',
                'https://live.douyin.com/' + str(room_id)]
         result = subprocess.run(cmd, capture_output=True, timeout=URLLIB_TIMEOUT + 5)
         html = result.stdout.decode('utf-8', errors='replace')
@@ -487,7 +500,7 @@ def run():
                         recordings[rid] = {"proc": proc, "outfile": outfile, "audio_proc": audio_proc,
                                             "audiofile": audiofile, "start": time.time()}
 
-                time.sleep(random.uniform(4, 6))
+                time.sleep(random.uniform(3, 9))
 
             # Force-end recordings that exceeded max duration
             for rid in list(recordings.keys()):
