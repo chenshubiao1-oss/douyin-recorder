@@ -460,16 +460,16 @@ def run():
                 rec = recordings[rid]
                 proc = rec.get("proc")
                 if proc and proc.poll() is not None:
-                    log("[REC] " + str(room_names.get(rid, rid)) + " ffmpeg 退出, 检查是否仍直播")
+                    log("[REC] " + str(room_names.get(rid, rid)) + " 🔄 ffmpeg 退出, 检查是否仍直播")
                     still_live, l_reason, l_url, l_q = http_check_live(rid)
                     if still_live and l_url:
-                        log("[REC] " + str(room_names.get(rid, rid)) + " 仍直播中 -> 上传分段后重启")
+                        log("[REC] " + str(room_names.get(rid, rid)) + " 🟢 仍直播 -> 上传分段后重启")
                         # Save current segment first (upload + dispatch)
                         handle_room_end(rid, recordings, anchor_names, now)
                         # Now recordings[rid] is deleted, next detection will restart
                         log("[REC] " + str(room_names.get(rid, rid)) + " 将于下一轮重启录制")
                     else:
-                        log("[REC] " + str(room_names.get(rid, rid)) + " 已下播, 结束录制")
+                        log("[REC] " + str(room_names.get(rid, rid)) + " 🔴 已下播, 结束录制")
                         handle_room_end(rid, recordings, anchor_names, now)
 
             # HTTP detection for 非录制房间(串行) - SERIAL 1 room/5min to avoid 6285
@@ -493,7 +493,7 @@ def run():
             # Recording rooms: skip detection
             for rid in sorted(recordings.keys()):
                 safe_rid = room_names.get(rid, rid)[:20]
-                log('[REC] ' + safe_rid + ' 录制中, 跳过检测')
+                log('[REC] ' + safe_rid + ' 🔴 录制中, 跳过检测')
 
             # Force-end recordings that exceeded max duration
             for rid in list(recordings.keys()):
