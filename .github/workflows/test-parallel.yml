@@ -4,4 +4,5 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - run: python3 test_p.py
+      - uses: actions/checkout@v4
+      - run: python3 .github/workflows/test_p.py
