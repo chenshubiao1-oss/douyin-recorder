@@ -113,6 +113,18 @@ class DanmakuCollector:
 
         self.data["pw_start"] = time.time()
 
+        # Probe: check if GitHub runner can access douyin at all
+        try:
+            import urllib.request
+            _req = urllib.request.Request(f"https://live.douyin.com/{self.room_id}",
+                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36"})
+            _resp = urllib.request.urlopen(_req, timeout=10)
+            _html = _resp.read().decode('utf-8', errors='ignore')[:200]
+            _live_main = "live-main" in _html
+            log(f"[PW] {self.anchor_name} HTTP probe: {len(_html)}b, live-main={_live_main}, first={_html[:80].strip()}")
+        except Exception as _e:
+            log(f"[PW] {self.anchor_name} HTTP probe FAILED: {_e}")
+
         try:
             pw_context = sync_playwright()
             p = pw_context.__enter__()
