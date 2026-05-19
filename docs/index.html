@@ -498,6 +498,22 @@ function rp(){
 
 }
 
+
+function pkPeakHtml(p){
+  var mi=p.it.find(function(a){return a.ty=="m"});
+  if(!mi)return "";
+  var el=document.createElement("span");
+  el.className="peak-load";
+  el.textContent="...";
+  fetch(mi.u).then(function(r){return r.json()}).then(function(d){
+    var pk=d.peak_viewers||0;
+    if(pk)el.innerHTML="\ud83d\udce1 "+pk.toLocaleString()+"\u5728\u7EBF";
+    else el.innerHTML="\ud83d\udce1 -";
+    el.className="peak-val";
+  }).catch(function(){el.remove()});
+  return el.outerHTML;
+}
+
 function od(an,pi){
 
   var p=null;
