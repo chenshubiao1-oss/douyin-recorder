@@ -1,11 +1,5 @@
 name: Test Viewer Count (10 browsers)
-
-on:
-  workflow_dispatch:
-    inputs:
-      dummy:
-        description: 'Dummy input'
-        default: 'test'
+on: workflow_dispatch
 
 env:
   PYTHON_VERSION: '3.11'
@@ -20,49 +14,35 @@ jobs:
       max-parallel: 10
     steps:
       - uses: actions/checkout@v4
-      
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      
       - name: Install Playwright
         run: |
           pip install playwright
           python -m playwright install chromium --with-deps
-      
       - name: Open Room and Wait 120s
         env:
           BROWSER_ID: ${{ matrix.browser }}
         run: |
           python << 'PYEOF'
-import asyncio
-import os
+import asyncio, os, time
 from playwright.async_api import async_playwright
-
 ROOM_URL = "https://live.douyin.com/48383706721"
-BROWSER_ID = os.environ.get("BROWSER_ID", "?")
-
+BID = os.environ.get("BROWSER_ID", "?")
 async def main():
-    print(f"[Browser {BROWSER_ID}] Starting...")
+    print(f"[Browser {BID}] Starting...")
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
-        context = await browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-        )
-        page = await context.new_page()
-        import time
-        t0 = time.time()
-        print(f"[Browser {BROWSER_ID}] Navigating to room...")
+        page = await browser.new_page(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
         await page.goto(ROOM_URL, wait_until="load", timeout=30000)
         await asyncio.sleep(3)
-        print(f"[Browser {BROWSER_ID}] Loaded. Holding 120s...")
+        print(f"[Browser {BID}] Holding 120s...")
         for i in range(12):
             await asyncio.sleep(10)
-            elapsed = time.time() - t0
-            print(f"[Browser {BROWSER_ID}] Still alive... {elapsed:.0f}s")
-        print(f"[Browser {BROWSER_ID}] Done! Closing.")
+            print(f"[Browser {BID}] {i*10+10}s")
         await browser.close()
-
+        print(f"[Browser {BID}] Done")
 asyncio.run(main())
 PYEOF
