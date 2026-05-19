@@ -118,29 +118,26 @@ class DanmakuCollector:
             p = pw_context.__enter__()
             browser = p.chromium.launch(
                 headless=True,
-                args=["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage",
-                      "--disable-blink-features=AutomationControlled"]
+                args=["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage"]
             )
             page = browser.new_page(
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
                 viewport={"width": 1280, "height": 720}
             )
-            page.add_init_script('Object.defineProperty(navigator, "webdriver", {get: () => undefined});')
             page.goto(f"https://live.douyin.com/{self.room_id}", wait_until="domcontentloaded", timeout=15000)
-            # Quick debug log
+            # Debug: log page info
             try:
                 _pt = page.title()
                 _pu = page.url
-                log(f"[PW] {self.anchor_name} page title=[{_pt}] url=[{_pu[:60]}]")
+                log(f"[PW] {self.anchor_name} title=[{_pt}] url=[{_pu[:70]}]")
             except:
                 pass
-            # Check for SSR live room (live-main is in SSR HTML)
+            # Quick check for SSR content
             try:
-                page.wait_for_selector("[class*=live-main]", timeout=5000)
-                log(f"[PW] {self.anchor_name} SSR live room found")
+                page.wait_for_selector("[class*=live-main]", timeout=3000)
             except:
-                log(f"[PW] {self.anchor_name} SSR live room NOT found (may be blocked/captcha)")
-            # Wait briefly for possible hydration
+                log(f"[PW] {self.anchor_name} SSR not found (page may be blocked)")
+            # Brief wait for hydration
             time.sleep(3.0)
             _seen_texts = set()
             _last_move = time.time()
