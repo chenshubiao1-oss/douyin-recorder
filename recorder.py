@@ -94,14 +94,16 @@ class DanmakuCollector:
             self._thread.join(timeout=30)
 
     def save_data(self):
-        """Write collected data to disk, returns (viewer_counts, danmaku)."""
+        """Write collected data to disk, returns (viewer_counts, danmaku, peak_vc)."""
         pw_start = self.data.get("pw_start", 0)
+        vc_list = self.data.get("viewer_counts", [])
+        peak_vc = max((v["count"] for v in vc_list), default=0)
         path = os.path.join(self.output_dir, f"page_data_{self.room_id}.json")
         with open(path, "w", encoding="utf-8") as f:
             json.dump(self.data, f, ensure_ascii=False, indent=1)
         log(f"[PW] {self.anchor_name} saved: {len(self.data['danmaku'])} danmaku, "
-            f"{len(self.data['viewer_counts'])} viewer points")
-        return self.data["viewer_counts"], self.data["danmaku"]
+            f"{len(vc_list)} viewer points, peak={peak_vc}")
+        return self.data["viewer_counts"], self.data["danmaku"], peak_vc
 
     def _run(self):
         try:
@@ -619,11 +621,24 @@ def handle_room_end(rid, recordings, anchor_names, now):
     stop_proc(rec.get("proc"))
     stop_proc(rec.get("audio_proc"))
 
-    # Stop Playwright collector and save data
+    # Stop Playwright collector and save data, get peak viewer count
+    peak_vc = 0
     collector = rec.get("collector")
     if collector:
         collector.stop()
-        collector.save_data()
+        _, _, peak_vc = collector.save_data()
+
+    # Update meta.json with peak viewer count
+    meta_path = os.path.join(OUTPUT_DIR, f"{rid}_meta.json")
+    try:
+        if os.path.exists(meta_path):
+            with open(meta_path, "r", encoding="utf-8") as f:
+                meta = json.load(f)
+            meta["peak_viewers"] = peak_vc
+            with open(meta_path, "w", encoding="utf-8") as f:
+                json.dump(meta, f, ensure_ascii=False, indent=1)
+    except Exception:
+        pass
 
     outfile_pattern = rec.get("outfile", "")
     audiofile = rec.get("audiofile", "")
