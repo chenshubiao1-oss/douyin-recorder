@@ -26,3 +26,4 @@ jobs:
         run: python run_browser.py
         env:
           BROWSER_ID: ${{ matrix.id }}
+          ROOM_URL: https://live.douyin.com/919096107345
