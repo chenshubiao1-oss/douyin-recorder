@@ -95,8 +95,6 @@ class DanmakuCollector:
 
     def save_data(self):
         """Write collected data to disk, returns (viewer_counts, danmaku)."""
-        if not self.data["viewer_counts"] and not self.data["danmaku"]:
-            return [], []
         pw_start = self.data.get("pw_start", 0)
         path = os.path.join(self.output_dir, f"page_data_{self.room_id}.json")
         with open(path, "w", encoding="utf-8") as f:
@@ -124,9 +122,12 @@ class DanmakuCollector:
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
                 viewport={"width": 1280, "height": 720}
             )
-            page.goto(f"https://live.douyin.com/{self.room_id}", wait_until="domcontentloaded", timeout=30000)
-            # Wait for page to render
-            time.sleep(3)
+            # Shorter timeout + check stop signal during startup
+            page.goto(f"https://live.douyin.com/{self.room_id}", wait_until="domcontentloaded", timeout=15000)
+            for _ in range(10):
+                if self._stop.is_set():
+                    break
+                time.sleep(0.3)
             _seen_texts = set()
             _last_move = time.time()
             _last_scroll = time.time()
