@@ -253,7 +253,7 @@ def start_recording(url, quality, room_id, anchor_name=""):
         "Referer: https://live.douyin.com/\r\n"
         "Origin: https://live.douyin.com\r\n"
         "Accept: */*\r\n"
-        "Host: pull-flv-l1.douyincdn.com\r\n"
+        "Host: " + url.split("/")[2] + "\r\n"
         "Connection: keep-alive\r\n"
         + cookie_hdr,
     ]
