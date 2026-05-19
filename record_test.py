@@ -97,20 +97,43 @@ async def capture_data(page, store):
                 if txt and txt.strip().isdigit():
                     store.add_viewer(now, int(txt.strip()))
 
-            # Danmaku from chatroom list
+            # Danmaku from DOM - use evaluate to find all visible chat messages
             new_msgs = await page.evaluate("""() => {
-                const list = document.querySelector('[class*="webcast-chatroom___list"]');
-                if (!list) return [];
                 const results = [];
-                for (const child of list.children) {
-                    for (const msgDiv of child.children) {
-                        const text = (msgDiv.textContent || '').trim();
-                        if (text && text.length < 200 && text.length > 2) {
-                            results.push(text);
+                const allDivs = document.querySelectorAll('div');
+                // Find the chat container by looking for many short text divs with Chinese patterns
+                for (const div of allDivs) {
+                    const text = (div.textContent || '').trim();
+                    if (text.length > 2 && text.length < 150 &&
+                        !div.querySelector('*') &&  // leaf node
+                        (text.includes('\uff1a') || /[\u4e00-\u9fff]/.test(text) || text.length > 2)) {
+                        // Check parent for chat-like structure
+                        let p = div.parentElement;
+                        let depth = 0;
+                        while (p && depth < 4) {
+                            const cls = p.className || '';
+                            if (typeof cls === 'string' &&
+                                (cls.includes('chat') || cls.includes('msg') || cls.includes('message') ||
+                                 cls.includes('danmu') || cls.includes('list'))) {
+                                const t = text.replace(/\\s+/g, ' ');
+                                if (t.length > 2) results.push(t);
+                                break;
+                            }
+                            p = p.parentElement;
+                            depth++;
                         }
                     }
                 }
-                return results;
+                // Also try getting from the chatroom list directly
+                const list = document.querySelector('[class*="webcast-chatroom"]');
+                if (list) {
+                    Array.from(list.querySelectorAll('div')).forEach(d => {
+                        const t = (d.textContent || '').trim();
+                        if (t.length > 2 && t.length < 150) results.push(t);
+                    });
+                }
+                // Deduplicate
+                return [...new Set(results)];
             }""")
 
             for msg in new_msgs:
