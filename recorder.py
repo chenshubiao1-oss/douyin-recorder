@@ -118,26 +118,34 @@ class DanmakuCollector:
             p = pw_context.__enter__()
             browser = p.chromium.launch(
                 headless=True,
-                args=["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage"]
+                args=["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage",
+                      "--disable-blink-features=AutomationControlled"]
             )
             page = browser.new_page(
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
                 viewport={"width": 1280, "height": 720}
             )
-            # Load page and wait for live room DOM to appear
-            page.goto(f"https://live.douyin.com/{self.room_id}", wait_until="domcontentloaded", timeout=15000)
+            page.add_init_script('Object.defineProperty(navigator, "webdriver", {get: () => undefined});')
+            page.goto(f"https://live.douyin.com/{self.room_id}", wait_until="domcontentloaded", timeout=20000)
             found_elem = False
-            for _ in range(20):
+            for _ in range(60):
                 if self._stop.is_set():
                     browser.close()
                     pw_context.__exit__(None, None, None)
                     return
-                if page.query_selector('[data-e2e="live-room-audience"]'):
+                el = page.query_selector('[data-e2e="live-room-audience"]')
+                if el:
                     found_elem = True
+                    log(f"[PW] {self.anchor_name} found audience element")
                     break
-                time.sleep(0.5)
+                time.sleep(1.0)
             if not found_elem:
-                log(f"[PW] {self.anchor_name} no live room elements found after 10s wait")
+                log(f"[PW] {self.anchor_name} no audience element after 60s, will try alt")
+                try:
+                    page.wait_for_selector("[class*=live-main]", timeout=3000)
+                    log(f"[PW] {self.anchor_name} live-main found (SSR), continuing with alt selectors")
+                except:
+                    log(f"[PW] {self.anchor_name} even live-main not found, page may not have loaded")
             _seen_texts = set()
             _last_move = time.time()
             _last_scroll = time.time()
@@ -180,27 +188,48 @@ class DanmakuCollector:
                         _last_move = now
                         _last_scroll = now
 
-                    # 1. Viewer count
+                    # 1. Viewer count - try data-e2e first, then fallback to evaluate
+                    vc = None
                     ve = page.query_selector('[data-e2e="live-room-audience"]')
                     if ve:
                         ct = ve.text_content().strip()
-                        # Parse Chinese numbers: "1.2万" = 12000, "1万" = 10000, "9999" = 9999
                         vc = _parse_viewer_count(ct)
-                        if vc is not None:
-                            if not self.data["viewer_counts"] or \
-                               self.data["viewer_counts"][-1]["count"] != vc:
-                                self.data["viewer_counts"].append({
-                                    "count": vc, "offset": offset, "wall_ts": wall_ts
-                                })
-                                _seen_texts.clear()
-                        elif _collect_iter % 30 == 0 and ct:
+                        if vc is None and _collect_iter % 30 == 0 and ct:
                             log(f"[PW] {self.anchor_name} vc unparsed: [{ct[:60]}]")
+                    else:
+                        # Fallback: search via evaluate for viewer count text
+                        try:
+                            vc = page.evaluate('''() => {
+                                const el = document.querySelector("[data-e2e=live-room-audience]");
+                                if(el) return el.textContent.trim();
+                                const all = document.querySelectorAll("*");
+                                for(let e of all){
+                                    let t = e.textContent.trim();
+                                    if(t.match(/^[\d,.万]+$/) && t.length < 10 && e.offsetHeight > 0)
+                                        return t;
+                                }
+                                return null;
+                            }''')
+                            if vc:
+                                vc = _parse_viewer_count(str(vc))
+                        except:
+                            pass
+                        if vc is None and _collect_iter % 120 == 0:
+                            log(f"[PW] {self.anchor_name} no viewer element found (it{_collect_iter})")
 
-                    # 2. Danmaku
+                    if vc is not None:
+                        if not self.data["viewer_counts"] or \
+                           self.data["viewer_counts"][-1]["count"] != vc:
+                            self.data["viewer_counts"].append({
+                                "count": vc, "offset": offset, "wall_ts": wall_ts
+                            })
+                            _seen_texts.clear()
+
+                    # 2. Danmaku - try chatroom selector, fallback to evaluate
+                    dm_before = len(self.data["danmaku"])
                     ce = page.query_selector('[class*="webcast-chatroom"]')
                     if ce:
                         items = ce.query_selector_all(':scope > div')
-                        dm_before = len(self.data["danmaku"])
                         for item in items:
                             text = item.text_content().strip()
                             if not text or text in _seen_texts:
@@ -219,9 +248,34 @@ class DanmakuCollector:
                                 "wall_ts": wall_ts
                             })
                             _seen_texts.add(text)
-                        if _collect_iter % 30 == 0:
-                            dm_new = len(self.data["danmaku"]) - dm_before
-                            log(f"[PW] {self.anchor_name} it{_collect_iter}: chatroom {len(items)} items, +{dm_new} dm")
+                    else:
+                        # Fallback: try to find chatroom via evaluate
+                        try:
+                            items = page.evaluate('''() => {
+                                const cr = document.querySelector("[class*=chatroom]");
+                                if(!cr) return [];
+                                return Array.from(cr.querySelectorAll(":scope > div")).map(d => d.textContent.trim());
+                            }''')
+                            for text in (items or []):
+                                if not text or text in _seen_texts or '：' not in text:
+                                    continue
+                                parts = text.split('：', 1)
+                                msg = parts[1].strip() if len(parts) > 1 else ''
+                                if msg in {"来了", "为主播点赞了", ""} or len(msg) <= 1:
+                                    continue
+                                self.data["danmaku"].append({
+                                    "text": text[:80],
+                                    "offset": offset,
+                                    "wall_ts": wall_ts
+                                })
+                                _seen_texts.add(text)
+                        except:
+                            pass
+
+                    # Log chatroom state every 30 iters
+                    if _collect_iter % 30 == 0:
+                        dm_new = len(self.data["danmaku"]) - dm_before
+                        log(f"[PW] {self.anchor_name} it{_collect_iter}: +{dm_new} dm")
 
                 except Exception as e:
                     try:
