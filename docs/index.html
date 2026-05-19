@@ -115,16 +115,11 @@ let allReleases = null;
 
 async function init() {
 try {
-const [liveRes, roomsRes] = await Promise.all([
-fetch('live_status.json').catch(() => null),
-fetch('rooms.txt').catch(() => null)
-]);
-let liveMap = {};
-if (liveRes && liveRes.ok) {
-try { liveMap = await liveRes.json(); } catch(e) {}
-}
+// rooms.txt from raw GitHub (always available)
 let roomsList = [];
-if (roomsRes && roomsRes.ok) {
+try {
+const roomsRes = await fetch('https://raw.githubusercontent.com/tangwei880620-rgb/douyin-recorder/main/rooms.txt');
+if (roomsRes.ok) {
 const text = await roomsRes.text();
 for (let line of text.split('\n')) {
 line = line.trim();
@@ -133,17 +128,23 @@ const eq = line.indexOf('=');
 if (eq > 0) roomsList.push({ id: line.slice(0, eq).trim(), name: line.slice(eq + 1).trim() });
 }
 }
+} catch(e) {}
+// live_status.json (may not exist yet)
+let liveMap = {};
+try {
+const liveRes = await fetch('https://raw.githubusercontent.com/tangwei880620-rgb/douyin-recorder/main/docs/live_status.json');
+if (liveRes.ok) liveMap = await liveRes.json();
+} catch(e) {}
 roomsData = { live: liveMap, list: roomsList };
 document.getElementById('loading').classList.add('hidden');
 renderRooms();
-// Load transcripts in background
 loadTranscripts();
 loadFiles();
 } catch(e) {
+document.getElementById('loading').classList.add('hidden');
 const errEl = document.getElementById('errorMsg');
 errEl.textContent = '加载失败: ' + e.message;
 errEl.classList.remove('hidden');
-document.getElementById('loading').classList.add('hidden');
 }
 }
 
@@ -214,7 +215,7 @@ el.innerHTML = html;
 
 async function loadTranscripts() {
 try {
-const res = await fetch('transcripts_index.json');
+const res = await fetch('https://raw.githubusercontent.com/tangwei880620-rgb/douyin-recorder/main/docs/transcripts_index.json');
 if (!res.ok) throw new Error('HTTP ' + res.status);
 transcriptsData = await res.json();
 renderTranscripts();
