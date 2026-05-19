@@ -31,5 +31,6 @@ jobs:
           name: test-recording
           path: |
             *.flv
-            viewer_count.json
+            page_data.json
+            *.ass
           retention-days: 7
