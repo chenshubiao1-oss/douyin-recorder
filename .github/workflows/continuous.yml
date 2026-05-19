@@ -1,4 +1,4 @@
-name: 24h连续监控
+name: 24hï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 
 on:
   workflow_dispatch:
@@ -6,7 +6,7 @@ on:
     types: [record_lives]
 
 env:
-  PYTHON_VERSION: '3.11'
+  PYTHON_VERSION. '3.11'
 
 jobs:
   record:
@@ -29,9 +29,9 @@ jobs:
             ~/.cache/torch
             ~/.cache/modelscope
             ~/.cache/huggingface
-          key: deps-v3-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+          key: deps-v3-${{ runner.os }}-$${{ hashFiles('requirements.txt') }}
           restore-keys: |
-            deps-v3-${{ runner.os }}-
+            deps-v3-$${{ runner.os }}-
             deps-v3-
             deps-
             dep-
@@ -48,14 +48,14 @@ jobs:
           mkdir -p /tmp/recordings /tmp/transcripts
       - name: Show TH time
         run: |
-          echo 'GitHub UTC: ' $(date -u '+%Y-%m-%d %H:%M:%S')
-          echo 'Thailand:  ' $(TZ='Asia/Bangkok' date '+%Y-%m-%d %H:%M:%S')
+          echo 'GitHub UTC: $ (date -u +'%Y-%m-%d %H:%M:%S')
+          echo 'Thailand:  $ (TZ='Asia/Bangkok' date +'%Y-%m-%d %H:%M:%S')
       - name: Set locale
         run: |
           sudo locale-gen en_US.UTF-8 || true
           sudo update-locale LANG=en_US.UTF-8 || true
-          echo LANG=en_US.UTF-8 >> "${GITHUB_ENV}"
-          echo LC_ALL=en_US.UTF-8 >> "${GITHUB_ENV}"
+          echo LANG=en_US.UTF-8 >> "\${GITHUR_ENV}"
+          echo LC_ALL=en_US.UTF-8 >> "\${GITHUR_ENV}"
       - name: Debug curl
         run: |
           curl -s -L --max-time 25 -H 'User-Agent: Mozilla/5.0' -H 'Accept: text/html' 'https://live.douyin.com/673814862790' -o /tmp/curl_debug.html
@@ -68,9 +68,10 @@ jobs:
         env:
           CHECK_INTERVAL: 60
           GH_REPO: ${{ github.repository }}
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          GH_TOKEN: ${ secrets.GH_TOKEN }
           GH_RUN_ID: ${{ github.run_id }}
-          DOUYIN_COOKIE: ${{ secrets.DOUYIN_COOKIE }}
+          GH_RUN_NUMBER: ${{ github.run_number }}
+          DOUYIN_COOKIE: ${ secrets.DOUYIN_COOKIE }
           TEST_MODE: ${{ github.event.inputs.test_mode || '' }}
           TEST_ROOM: ${{ github.event.inputs.test_room || '344763580' }}
           TEST_DURATION: ${{ github.event.inputs.test_duration || '60' }}
@@ -79,7 +80,7 @@ jobs:
         run: python3 fallback_upload.py
         env:
           GH_REPO: ${{ github.repository }}
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          GH_TOKEN: ${ secrets.GH_TOKEN }
           GH_RUN_ID: ${{ github.run_id }}
       - name: Self-renew (trigger next run, dedup)
         if: always()
@@ -87,13 +88,13 @@ jobs:
           EXISTING=$(curl -s -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${{ secrets.GH_TOKEN }}" \
             "https://api.github.com/repos/${{ github.repository }}/actions/workflows/continuous.yml/runs?per_page=5&status=in_progress")
-          IN_PROGRESS=$(echo "${EXISTING}" | python3 -c "import sys,json; runs=json.load(sys.stdin).get(\"workflow_runs\",[]); current=\"${{ github.run_id }}\"; other=[r[\"run_number\"] for r in runs if str(r[\"id\"])!=current]; print(len(other))" 2>/dev/null || echo "0")
+          IN_PROGRESS=$(echo "${EXISTING}" | python3 -c "import sys,json; runs=json.load(sys.stdin).get(\"workflow_runs\",[]); current=\"${{ github.run_number }}\"; other=[r[\"run_number\"] for r in runs if str(r[\"run_number\"])!=current]; print(len(other))" 2>/dev/null || echo "0")
           if [ "${IN_PROGRESS}" -gt "0" ]; then
             echo "Skipped: ${IN_PROGRESS} other in-progress run(s) exist"
           else
             curl -s -X POST "https://api.github.com/repos/${{ github.repository }}/actions/workflows/continuous.yml/dispatches" \
               -H "Accept: application/vnd.github+json" \
-              -H "Authorization: Bearer ${{ secrets.GH_TOKEN }}" \
+              -H "Authorization: Bearer ${ secrets.GH_TOKEN }" \
               -H "User-Agent: renew" \
               --data '{"ref":"main"}' && echo "Renew OK" || echo "Renew FAIL"
           fi
