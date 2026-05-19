@@ -1,4 +1,4 @@
-name: 24h�������
+name: 24h连续监控
 
 on:
   workflow_dispatch:
