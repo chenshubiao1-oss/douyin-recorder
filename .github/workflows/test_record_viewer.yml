@@ -1,4 +1,4 @@
-name: Test Record + Viewer Count (5min)
+name: Test Record + Viewer Count (1min)
 on: [workflow_dispatch]
 
 env:
@@ -7,7 +7,7 @@ env:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - name: Setup Python
@@ -24,7 +24,7 @@ jobs:
         run: python record_test.py
         env:
           ROOM_URL: https://live.douyin.com/168465302284
-          DURATION_MIN: '5'
+          DURATION_MIN: '1'
       - name: Upload recording
         uses: actions/upload-artifact@v4
         with:
