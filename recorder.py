@@ -512,7 +512,9 @@ def run():
             # Recording rooms: skip detection
             for rid in sorted(recordings.keys()):
                 safe_rid = room_names.get(rid, rid)[:20]
-                log('[REC] ' + safe_rid + ' 🔴 录制中, 跳过检测')
+                rsec = int(time.time() - recordings[rid]['start'])
+                rh, rm = rsec // 3600, (rsec % 3600) // 60
+                log(f'[REC] {safe_rid} 🔴 已录制{rh}时{rm}分, 跳过检测')
 
             # Force-end recordings that exceeded max duration
             for rid in list(recordings.keys()):
