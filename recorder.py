@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""Douyin live recorder - pure HTTP detection + ffmpeg recording. No Playwright."""
+"""Douyin live recorder - HTTP detection + ffmpeg recording + Playwright danmaku overlay."""
 import os, sys, json, threading, time, subprocess, re, urllib.request, urllib.error, base64, signal, random, concurrent.futures
 
-# Force UTF-8 for all I/O to avoid ascii encoding errors in Actions
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
@@ -29,16 +28,14 @@ _upload_lock = threading.Lock()
 
 
 def log(msg):
-    # Bypass stdout encoding - use buffer write directly to avoid ascii errors
     try:
         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         line = f"[{ts}] {msg}\n"
         sys.stdout.buffer.write(line.encode("utf-8"))
         sys.stdout.buffer.flush()
     except Exception:
-        # Ultimate fallback: raw 字节
-        import os
-        os.write(1, b"[LOGGING_FAILED]\n")
+        import os as _os
+        _os.write(1, b"[LOGGING_FAILED]\n")
 
 
 _ua_pool = [
@@ -49,7 +46,6 @@ _ua_pool = [
 ]
 _ua_idx = 0
 
-
 def _next_ua():
     global _ua_idx
     ua = _ua_pool[_ua_idx % len(_ua_pool)]
@@ -57,8 +53,290 @@ def _next_ua():
     return ua
 
 
+# ─── Playwright data collector ───────────────────────────────────────────
+
+_PW_AVAILABLE = None
+def _pw_check():
+    global _PW_AVAILABLE
+    if _PW_AVAILABLE is None:
+        try:
+            from playwright.sync_api import sync_playwright
+            _PW_AVAILABLE = True
+        except ImportError:
+            _PW_AVAILABLE = False
+    return _PW_AVAILABLE
+
+
+class DanmakuCollector:
+    """Thread-based Playwright collector for viewer counts + danmaku.
+    Collects every 1s, stores absolute wall timestamps for segment matching."""
+
+    def __init__(self, room_id, anchor_name, output_dir):
+        self.room_id = room_id
+        self.anchor_name = anchor_name
+        self.output_dir = output_dir
+        self.data = {"viewer_counts": [], "danmaku": [], "pw_start": 0}
+        self._stop = threading.Event()
+        self._thread = None
+
+    def start(self):
+        if not _pw_check():
+            log(f"[PW] {self.anchor_name} playwright not installed, skipping danmaku")
+            return
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def stop(self):
+        if self._stop.is_set():
+            return
+        self._stop.set()
+        if self._thread:
+            self._thread.join(timeout=15)
+
+    def save_data(self):
+        """Write collected data to disk, returns (viewer_counts, danmaku)."""
+        if not self.data["viewer_counts"] and not self.data["danmaku"]:
+            return [], []
+        pw_start = self.data.get("pw_start", 0)
+        path = os.path.join(self.output_dir, f"page_data_{self.room_id}.json")
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(self.data, f, ensure_ascii=False, indent=1)
+        log(f"[PW] {self.anchor_name} saved: {len(self.data['danmaku'])} danmaku, "
+            f"{len(self.data['viewer_counts'])} viewer points")
+        return self.data["viewer_counts"], self.data["danmaku"]
+
+    def _run(self):
+        try:
+            from playwright.sync_api import sync_playwright
+        except ImportError:
+            return
+
+        self.data["pw_start"] = time.time()
+
+        try:
+            pw_context = sync_playwright()
+            p = pw_context.__enter__()
+            browser = p.chromium.launch(
+                headless=True,
+                args=["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage"]
+            )
+            page = browser.new_page(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
+                viewport={"width": 1280, "height": 720}
+            )
+            page.goto(f"https://live.douyin.com/{self.room_id}", wait_until="domcontentloaded", timeout=30000)
+            # Wait for page to render
+            time.sleep(3)
+            _seen_texts = set()
+
+            while not self._stop.is_set():
+                now = time.time()
+                offset = round(now - self.data["pw_start"], 1)
+                wall_ts = round(now, 1)
+
+                try:
+                    # 1. Viewer count
+                    ve = page.query_selector('[data-e2e="live-room-audience"]')
+                    if ve:
+                        ct = ve.text_content().strip()
+                        c = re.sub(r'\D', '', ct)
+                        if c and c.isdigit():
+                            vc = int(c)
+                            if not self.data["viewer_counts"] or \
+                               self.data["viewer_counts"][-1]["count"] != vc:
+                                self.data["viewer_counts"].append({
+                                    "count": vc, "offset": offset, "wall_ts": wall_ts
+                                })
+                                _seen_texts.clear()
+
+                    # 2. Danmaku
+                    ce = page.query_selector('[class*="webcast-chatroom"]')
+                    if ce:
+                        items = ce.query_selector_all(':scope > div')
+                        for item in items:
+                            text = item.text_content().strip()
+                            if not text or text in _seen_texts:
+                                continue
+                            # Filter: only real chat with colon
+                            if '：' not in text:
+                                continue
+                            parts = text.split('：', 1)
+                            msg = parts[1].strip() if len(parts) > 1 else ''
+                            if msg in {"来了", "为主播点赞了", ""}:
+                                continue
+                            if len(msg) <= 1:
+                                continue
+                            self.data["danmaku"].append({
+                                "text": text[:80],
+                                "offset": offset,
+                                "wall_ts": wall_ts
+                            })
+                            _seen_texts.add(text)
+
+                except Exception:
+                    pass  # next cycle
+
+                time.sleep(1)
+
+            browser.close()
+            p.__exit__(None, None, None)
+            pw_context.__exit__(None, None, None)
+
+        except Exception as e:
+            log(f"[PW] {self.anchor_name} error: {e}")
+
+
+# ─── ASS generation ──────────────────────────────────────────────────────
+
+def _fmt_ts(s):
+    h = int(s // 3600)
+    m = int((s % 3600) // 60)
+    sec = s % 60
+    return f"{h}:{m:02d}:{sec:05.2f}"
+
+def _build_ass(seg_vc, seg_dm, seg_duration):
+    """Build ASS content for one segment's data. Push-up style, 10 max lines."""
+    # Rebase offsets to 0-based for this segment (already done by caller)
+    lines = [
+        "[Script Info]",
+        "ScriptType: v4.00+",
+        "PlayResX: 1920",
+        "PlayResY: 1080",
+        "Collisions: Normal",
+        "",
+        "[V4+ Styles]",
+        "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
+        "Style: ViewerCount,Microsoft YaHei,36,&H00FFFFFF,&H00FFFFFF,&H80000000,&H00000000,1,0,0,0,100,100,0,0,1,2,0,8,50,50,50,1",
+        "Style: Danmaku,Microsoft YaHei,24,&H00FFFFFF,&H00FFFFFF,&H80000000,&H00000000,0,0,0,0,100,100,0,0,1,2,0,1,20,20,150,1",
+        "",
+        "[Events]",
+        "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
+    ]
+
+    # 1. Viewer count - fixed top with inline overrides
+    for i, vp in enumerate(seg_vc):
+        off = vp.get("_offset", vp.get("offset", 0))
+        start = max(0, off - 1.0)
+        if i + 1 < len(seg_vc):
+            end = seg_vc[i + 1].get("_offset", seg_vc[i + 1].get("offset", 0)) - 0.5
+        else:
+            end = seg_duration
+        if end > start:
+            lines.append(
+                f'Dialogue: 0,{_fmt_ts(start)},{_fmt_ts(min(end, seg_duration))},ViewerCount,,0,0,0,,'
+                f'{{\\an8\\move(960,30,960,30,0,0)\\1c&HFFFFFF&\\3c&H0000FF&\\bord8\\shad0}}{vp["count"]} 人在看'
+            )
+
+    # 2. Danmaku push-up: 10 lines max
+    if not seg_dm:
+        return '\n'.join(lines)
+
+    MAX_SLOTS = 10
+    FONT_HEIGHT = 32
+    LEFT_X = 100
+    BOTTOM_Y = 1050
+    APPEAR_FADE = 0.2
+
+    # Build absolute start times for each message
+    msgs = []
+    for dp in seg_dm:
+        off = dp.get("_offset", dp.get("offset", 0))
+        msgs.append({"text": dp.get("text", "")[:60], "enter": max(0, off)})
+
+    # Push-up slot logic
+    for idx, m in enumerate(msgs):
+        enter_time = m["enter"]
+        for shift in range(MAX_SLOTS):
+            slot_start = enter_time
+            if idx + shift < len(msgs):
+                slot_start = max(enter_time, msgs[idx + shift]["enter"])
+            if idx + shift + 1 < len(msgs):
+                slot_end = msgs[idx + shift + 1]["enter"]
+            else:
+                slot_end = seg_duration
+            if slot_end <= slot_start or slot_start >= seg_duration:
+                continue
+            fade = ""
+            if shift == 0 and slot_end - slot_start > APPEAR_FADE:
+                fade = f"\\fad({int(APPEAR_FADE*1000)},0)"
+            y_pos = BOTTOM_Y - shift * FONT_HEIGHT
+            lines.append(
+                f'Dialogue: 1,{_fmt_ts(slot_start)},{_fmt_ts(min(slot_end, seg_duration))},Danmaku,,0,0,0,,'
+                f'{{\\an1{fade}\\move({LEFT_X},{y_pos},{LEFT_X},{y_pos},0,0)'
+                f'\\1c&HFFFFFF&\\3c&H0000FF&\\4c&H0000FF&\\bord4\\shad2}}{m["text"]}'
+            )
+
+    return '\n'.join(lines)
+
+
+def _process_segments(output_dir, room_id, anchor_name, seg_files, rec_start, seg_duration):
+    """Generate ASS per segment and remux MP4 → MKV. Returns list of (mkv_path, mkv_fname)."""
+    data_path = os.path.join(output_dir, f"page_data_{room_id}.json")
+    if not os.path.exists(data_path):
+        log(f"[ASS] {anchor_name} no page_data, skipping")
+        return []
+
+    with open(data_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    vc = data.get("viewer_counts", [])
+    dm = data.get("danmaku", [])
+
+    if not vc and not dm:
+        log(f"[ASS] {anchor_name} empty data, skipping")
+        return []
+
+    mkv_results = []
+    # 5-second tolerance at each boundary
+    TOLERANCE = 5.0
+
+    for seq_idx, (seg_path, seg_fname) in enumerate(seg_files):
+        seg_begin = rec_start + seq_idx * seg_duration
+        seg_end = rec_start + (seq_idx + 1) * seg_duration
+
+        # Filter data: wall_ts within [seg_begin - TOL, seg_end + TOL)
+        seg_vc = [
+            {**p, "_offset": max(0, p["wall_ts"] - seg_begin)}
+            for p in vc if (seg_begin - TOLERANCE) <= p.get("wall_ts", seg_begin) < (seg_end + TOLERANCE)
+        ]
+        seg_dm = [
+            {**d, "_offset": max(0, d["wall_ts"] - seg_begin)}
+            for d in dm if (seg_begin - TOLERANCE) <= d.get("wall_ts", seg_begin) < (seg_end + TOLERANCE)
+        ]
+
+        # Sort by new offset
+        seg_vc.sort(key=lambda x: x["_offset"])
+        seg_dm.sort(key=lambda x: x["_offset"])
+
+        ass_content = _build_ass(seg_vc, seg_dm, seg_duration)
+        ass_path = os.path.join(output_dir, f"{room_id}_{seq_idx:03d}.ass")
+        with open(ass_path, "w", encoding="utf-8") as f:
+            f.write(ass_content)
+
+        mkv_path = seg_path.replace(".mp4", ".mkv")
+        cmd = [FFMPEG, "-y", "-hide_banner",
+               "-i", seg_path,
+               "-f", "ass", "-i", ass_path,
+               "-c:v", "copy", "-c:a", "copy", "-c:s", "ass",
+               "-map", "0:v", "-map", "0:a", "-map", "1",
+               mkv_path]
+        result = subprocess.run(cmd, capture_output=True, timeout=120)
+
+        if os.path.exists(mkv_path):
+            mkv_size = os.path.getsize(mkv_path)
+            mkv_name = os.path.basename(mkv_path)
+            mkv_results.append((mkv_path, mkv_name))
+            log(f"[ASS] {anchor_name} seg{seq_idx} → MKV ({len(seg_dm)} dm, {mvk_size/1024/1024:.1f}MB)")
+        else:
+            log(f"[ASS] {anchor_name} seg{seq_idx} remux FAILED")
+
+    return mkv_results
+
+
+# ─── Core recording functions ────────────────────────────────────────────
+
 def http_check_live(room_id):
-    """HTTP check using shell curl (same as test_9rooms.yml, proven working)."""
+    """HTTP check using shell curl."""
     ua = _next_ua()
     cookie_val = ""
     try:
@@ -79,12 +357,10 @@ def http_check_live(room_id):
         return (False, 'curl_exc:' + str(type(e).__name__), None, None)
 
     if "flv_pull_url" not in html:
-        log("[DBG] " + str(room_id) + " no flv len=" + str(len(html)))
-        # Debug: check cluster
+        log(f"[DBG] {room_id} no flv len={len(html)}")
         m = re.search(r'data-cluster="([^"]+)"', html)
         cluster = m.group(1) if m else 'none'
-        log("[DBG] " + str(room_id) + " cluster=" + cluster)
-        # Retry once on empty body (rate limited)
+        log(f"[DBG] {room_id} cluster={cluster}")
         if len(html) < 100:
             import random as _rnd
             delay = _rnd.uniform(3, 5)
@@ -95,8 +371,7 @@ def http_check_live(room_id):
                 html2 = result.stdout.decode('utf-8', errors='replace')
                 if "flv_pull_url" in html2:
                     log(f"[RETRY] {room_id} success on retry")
-                    html = html2  # use retry result
-                    retried = True
+                    html = html2
             except:
                 pass
         if "flv_pull_url" not in html:
@@ -112,14 +387,10 @@ def http_check_live(room_id):
     if found:
         best = max(found, key=lambda x: priority.get(x[0], 0))
         flv_url = best[1]
-        # Verify this is actually THIS room's stream by checking room_id in SSR JSON.
-        # Douyin flv URLs do NOT contain room_id, but the SSR HTML has a room_id field.
-        rid_str = str(room_id)
-        room_id_found = True
-        if room_id_found:
-            return (True, "ok", flv_url, best[0])
+        return (True, "ok", flv_url, best[0])
 
     return (True, "live_but_no_flv", None, None)
+
 
 def http_get_anchor_name(room_id):
     """Get anchor name from SSR HTML via curl."""
@@ -135,7 +406,6 @@ def http_get_anchor_name(room_id):
     except:
         return None
 
-    # Search for nickname in SSR JSON - try both escaped and unescaped formats
     for m in re.finditer(r'[\\]?"nickname[\\]?"\s*[:=]\s*[\\]?"([^"]+)', html):
         name = m.group(1)
         name = name.rstrip('\\')
@@ -145,7 +415,6 @@ def http_get_anchor_name(room_id):
 
 
 def load_rooms():
-    """Load rooms from local file."""
     rooms = []
     if os.path.exists(ROOMS_FILE):
         with open(ROOMS_FILE, 'r', encoding='utf-8') as f:
@@ -162,8 +431,8 @@ def load_rooms():
     log(f"Loaded {len(rooms)} rooms from {ROOMS_FILE}")
     return rooms
 
+
 def load_rooms_from_github():
-    """Load rooms from GitHub API."""
     try:
         if not GH_REPO or not GH_TOKEN:
             return []
@@ -191,7 +460,6 @@ def load_rooms_from_github():
 
 
 def update_rooms_nickname(anchor_names):
-    """Update rooms.txt with latest anchor names."""
     if not GH_TOKEN or not GH_REPO:
         return
     try:
@@ -221,28 +489,33 @@ def update_rooms_nickname(anchor_names):
             return
         put = urllib.request.Request(
             f"https://api.github.com/repos/{GH_REPO}/contents/{ROOMS_FILE}",
-            data=json.dumps({"message": "update nicknames", "content": base64.b64encode(new_content.encode()).decode(), "sha": sha}).encode(),
+            data=json.dumps({"message": "update nicknames",
+                             "content": base64.b64encode(new_content.encode()).decode(),
+                             "sha": sha}).encode(),
             headers={"Authorization": f"Bearer {GH_TOKEN}", "Content-Type": "application/json"},
             method="PUT")
         urllib.request.urlopen(put, timeout=URLLIB_TIMEOUT)
-        log("rooms.txt 房间昵称已通过 GitHub API 更新")
+        log("rooms.txt nicknames updated via GitHub API")
     except Exception as e:
         log(f"update nicknames error: {e}")
 
 
 def start_recording(url, quality, room_id, anchor_name=""):
+    """Start ffmpeg segmented recording + Playwright data collector."""
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     base = f"{room_id}_{ts}"
-    # mp4: segment into 15-min files (~700MB each) to avoid GitHub Release 2GB limit
+    seg_duration = int(os.environ.get("SEGMENT_DURATION", "900"))
     outfile_pattern = os.path.join(OUTPUT_DIR, f"{base}_%03d.mp4")
     audiofile = os.path.join(OUTPUT_DIR, f"{base}.wav")
-    seg_duration = int(os.environ.get("SEGMENT_DURATION", "900"))  # 15 min default
+
     with open(os.path.join(OUTPUT_DIR, f"{room_id}_meta.json"), "w", encoding="utf-8") as f:
         json.dump({"room_id": room_id, "anchor_name": anchor_name,
-                   "filename_base": base, "audio": f"{base}.wav", "quality": quality}, f)
+                   "filename_base": base, "audio": f"{base}.wav",
+                   "quality": quality, "seg_duration": seg_duration}, f)
+
     log(f"Start recording: {anchor_name}/{base}_%03d.mp4 [{quality}] seg={seg_duration}s + audio")
-    # Build ffmpeg headers for Douyin flv pull authentication
+
     ff_ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     cookie_val = ""
     cookie_hdr = "Cookie: " + cookie_val + "\r\n" if cookie_val else ""
@@ -260,13 +533,18 @@ def start_recording(url, quality, room_id, anchor_name=""):
                              "-f", "segment", "-segment_time", str(seg_duration),
                              "-reset_timestamps", "1", outfile_pattern],
                             stdout=subprocess.DEVNULL, stderr=open(ffmpeg_log, "w"))
-    # Delay audio start by 2s to avoid two ffmpeg processes fighting over the same stream URL
+
     time.sleep(2)
     audio_log = os.path.join(OUTPUT_DIR, f"audio_{room_id}_{ts}.log")
     audio_proc = subprocess.Popen([FFMPEG, "-y", "-loglevel", "warning"] + ff_headers + ["-i", url, "-vn",
                                     "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1", audiofile],
                                    stdout=subprocess.DEVNULL, stderr=open(audio_log, "w"))
-    return proc, outfile_pattern, audio_proc, audiofile
+
+    # Start Playwright danmaku collector
+    collector = DanmakuCollector(room_id, anchor_name, OUTPUT_DIR)
+    collector.start()
+
+    return proc, outfile_pattern, audio_proc, audiofile, collector, seg_duration
 
 
 def stop_proc(proc):
@@ -284,31 +562,35 @@ def handle_room_end(rid, recordings, anchor_names, now):
     rec = recordings[rid]
     stop_proc(rec.get("proc"))
     stop_proc(rec.get("audio_proc"))
+
+    # Stop Playwright collector and save data
+    collector = rec.get("collector")
+    if collector:
+        collector.stop()
+        collector.save_data()
+
     outfile_pattern = rec.get("outfile", "")
     audiofile = rec.get("audiofile", "")
+    seg_duration = rec.get("seg_duration", 900)
     from datetime import datetime as _dt
     start_ts_fmt = _dt.fromtimestamp(rec.get("start", 0)).strftime("%Y%m%d_%H%M%S")
     end_ts_fmt = _dt.fromtimestamp(now).strftime("%Y%m%d_%H%M%S")
     aname = anchor_names.get(rid, rid)
     dirname = OUTPUT_DIR
 
-    # Find segment mp4 files (filename base is encoded in the meta.json or pattern)
-    # outfile_pattern is like /tmp/recordings/roomid_ts_%03d.mp4
     base_prefix = outfile_pattern.replace("_%03d.mp4", "")
     seg_files = sorted([f for f in os.listdir(dirname)
                         if f.startswith(os.path.basename(base_prefix))
                         and f.endswith(".mp4")
                         and os.path.isfile(os.path.join(dirname, f))])
 
-    # Build upload pairs: (filepath, upload_name)
     upload_files = []
     for seg_fname in seg_files:
         seg_path = os.path.join(dirname, seg_fname)
-        # Use segment's mtime for end timestamp
         seg_end = _dt.fromtimestamp(os.path.getmtime(seg_path)).strftime("%Y%m%d_%H%M%S")
-        upload_files.append((seg_path, seg_fname))  # filename already has roomid_ts_seq.mp4 format
+        upload_files.append((seg_path, seg_fname))
 
-    # Handle audio file: rename to include end timestamp
+    # Handle audio
     new_wav = None
     if audiofile and os.path.exists(audiofile):
         wav_base = os.path.splitext(os.path.basename(audiofile))[0]
@@ -318,29 +600,31 @@ def handle_room_end(rid, recordings, anchor_names, now):
             os.rename(audiofile, new_wav)
         except:
             new_wav = audiofile
-        # wav goes FIRST in upload queue (before mp4 segments)
         upload_files.insert(0, (new_wav, os.path.basename(new_wav)))
+
+    # Generate ASS per segment and remux to MKV
+    rec_start = rec.get("start", 0)
+    if rec_start > 0:
+        mkv_files = _process_segments(dirname, rid, aname, upload_files, rec_start, seg_duration)
+        # Add MKV files to upload queue (after WAV, before MP4)
+        for mkv_path, mkv_name in mkv_files:
+            upload_files.append((mkv_path, mkv_name))
 
     if upload_files:
         log(f"[{aname}] Recording ended, enqueuing {len(upload_files)} file(s) for upload")
 
-    # Enqueue upload + dispatch to background thread
     _enqueue_upload_segments(upload_files, start_ts_fmt)
-
     del recordings[rid]
 
 
 def check_renew(elapsed):
-    """Self-renewal at 270min."""
     global _renew_triggered
     if elapsed > 270*60 and not _renew_triggered and GH_REPO and GH_TOKEN:
         try:
-            # Check existing runs first
             check_req = urllib.request.Request(
                 f"https://api.github.com/repos/{GH_REPO}/actions/workflows/275535928/runs?per_page=5&status=in_progress",
                 headers={"Authorization": f"Bearer {GH_TOKEN}"})
             existing = json.loads(urllib.request.urlopen(check_req, timeout=15).read())
-            # IMPORTANT: compare by run_number against GH_RUN_NUMBER, not GH_RUN_ID (numeric id)
             existing_numbers = [r["run_number"] for r in existing.get("workflow_runs", [])]
             other_runs = [n for n in existing_numbers if str(n) != str(GH_RUN_NUMBER)]
             if len(other_runs) > 0:
@@ -370,15 +654,17 @@ def run():
     log(f"Room check: ~10-20s per room (serial) | Max duration: {MAX_DURATION//3600}h")
     if GH_REPO and GH_TOKEN:
         log("Self-renewal + upload: enabled")
+    if _pw_check():
+        log("Playwright available: danmaku overlay ENABLED")
+    else:
+        log("Playwright NOT available: danmaku overlay DISABLED (pip install playwright)")
 
-    # Initial state
     prev_live = {}
     recordings = {}
     anchor_names = {}
     room_names = {r['id']: r['name'] for r in rooms}
     current_room_idx = 0
 
-    # Initial HTTP detection - PARALLEL
     t0 = time.time()
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(rooms)) as ex:
         def init_check(r):
@@ -388,7 +674,7 @@ def run():
         init_results = list(ex.map(init_check, rooms))
     for r, live, reason, url, quality, aname in init_results:
         safe_name = r['name'][:20]
-        log(f"  [{safe_name}]] 直播状态={'在线' if live else '离线'} ({reason})")
+        log(f"  [{safe_name}] 直播状态={'在线' if live else '离线'} ({reason})")
         if live and url:
             log(f"  -> 直播流: {quality} {url[:80]}...")
         prev_live[r['id']] = live
@@ -399,7 +685,7 @@ def run():
             update_rooms_nickname(anchor_names)
     log(f'[init] initial check of {len(rooms)} rooms done in {time.time()-t0:.1f}s')
 
-    # Start recordings for any live rooms (reuse init check results)
+    # Start recordings for any live rooms
     init_live_map = {}
     for r, live, reason, url, quality, aname in init_results:
         init_live_map[r['id']] = (live, url, quality, aname)
@@ -407,12 +693,12 @@ def run():
         rid = r['id']
         live, url, quality, aname = init_live_map.get(rid, (False, None, None, r['name']))
         if live and url:
-            proc, outfile, audio_proc, audiofile = start_recording(url, quality, rid, aname)
+            proc, outfile, audio_proc, audiofile, collector, seg_duration = start_recording(url, quality, rid, aname)
             recordings[rid] = {"proc": proc, "outfile": outfile, "audio_proc": audio_proc,
-                               "audiofile": audiofile, "start": time.time()}
+                               "audiofile": audiofile, "start": time.time(),
+                               "collector": collector, "seg_duration": seg_duration}
             log(f"Started recording {aname}")
 
-    # Main loop - pure HTTP, no Playwright
     log('[init] entering main loop')
     start_time = time.time()
     last_refresh = start_time
@@ -424,7 +710,7 @@ def run():
             elapsed = now - start_time
 
             if elapsed > MAX_DURATION:
-                log(f"Time limit ({elapsed/3600:.1f}h), 退出")
+                log(f"Time limit ({elapsed/3600:.1f}h), exiting")
                 break
 
             # Refresh rooms from GitHub
@@ -432,45 +718,39 @@ def run():
                 new_rooms = load_rooms_from_github()
                 for nr in new_rooms:
                     if nr["id"] not in [r["id"] for r in rooms]:
-                        log(f"新增房间: {nr['id']} = {nr['name']}")
-                        # Initial detection for new room
+                        log(f"New room: {nr['id']} = {nr['name']}")
                         live, reason, url, quality = http_check_live(nr["id"])
                         prev_live[nr["id"]] = live
                         aname = http_get_anchor_name(nr["id"]) or nr["name"]
                         anchor_names[nr["id"]] = aname
                         room_names[nr["id"]] = aname
-                        log(f"  [{aname}]] 直播状态={'在线' if live else '离线'} ({reason})")
+                        log(f"  [{aname}] 直播状态={'在线' if live else '离线'} ({reason})")
                         if live and url:
-                            proc, outfile, audio_proc, audiofile = start_recording(url, quality, nr["id"], aname)
+                            proc, outfile, audio_proc, audiofile, collector, seg_duration = start_recording(url, quality, nr["id"], aname)
                             recordings[nr["id"]] = {"proc": proc, "outfile": outfile, "audio_proc": audio_proc,
-                                                     "audiofile": audiofile, "start": time.time()}
+                                                     "audiofile": audiofile, "start": time.time(),
+                                                     "collector": collector, "seg_duration": seg_duration}
                         update_rooms_nickname(anchor_names)
 
-                # Remove deleted rooms
                 new_ids = {r["id"] for r in new_rooms}
                 for rid in list(prev_live.keys()):
                     if rid not in new_ids:
-                        log(f"房间已移除: {room_names.get(rid, rid)}")
+                        log(f"Room removed: {room_names.get(rid, rid)}")
                         if rid in recordings:
                             handle_room_end(rid, recordings, anchor_names, now)
                         prev_live.pop(rid, None)
                         room_names.pop(rid, None)
                         anchor_names.pop(rid, None)
-
                 rooms = new_rooms
                 last_refresh = now
 
-            # Check for recording process exit first
+            # Check recording process exit
             for rid in list(recordings.keys()):
                 rec = recordings[rid]
                 proc = rec.get("proc")
                 if proc and proc.poll() is not None:
-                    # Log last 3 lines of ffmpeg stderr for debugging
-                    ff_log = rec.get("outfile", "").replace("_%03d.mp4", "")  # approximate log path
-                    log_dir = OUTPUT_DIR
-                    ts_part = str(int(rec.get("start", 0)))
-                    # Try to read ffmpeg log
                     import glob
+                    log_dir = OUTPUT_DIR
                     for f in sorted(glob.glob(os.path.join(log_dir, f"ffmpeg_{rid}_*.log"))):
                         try:
                             lines = open(f, "r").read().strip().split("\n")
@@ -479,56 +759,50 @@ def run():
                         except:
                             pass
                         break
-                    log("[REC] " + str(room_names.get(rid, rid)) + " 🔄 ffmpeg 退出, 检查是否仍直播")
+                    log(f"[REC] {room_names.get(rid, rid)} ffmpeg exited, checking if still live")
                     still_live, l_reason, l_url, l_q = http_check_live(rid)
                     if still_live and l_url:
-                        log("[REC] " + str(room_names.get(rid, rid)) + " 🟢 仍直播 -> 上传分段后重启")
-                        # Save current segment first (upload + dispatch)
+                        log(f"[REC] {room_names.get(rid, rid)} still live -> upload + restart")
                         handle_room_end(rid, recordings, anchor_names, now)
-                        # Now recordings[rid] is deleted, next detection will restart
-                        log("[REC] " + str(room_names.get(rid, rid)) + " 将于下一轮重启录制")
+                        log(f"[REC] {room_names.get(rid, rid)} will restart next cycle")
                     else:
-                        log("[REC] " + str(room_names.get(rid, rid)) + " 🔴 已下播, 结束录制")
+                        log(f"[REC] {room_names.get(rid, rid)} went offline, ending")
                         handle_room_end(rid, recordings, anchor_names, now)
 
-            # HTTP detection for 非录制房间(串行) - SERIAL 1 room/5min to avoid 6285
+            # HTTP detection for non-recording rooms
             detect_rooms = [rid for rid in sorted(prev_live.keys()) if rid not in recordings]
             if detect_rooms:
                 rid = detect_rooms[current_room_idx % len(detect_rooms)]
                 current_room_idx += 1
                 live, reason, url, quality = http_check_live(rid)
                 safe_rid = room_names.get(rid, rid)[:20]
-                log('[' + safe_rid + ']] 直播状态=' + ('在线' if live else '离线') + ' (' + reason + ')')
+                log(f'[{safe_rid}] 直播状态={"在线" if live else "离线"} ({reason})')
                 prev_live[rid] = live
-                # Just transitioned to live
                 if live and rid not in recordings:
                     if url:
                         aname = anchor_names.get(rid, room_names.get(rid, rid))
-                        proc, outfile, audio_proc, audiofile = start_recording(url, quality, rid, aname)
+                        proc, outfile, audio_proc, audiofile, collector, seg_duration = start_recording(url, quality, rid, aname)
                         recordings[rid] = {"proc": proc, "outfile": outfile, "audio_proc": audio_proc,
-                                            "audiofile": audiofile, "start": time.time()}
+                                            "audiofile": audiofile, "start": time.time(),
+                                            "collector": collector, "seg_duration": seg_duration}
                 log(f'  {len(detect_rooms)} non-rec, next in 10-20s')
 
-            # Recording rooms: skip detection
+            # Recording rooms: skip detection, log duration
             for rid in sorted(recordings.keys()):
                 safe_rid = room_names.get(rid, rid)[:20]
                 rsec = int(time.time() - recordings[rid]['start'])
                 rh, rm = rsec // 3600, (rsec % 3600) // 60
-                log(f'[REC] {safe_rid} 🔴 已录制{rh}时{rm}分, 跳过检测')
+                log(f'[REC] {safe_rid} 已录制{rh}时{rm}分, 跳过检测')
 
-            # Force-end recordings that exceeded max duration
             for rid in list(recordings.keys()):
                 if time.time() - recordings[rid]["start"] > MAX_DURATION:
                     handle_room_end(rid, recordings, anchor_names, time.time())
 
-            # Self-renewal check
             check_renew(elapsed)
 
-            # Heartbeat
             if int(elapsed / 60) != int((elapsed - CHECK_INTERVAL) / 60):
-                log(f'[heartbeat] running {int(elapsed/60)}min,  房间数={len(prev_live)}')
+                log(f'[heartbeat] running {int(elapsed/60)}min, rooms={len(prev_live)}')
 
-            # Write live status to GitHub every 60s
             if int(elapsed / 60) != int((elapsed - CHECK_INTERVAL - 1) / 60):
                 try:
                     status_data = {}
@@ -558,21 +832,16 @@ def run():
             log(_tb.format_exc())
             time.sleep(10)
 
-    # Cleanup
     for rid in list(recordings.keys()):
         handle_room_end(rid, recordings, anchor_names, time.time())
-
-    # Wait for pending uploads to finish
     _wait_uploads()
     log("录制结束")
 
 
 def _enqueue_upload_segments(upload_files, start_ts_fmt):
-    """Enqueue upload files (segments + wav) to background thread, one by one."""
     global _upload_queue, _upload_thread
     if not upload_files:
         return
-    # Each file gets its own queue entry so uploads are serially ordered
     with _upload_lock:
         for fpath, fname in upload_files:
             _upload_queue.append((fpath, fname))
@@ -582,21 +851,19 @@ def _enqueue_upload_segments(upload_files, start_ts_fmt):
 def _start_upload_worker():
     global _upload_thread
     if _upload_thread and _upload_thread.is_alive():
-        return  # worker already running, queue will drain automatically
+        return
     t = threading.Thread(target=_upload_worker, daemon=True)
     t.start()
     _upload_thread = t
 
 
 def _upload_worker():
-    """Background worker: upload files serially, trigger dispatch on wav completion."""
     while True:
         with _upload_lock:
             if not _upload_queue:
                 break
             fpath, fname = _upload_queue.pop(0)
         ok = _upload_file(fpath, fname)
-        # Trigger transcription dispatch right after wav upload
         if ok and fname.endswith('.wav') and GH_REPO and GH_TOKEN:
             try:
                 dispatch = urllib.request.Request(
@@ -611,15 +878,12 @@ def _upload_worker():
 
 
 def _upload_file(fpath, upload_name):
-    """Upload a single file to Release. Returns True on success."""
     if not os.path.exists(fpath) or not GH_REPO or not GH_TOKEN:
         return False
     try:
         with open(fpath, 'rb') as f:
             content = f.read()
-        # Use the filename (without path) as the release tag base
         fname_only = os.path.basename(upload_name) if not upload_name.startswith('/') else upload_name
-        # No start_ts needed since seg filename already has timestamp
         tag = fname_only
         release_url = f"https://api.github.com/repos/{GH_REPO}/releases"
         rel = json.loads(urllib.request.urlopen(
@@ -638,14 +902,13 @@ def _upload_file(fpath, upload_name):
                     headers={"Authorization": f"Bearer {GH_TOKEN}", "Content-Type": "application/json"}),
                 timeout=URLLIB_TIMEOUT).read())
             url = r2["upload_url"].replace("{?name,label}", f"?name={fname_only}")
-        # Simple full-file upload (no chunking)
         total_size = len(content)
         urllib.request.urlopen(urllib.request.Request(url,
             data=content,
             headers={"Authorization": f"Bearer {GH_TOKEN}", "Content-Type": "application/octet-stream",
                      "Content-Length": str(total_size)}),
             timeout=600)
-        log(f"已上传 {fname_only} ({total_size/1024/1024:.1f}MB) to Release")
+        log(f"Uploaded {fname_only} ({total_size/1024/1024:.1f}MB) to Release")
         return True
     except Exception as e:
         log(f"Upload error {fname_only}: {e}")
@@ -653,29 +916,13 @@ def _upload_file(fpath, upload_name):
 
 
 def _wait_uploads():
-    """Wait for all queued background uploads to finish."""
     global _upload_thread
     if _upload_thread and _upload_thread.is_alive():
         log("Waiting for background uploads to finish...")
         _upload_thread.join(timeout=1200)
 
 
-def _trigger_dispatch():
-    if GH_REPO and GH_TOKEN:
-        try:
-            dispatch = urllib.request.Request(
-                f"https://api.github.com/repos/{GH_REPO}/dispatches",
-                data=json.dumps({"event_type": "transcribe_ready"}).encode(),
-                headers={"Authorization": f"Bearer {GH_TOKEN}", "Content-Type": "application/json"},
-                method="POST")
-            urllib.request.urlopen(dispatch, timeout=URLLIB_TIMEOUT)
-            log("Triggered transcription dispatch")
-        except Exception as e:
-            log(f"Trigger dispatch error: {e}")
-
-
 def _write_status_json(status_data):
-    """Write live status JSON to GitHub repository (docs/live_status.json)."""
     if not GH_REPO or not GH_TOKEN:
         return
     path = 'docs/live_status.json'
@@ -683,7 +930,6 @@ def _write_status_json(status_data):
     b64 = base64.b64encode(body.encode('utf-8')).decode('utf-8')
     for attempt in range(3):
         try:
-            # Get current sha first
             req = urllib.request.Request(
                 f'https://api.github.com/repos/{GH_REPO}/contents/{path}',
                 headers={'Authorization': f'Bearer {GH_TOKEN}', 'Accept': 'application/vnd.github+json'})
@@ -711,7 +957,7 @@ def _write_status_json(status_data):
                 headers={'Authorization': f'Bearer {GH_TOKEN}', 'Content-Type': 'application/json'},
                 method='PUT')
             urllib.request.urlopen(put_req, timeout=30)
-            return  # success
+            return
         except urllib.error.HTTPError as he:
             if he.code == 409:
                 log(f'_write_status_json sha conflict, retry {attempt+1}')
@@ -725,7 +971,6 @@ def _write_status_json(status_data):
 
 
 def fallback_upload():
-    """Upload any untranscribed WAV files to Release."""
     if not os.path.exists(OUTPUT_DIR) or not GH_REPO or not GH_TOKEN:
         return
     from pathlib import Path
@@ -747,7 +992,7 @@ def fallback_upload():
             log("Triggered transcription check")
         except:
             pass
-        break  # one at a time
+        break
 
 
 if __name__ == "__main__":
@@ -755,4 +1000,3 @@ if __name__ == "__main__":
         fallback_upload()
     else:
         run()
-
