@@ -135,6 +135,7 @@ class DanmakuCollector:
             _last_move = time.time()
             _last_scroll = time.time()
             _last_refresh = time.time()
+            log(f"[PW] {self.anchor_name} collector started")
 
             while not self._stop.is_set():
                 now = time.time()
