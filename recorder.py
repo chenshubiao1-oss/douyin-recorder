@@ -257,13 +257,17 @@ def start_recording(url, quality, room_id, anchor_name=""):
         "Connection: keep-alive\r\n"
         + cookie_hdr,
     ]
+    ffmpeg_log = os.path.join(OUTPUT_DIR, f"ffmpeg_{room_id}_{ts}.log")
     proc = subprocess.Popen([FFMPEG, "-y", "-loglevel", "warning"] + ff_headers + ["-i", url, "-c", "copy",
                              "-f", "segment", "-segment_time", str(seg_duration),
                              "-reset_timestamps", "1", outfile_pattern],
-                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                            stdout=subprocess.DEVNULL, stderr=open(ffmpeg_log, "w"))
+    # Delay audio start by 2s to avoid two ffmpeg processes fighting over the same stream URL
+    time.sleep(2)
+    audio_log = os.path.join(OUTPUT_DIR, f"audio_{room_id}_{ts}.log")
     audio_proc = subprocess.Popen([FFMPEG, "-y", "-loglevel", "warning"] + ff_headers + ["-i", url, "-vn",
                                     "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1", audiofile],
-                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                                   stdout=subprocess.DEVNULL, stderr=open(audio_log, "w"))
     return proc, outfile_pattern, audio_proc, audiofile
 
 
@@ -460,6 +464,20 @@ def run():
                 rec = recordings[rid]
                 proc = rec.get("proc")
                 if proc and proc.poll() is not None:
+                    # Log last 3 lines of ffmpeg stderr for debugging
+                    ff_log = rec.get("outfile", "").replace("_%03d.mp4", "")  # approximate log path
+                    log_dir = OUTPUT_DIR
+                    ts_part = str(int(rec.get("start", 0)))
+                    # Try to read ffmpeg log
+                    import glob
+                    for f in sorted(glob.glob(os.path.join(log_dir, f"ffmpeg_{rid}_*.log"))):
+                        try:
+                            lines = open(f, "r").read().strip().split("\n")
+                            if lines:
+                                log(f"[FFERR] {room_names.get(rid, rid)} last lines: {lines[-3:]}")
+                        except:
+                            pass
+                        break
                     log("[REC] " + str(room_names.get(rid, rid)) + " 🔄 ffmpeg 退出, 检查是否仍直播")
                     still_live, l_reason, l_url, l_q = http_check_live(rid)
                     if still_live and l_url:
