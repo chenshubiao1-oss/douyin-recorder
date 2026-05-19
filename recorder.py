@@ -205,7 +205,6 @@ class DanmakuCollector:
                 time.sleep(random.uniform(0.8, 1.3))
 
             browser.close()
-            p.__exit__(None, None, None)
             pw_context.__exit__(None, None, None)
 
         except Exception as e:
@@ -352,7 +351,7 @@ def _process_segments(output_dir, room_id, anchor_name, seg_files, rec_start, se
             mkv_size = os.path.getsize(mkv_path)
             mkv_name = os.path.basename(mkv_path)
             mkv_results.append((mkv_path, mkv_name))
-            log(f"[ASS] {anchor_name} seg{seq_idx} → MKV ({len(seg_dm)} dm, {mvk_size/1024/1024:.1f}MB)")
+            log(f"[ASS] {anchor_name} seg{seq_idx} → MKV ({len(seg_dm)} dm, {mkv_size/1024/1024:.1f}MB)")
         else:
             log(f"[ASS] {anchor_name} seg{seq_idx} remux FAILED")
 
