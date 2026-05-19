@@ -128,6 +128,9 @@ class DanmakuCollector:
             # Wait for page to render
             time.sleep(3)
             _seen_texts = set()
+            _last_move = time.time()
+            _last_scroll = time.time()
+            _last_refresh = time.time()
 
             while not self._stop.is_set():
                 now = time.time()
@@ -135,6 +138,30 @@ class DanmakuCollector:
                 wall_ts = round(now, 1)
 
                 try:
+                    # Human-like mouse movement every 15-40s
+                    if now - _last_move > random.uniform(15, 40):
+                        x = random.randint(200, 1000)
+                        y = random.randint(100, 600)
+                        page.mouse.move(x, y, steps=random.randint(3, 8))
+                        _last_move = now
+
+                    # Scroll chat to bottom every 20-50s
+                    if now - _last_scroll > random.uniform(20, 50):
+                        page.evaluate('() => {const el=document.querySelector("[class*=webcast-chatroom]");if(el)el.scrollTop=el.scrollHeight;}')
+                        time.sleep(random.uniform(0.5, 1.5))
+                        _last_scroll = now
+
+                    # Refresh page every 25-35 min
+                    if now - _last_refresh > random.uniform(1500, 2100):
+                        try:
+                            page.goto(f"https://live.douyin.com/{self.room_id}", wait_until="domcontentloaded", timeout=30000)
+                            time.sleep(random.uniform(2, 4))
+                        except:
+                            pass
+                        _last_refresh = now
+                        _last_move = now
+                        _last_scroll = now
+
                     # 1. Viewer count
                     ve = page.query_selector('[data-e2e="live-room-audience"]')
                     if ve:
@@ -157,7 +184,6 @@ class DanmakuCollector:
                             text = item.text_content().strip()
                             if not text or text in _seen_texts:
                                 continue
-                            # Filter: only real chat with colon
                             if '：' not in text:
                                 continue
                             parts = text.split('：', 1)
@@ -174,9 +200,9 @@ class DanmakuCollector:
                             _seen_texts.add(text)
 
                 except Exception:
-                    pass  # next cycle
+                    pass
 
-                time.sleep(1)
+                time.sleep(random.uniform(0.8, 1.3))
 
             browser.close()
             p.__exit__(None, None, None)
