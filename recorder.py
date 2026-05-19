@@ -402,7 +402,13 @@ def _process_segments(output_dir, room_id, anchor_name, seg_files, rec_start, se
     # 5-second tolerance at each boundary
     TOLERANCE = 5.0
 
-    for seq_idx, (seg_path, seg_fname) in enumerate(seg_files):
+    # Only process MP4 files (not WAV/other) so seq_idx matches segment position
+    mp4_files = [(p, f) for p, f in seg_files if f.endswith('.mp4')]
+    if not mp4_files:
+        log(f"[ASS] {anchor_name} no MP4 segments found")
+        return []
+
+    for seq_idx, (seg_path, seg_fname) in enumerate(mp4_files):
         seg_begin = rec_start + seq_idx * seg_duration
         seg_end = rec_start + (seq_idx + 1) * seg_duration
 
