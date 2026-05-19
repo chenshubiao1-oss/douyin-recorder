@@ -1,4 +1,4 @@
-name: 24h连续监控
+name: 24h�������
 
 on:
   workflow_dispatch:
@@ -26,10 +26,11 @@ jobs:
         with:
           path: |
             ~/.cache/pip
+            ~/.cache/ms-playwright
             ~/.cache/torch
             ~/.cache/modelscope
             ~/.cache/huggingface
-          key: deps-v3-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+          key: deps-v4-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
           restore-keys: |
             deps-v3-${{ runner.os }}-
             deps-v3-
@@ -45,7 +46,12 @@ jobs:
           pip install --timeout 120 torchaudio --index-url https://download.pytorch.org/whl/cpu
           pip install --timeout 120 funasr
           pip install --timeout 120 requests
+          pip install --timeout 120 playwright
           mkdir -p /tmp/recordings /tmp/transcripts
+      - name: Install Playwright browsers
+        run: python -m playwright install chromium
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ~/.cache/ms-playwright
       - name: Show TH time
         run: |
           echo 'GitHub UTC: ' $(date -u '+%Y-%m-%d %H:%M:%S')
