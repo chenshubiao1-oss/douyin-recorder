@@ -917,7 +917,14 @@ def run():
                 safe_rid = room_names.get(rid, rid)[:20]
                 rsec = int(time.time() - recordings[rid]['start'])
                 rh, rm = rsec // 3600, (rsec % 3600) // 60
-                log(f'[REC] {safe_rid} 已录制🔴{rh}时{rm}分, 跳过检测')
+                # Show current viewer count from collector
+                _coll = recordings[rid].get('collector')
+                _vc = ''
+                if _coll:
+                    _vcl = _coll.data.get('viewer_counts', [])
+                    if _vcl:
+                        _vc = f' [{_vcl[-1]["count"]}人]'
+                log(f'[REC] {safe_rid} 已录制🔴{rh}时{rm}分{_vc}, 跳过检测')
 
             for rid in list(recordings.keys()):
                 if time.time() - recordings[rid]["start"] > MAX_DURATION:
