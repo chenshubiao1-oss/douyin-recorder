@@ -220,8 +220,8 @@ def _fmt_ts(s):
     return f"{h}:{m:02d}:{sec:05.2f}"
 
 def _build_ass(seg_vc, seg_dm, seg_duration):
-    """Build ASS content for one segment's data. Push-up style, 10 max lines."""
-    # Rebase offsets to 0-based for this segment (already done by caller)
+    """Build ASS content. Simple ticker: 5s per danmaku, 10 rows, push-up."""
+
     lines = [
         "[Script Info]",
         "ScriptType: v4.00+",
@@ -231,68 +231,50 @@ def _build_ass(seg_vc, seg_dm, seg_duration):
         "",
         "[V4+ Styles]",
         "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-        "Style: ViewerCount,Microsoft YaHei,36,&H00FFFFFF,&H00FFFFFF,&H80000000,&H00000000,1,0,0,0,100,100,0,0,1,2,0,8,50,50,50,1",
-        "Style: Danmaku,Microsoft YaHei,24,&H00FFFFFF,&H00FFFFFF,&H80000000,&H00000000,0,0,0,0,100,100,0,0,1,2,0,1,20,20,150,1",
+        "Style: Danmaku,Microsoft YaHei,24,"+chr(38)+"H00FFFFFF,"+chr(38)+"H00FFFFFF,"+chr(38)+"H00000000,"+chr(38)+"H00000000,0,0,0,0,100,100,0,0,1,3,0,1,20,20,150,1",
+        "Style: ViewerCount,Microsoft YaHei,36,"+chr(38)+"H00FFFFFF,"+chr(38)+"H00FFFFFF,"+chr(38)+"H80000000,"+chr(38)+"H00000000,1,0,0,0,100,100,0,0,1,2,0,8,50,50,50,1",
         "",
         "[Events]",
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
     ]
 
-    # 1. Viewer count - fixed top with inline overrides
+    # Viewer count at top center, each shown for 5s
     for i, vp in enumerate(seg_vc):
-        off = vp.get("_offset", vp.get("offset", 0))
-        start = max(0, off - 1.0)
-        if i + 1 < len(seg_vc):
-            end = seg_vc[i + 1].get("_offset", seg_vc[i + 1].get("offset", 0)) - 0.5
-        else:
-            end = seg_duration
-        if end > start:
+        t = vp.get("_offset", vp.get("offset", 0))
+        s = max(0, t - 1.0)
+        e = min(s + 5.0, seg_duration)
+        if e > s:
             lines.append(
-                f'Dialogue: 0,{_fmt_ts(start)},{_fmt_ts(min(end, seg_duration))},ViewerCount,,0,0,0,,'
-                f'{{\\an8\\move(960,30,960,30,0,0)\\1c&HFFFFFF&\\3c&H0000FF&\\bord8\\shad0}}{vp["count"]} 人在看'
+                "Dialogue: 0," + _fmt_ts(s) + "," + _fmt_ts(e) + ",ViewerCount,,0,0,0,,"
+                "{\\an8\\move(960,30,960,30,0,0)\\1c" + chr(38) + "HFFFFFF" + chr(38) + "\\3c" + chr(38) + "H0000FF" + chr(38) + "\\bord8\\shad0}" + str(vp["count"]) + " \u4eba\u5728\u770b"
             )
 
-    # 2. Danmaku push-up: 10 lines max
     if not seg_dm:
         return '\n'.join(lines)
 
-    MAX_SLOTS = 10
-    FONT_HEIGHT = 32
-    LEFT_X = 100
+    # Danmaku: simple row cycle, 5s each
+    DUR = 5.0
+    ROWS = 10
+    ROW_H = 34
     BOTTOM_Y = 1050
-    APPEAR_FADE = 0.2
 
-    # Build absolute start times for each message
-    msgs = []
-    for dp in seg_dm:
-        off = dp.get("_offset", dp.get("offset", 0))
-        msgs.append({"text": dp.get("text", "")[:60], "enter": max(0, off)})
-
-    # Push-up slot logic
-    for idx, m in enumerate(msgs):
-        enter_time = m["enter"]
-        for shift in range(MAX_SLOTS):
-            slot_start = enter_time
-            if idx + shift < len(msgs):
-                slot_start = max(enter_time, msgs[idx + shift]["enter"])
-            if idx + shift + 1 < len(msgs):
-                slot_end = msgs[idx + shift + 1]["enter"]
-            else:
-                slot_end = seg_duration
-            if slot_end <= slot_start or slot_start >= seg_duration:
-                continue
-            fade = ""
-            if shift == 0 and slot_end - slot_start > APPEAR_FADE:
-                fade = f"\\fad({int(APPEAR_FADE*1000)},0)"
-            y_pos = BOTTOM_Y - shift * FONT_HEIGHT
-            lines.append(
-                f'Dialogue: 1,{_fmt_ts(slot_start)},{_fmt_ts(min(slot_end, seg_duration))},Danmaku,,0,0,0,,'
-                f'{{\\an1{fade}\\move({LEFT_X},{y_pos},{LEFT_X},{y_pos},0,0)'
-                f'\\1c&HFFFFFF&\\3c&H0000FF&\\4c&H0000FF&\\bord4\\shad2}}{m["text"]}'
-            )
+    for idx, dp in enumerate(seg_dm):
+        t = dp.get("_offset", dp.get("offset", 0))
+        if t < 0 or t >= seg_duration:
+            continue
+        txt = (dp.get("text", "") or "")[:60].replace("{", "").replace("}", "")
+        if not txt.strip():
+            continue
+        row = idx % ROWS
+        y = BOTTOM_Y - row * ROW_H
+        s = max(0, t - 0.1)
+        e = min(s + DUR, seg_duration)
+        lines.append(
+            "Dialogue: 1," + _fmt_ts(s) + "," + _fmt_ts(e) + ",Danmaku,,0,0,0,,"
+            "{\\an1\\move(100," + str(y) + ",100," + str(y) + ",0,0)\\fade(255,0,255,0,0,0," + str(int(DUR*1000)) + ")}" + txt
+        )
 
     return '\n'.join(lines)
-
 
 def _process_segments(output_dir, room_id, anchor_name, seg_files, rec_start, seg_duration):
     """Generate ASS per segment and remux MP4 → MKV. Returns list of (mkv_path, mkv_fname)."""
