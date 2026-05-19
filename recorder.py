@@ -236,7 +236,7 @@ def _build_ass(seg_vc, seg_dm, seg_duration):
         "",
         "[V4+ Styles]",
         "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-        "Style: Danmaku,Microsoft YaHei,24,"+chr(38)+"H00FFFFFF,"+chr(38)+"H00FFFFFF,"+chr(38)+"H00000000,"+chr(38)+"H00000000,0,0,0,0,100,100,0,0,1,3,0,1,20,20,150,1",
+        "Style: Danmaku,Microsoft YaHei,24,"+chr(38)+"H00FFFFFF,"+chr(38)+"H00FFFFFF,"+chr(38)+"H00000000,"+chr(38)+"H00FFFFFF,0,0,0,0,100,100,0,0,1,1,4,1,20,20,150,1",
         "Style: ViewerCount,Microsoft YaHei,36,"+chr(38)+"H00FFFFFF,"+chr(38)+"H00FFFFFF,"+chr(38)+"H80000000,"+chr(38)+"H00000000,1,0,0,0,100,100,0,0,1,2,0,8,50,50,50,1",
         "",
         "[Events]",
