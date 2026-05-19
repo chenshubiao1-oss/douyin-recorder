@@ -126,26 +126,22 @@ class DanmakuCollector:
                 viewport={"width": 1280, "height": 720}
             )
             page.add_init_script('Object.defineProperty(navigator, "webdriver", {get: () => undefined});')
-            page.goto(f"https://live.douyin.com/{self.room_id}", wait_until="domcontentloaded", timeout=20000)
-            found_elem = False
-            for _ in range(60):
-                if self._stop.is_set():
-                    browser.close()
-                    pw_context.__exit__(None, None, None)
-                    return
-                el = page.query_selector('[data-e2e="live-room-audience"]')
-                if el:
-                    found_elem = True
-                    log(f"[PW] {self.anchor_name} found audience element")
-                    break
-                time.sleep(1.0)
-            if not found_elem:
-                log(f"[PW] {self.anchor_name} no audience element after 60s, will try alt")
-                try:
-                    page.wait_for_selector("[class*=live-main]", timeout=3000)
-                    log(f"[PW] {self.anchor_name} live-main found (SSR), continuing with alt selectors")
-                except:
-                    log(f"[PW] {self.anchor_name} even live-main not found, page may not have loaded")
+            page.goto(f"https://live.douyin.com/{self.room_id}", wait_until="domcontentloaded", timeout=15000)
+            # Quick debug log
+            try:
+                _pt = page.title()
+                _pu = page.url
+                log(f"[PW] {self.anchor_name} page title=[{_pt}] url=[{_pu[:60]}]")
+            except:
+                pass
+            # Check for SSR live room (live-main is in SSR HTML)
+            try:
+                page.wait_for_selector("[class*=live-main]", timeout=5000)
+                log(f"[PW] {self.anchor_name} SSR live room found")
+            except:
+                log(f"[PW] {self.anchor_name} SSR live room NOT found (may be blocked/captcha)")
+            # Wait briefly for possible hydration
+            time.sleep(3.0)
             _seen_texts = set()
             _last_move = time.time()
             _last_scroll = time.time()
@@ -188,34 +184,34 @@ class DanmakuCollector:
                         _last_move = now
                         _last_scroll = now
 
-                    # 1. Viewer count - try data-e2e first, then fallback to evaluate
+                    # 1. Viewer count - use evaluate to robustly find it
                     vc = None
-                    ve = page.query_selector('[data-e2e="live-room-audience"]')
-                    if ve:
-                        ct = ve.text_content().strip()
-                        vc = _parse_viewer_count(ct)
-                        if vc is None and _collect_iter % 30 == 0 and ct:
-                            log(f"[PW] {self.anchor_name} vc unparsed: [{ct[:60]}]")
-                    else:
-                        # Fallback: search via evaluate for viewer count text
-                        try:
-                            vc = page.evaluate('''() => {
-                                const el = document.querySelector("[data-e2e=live-room-audience]");
-                                if(el) return el.textContent.trim();
-                                const all = document.querySelectorAll("*");
-                                for(let e of all){
-                                    let t = e.textContent.trim();
-                                    if(t.match(/^[\d,.万]+$/) && t.length < 10 && e.offsetHeight > 0)
-                                        return t;
-                                }
-                                return null;
-                            }''')
-                            if vc:
-                                vc = _parse_viewer_count(str(vc))
-                        except:
-                            pass
-                        if vc is None and _collect_iter % 120 == 0:
-                            log(f"[PW] {self.anchor_name} no viewer element found (it{_collect_iter})")
+                    try:
+                        vc = page.evaluate('''() => {
+                            var el = document.querySelector("[data-e2e=live-room-audience]");
+                            if(el) return el.textContent.trim();
+                            var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+                            var texts = [];
+                            while(walker.nextNode()){
+                                var t = walker.currentNode.textContent.trim();
+                                if(t.length > 20 || t.length < 1) continue;
+                                var p = walker.currentNode.parentElement;
+                                if(p && p.offsetHeight === 0) continue;
+                                texts.push(t);
+                            }
+                            for(var t of texts){
+                                t = t.replace(/,/g,'');
+                                if(/^\\d{1,5}$/.test(t) && parseInt(t) > 0) return t;
+                                if(/^\\d+\\.\\d万$/.test(t) || /^\\d+万$/.test(t)) return t;
+                            }
+                            return null;
+                        }''')
+                        if vc and isinstance(vc, str):
+                            vc = _parse_viewer_count(vc)
+                    except Exception:
+                        pass
+                    if vc is None and _collect_iter % 120 == 0:
+                        log(f"[PW] {self.anchor_name} no viewer count at it{_collect_iter}")
 
                     if vc is not None:
                         if not self.data["viewer_counts"] or \
@@ -225,22 +221,37 @@ class DanmakuCollector:
                             })
                             _seen_texts.clear()
 
-                    # 2. Danmaku - try chatroom selector, fallback to evaluate
+                    # 2. Danmaku - use evaluate to robustly find chat messages
                     dm_before = len(self.data["danmaku"])
-                    ce = page.query_selector('[class*="webcast-chatroom"]')
-                    if ce:
-                        items = ce.query_selector_all(':scope > div')
-                        for item in items:
-                            text = item.text_content().strip()
-                            if not text or text in _seen_texts:
-                                continue
-                            if '：' not in text:
+                    try:
+                        texts = page.evaluate('''() => {
+                            var el = document.querySelector("[class*=chatroom]");
+                            if(!el) return [];
+                            var divs = el.querySelectorAll(":scope > div");
+                            var result = [];
+                            for(var d of divs){
+                                var t = d.textContent.trim();
+                                if(t && t.indexOf("：") >= 0) result.push(t);
+                            }
+                            if(result.length) return result;
+                            var all = document.querySelectorAll("*");
+                            var best = [];
+                            for(var e of all){
+                                var t = e.textContent.trim();
+                                if(t.indexOf("：") < 0 || t.length > 100) continue;
+                                if(e.offsetHeight === 0) continue;
+                                var parts = t.split("：");
+                                if(parts[0].length > 20 || parts[1] && parts[1].length > 60) continue;
+                                best.push(t);
+                            }
+                            return best.slice(0, 50);
+                        }''')
+                        for text in (texts or []):
+                            if not text or text in _seen_texts or '：' not in text:
                                 continue
                             parts = text.split('：', 1)
                             msg = parts[1].strip() if len(parts) > 1 else ''
-                            if msg in {"来了", "为主播点赞了", ""}:
-                                continue
-                            if len(msg) <= 1:
+                            if msg in {"来了", "为主播点赞了", ""} or len(msg) <= 1:
                                 continue
                             self.data["danmaku"].append({
                                 "text": text[:80],
@@ -248,29 +259,8 @@ class DanmakuCollector:
                                 "wall_ts": wall_ts
                             })
                             _seen_texts.add(text)
-                    else:
-                        # Fallback: try to find chatroom via evaluate
-                        try:
-                            items = page.evaluate('''() => {
-                                const cr = document.querySelector("[class*=chatroom]");
-                                if(!cr) return [];
-                                return Array.from(cr.querySelectorAll(":scope > div")).map(d => d.textContent.trim());
-                            }''')
-                            for text in (items or []):
-                                if not text or text in _seen_texts or '：' not in text:
-                                    continue
-                                parts = text.split('：', 1)
-                                msg = parts[1].strip() if len(parts) > 1 else ''
-                                if msg in {"来了", "为主播点赞了", ""} or len(msg) <= 1:
-                                    continue
-                                self.data["danmaku"].append({
-                                    "text": text[:80],
-                                    "offset": offset,
-                                    "wall_ts": wall_ts
-                                })
-                                _seen_texts.add(text)
-                        except:
-                            pass
+                    except Exception:
+                        pass
 
                     # Log chatroom state every 30 iters
                     if _collect_iter % 30 == 0:
