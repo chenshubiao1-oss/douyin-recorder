@@ -1,18 +1,40 @@
 import asyncio, os, re, time, json, subprocess, urllib.request
 
-ROOM_URL = os.environ.get("ROOM_URL", "https://live.douyin.com/852733918841")
-DURATION_MIN = int(os.environ.get("DURATION_MIN", "5"))
+ROOM_URL = os.environ.get("ROOM_URL")
+if not ROOM_URL:
+    print("ERROR: ROOM_URL not set")
+    exit(1)
+
 ROOM_SHORT = ROOM_URL.rstrip("/").split("/")[-1]
+DURATION_MIN = int(os.environ.get("DURATION_MIN", "1"))
+
 print(f"Room: {ROOM_SHORT}, Duration: {DURATION_MIN}min")
 
 from playwright.async_api import async_playwright
 
-# "在线观众" in UTF-8 bytes
-ZH_ONLINE_BYTES = b"\xe5\x9c\xa8\xe7\xba\xbf\xe8\xa7\x82\xe4\xbc\x97"
-VIEWER_RE = re.compile(rb"(\d+)" + ZH_ONLINE_BYTES)
+ZH_BYTES = b"\xe5\x9c\xa8\xe7\xba\xbf\xe8\xa7\x82\xe4\xbc\x97"
+VIEWER_RE = re.compile(rb"(\d+)" + ZH_BYTES)
+
+QUALITY = {"FULL_HD1": 4, "HD1": 3, "SD1": 2, "SD2": 1}
 
 
-async def get_tokens():
+def extract_stream_url(html):
+    """Extract flv_pull_url from SSR HTML (same as main recorder.py)."""
+    found = []
+    for m in re.finditer(
+        r'["\\]+(FULL_HD1|HD1|SD1|SD2)["\\]+\s*[:=]\s*["\\]+(https?://[^"]+)',
+        html,
+    ):
+        url = m.group(2).replace("\\/", "/").replace("\\u0026", "&").replace("\\u003d", "=")
+        if url.startswith("http"):
+            found.append((m.group(1), url))
+    if found:
+        best = max(found, key=lambda x: QUALITY.get(x[0], 0))
+        return best[1]
+    return None
+
+
+async def get_tokens_and_stream():
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(headless=True)
         context = await browser.new_context(
@@ -30,16 +52,14 @@ async def get_tokens():
         page.on("response", on_resp)
 
         await page.goto(ROOM_URL, wait_until="domcontentloaded", timeout=30000)
-        await asyncio.sleep(5)
+        await asyncio.sleep(4)
 
-        stream_url = await page.evaluate(
-            """() => {
-            const d = localStorage.getItem("live_debug_info");
-            if (d) { try { return JSON.parse(d).src; } catch(e) {} }
-            return null;
-        }"""
-        )
+        # Get stream URL from SSR page HTML
+        html = await page.content()
+        stream_url = extract_stream_url(html)
+        print(f"Stream URL: {'YES' if stream_url else 'NO'}")
 
+        # Get cookies for im/fetch
         cookies = await context.cookies()
         cookie_str = "; ".join([f"{c['name']}={c['value']}" for c in cookies])
 
@@ -48,9 +68,9 @@ async def get_tokens():
 
 
 async def main():
-    print("[1/3] Getting tokens...")
+    print("[1/3] Getting tokens and stream URL...")
     try:
-        fetch_url, cookie_str, stream_url = await get_tokens()
+        fetch_url, cookie_str, stream_url = await get_tokens_and_stream()
     except Exception as e:
         print(f"Failed: {e}")
         return
@@ -58,9 +78,7 @@ async def main():
     if not fetch_url:
         print("ERROR: No im/fetch URL")
         return
-
-    print(f"Stream: {len(stream_url or '')} chars")
-    print(f"Fetch URL: {len(fetch_url)} chars")
+    print(f"Fetch URL OK ({len(fetch_url)} chars)")
 
     # Start recording
     out = f"{ROOM_SHORT}_test.flv"
@@ -85,8 +103,10 @@ async def main():
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
+    else:
+        print("NO STREAM URL - skipping recording, viewer count only")
 
-    # Poll
+    # Poll viewer count
     print(f"\n[3/3] Polling every 5s...")
     points = []
     t0 = time.time()
@@ -110,9 +130,9 @@ async def main():
                 n += 1
                 if n % 6 == 0:
                     print(f"  [{n}] Count: {c} @ {now-t0:.0f}s")
-        except Exception as e:
+        except Exception:
             if n % 12 == 0:
-                print(f"  Err: {type(e).__name__}")
+                print(f"  Poll error")
 
         await asyncio.sleep(5)
 
@@ -130,12 +150,6 @@ async def main():
             {"room": ROOM_URL, "duration": elapsed, "points": points}, f, indent=2
         )
     print(f"Data: {len(points)} points")
-
-    if points:
-        vals = [p["count"] for p in points]
-        print(
-            f"Min: {min(vals)}, Max: {max(vals)}, Avg: {sum(vals)/len(vals):.0f}"
-        )
 
 
 asyncio.run(main())
