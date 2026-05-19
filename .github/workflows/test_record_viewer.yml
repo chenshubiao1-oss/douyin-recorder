@@ -23,7 +23,7 @@ jobs:
       - name: Record + Track Viewer Count
         run: python record_test.py
         env:
-          ROOM_URL: https://live.douyin.com/852733918841
+          ROOM_URL: https://live.douyin.com/168465302284
           DURATION_MIN: '5'
       - name: Upload recording
         uses: actions/upload-artifact@v4
