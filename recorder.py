@@ -141,11 +141,17 @@ class DanmakuCollector:
             _last_scroll = time.time()
             _last_refresh = time.time()
             log(f"[PW] {self.anchor_name} collector started")
+            _collect_iter = 0
 
             while not self._stop.is_set():
                 now = time.time()
+                _collect_iter += 1
                 offset = round(now - self.data["pw_start"], 1)
                 wall_ts = round(now, 1)
+
+                # Periodic progress log every 30 iterations
+                if _collect_iter % 30 == 0:
+                    log(f"[PW] {self.anchor_name} it{_collect_iter}: {len(self.data['viewer_counts'])} vc, {len(self.data['danmaku'])} dm")
 
                 try:
                     # Human-like mouse movement every 15-40s
@@ -176,20 +182,23 @@ class DanmakuCollector:
                     ve = page.query_selector('[data-e2e="live-room-audience"]')
                     if ve:
                         ct = ve.text_content().strip()
-                        c = re.sub(r'\D', '', ct)
-                        if c and c.isdigit():
-                            vc = int(c)
+                        # Parse Chinese numbers: "1.2万" = 12000, "1万" = 10000, "9999" = 9999
+                        vc = _parse_viewer_count(ct)
+                        if vc is not None:
                             if not self.data["viewer_counts"] or \
                                self.data["viewer_counts"][-1]["count"] != vc:
                                 self.data["viewer_counts"].append({
                                     "count": vc, "offset": offset, "wall_ts": wall_ts
                                 })
                                 _seen_texts.clear()
+                        elif _collect_iter % 30 == 0 and ct:
+                            log(f"[PW] {self.anchor_name} vc unparsed: [{ct[:60]}]")
 
                     # 2. Danmaku
                     ce = page.query_selector('[class*="webcast-chatroom"]')
                     if ce:
                         items = ce.query_selector_all(':scope > div')
+                        dm_before = len(self.data["danmaku"])
                         for item in items:
                             text = item.text_content().strip()
                             if not text or text in _seen_texts:
@@ -208,6 +217,9 @@ class DanmakuCollector:
                                 "wall_ts": wall_ts
                             })
                             _seen_texts.add(text)
+                        if _collect_iter % 30 == 0:
+                            dm_new = len(self.data["danmaku"]) - dm_before
+                            log(f"[PW] {self.anchor_name} it{_collect_iter}: chatroom {len(items)} items, +{dm_new} dm")
 
                 except Exception as e:
                     try:
@@ -225,6 +237,30 @@ class DanmakuCollector:
 
 
 # ─── ASS generation ──────────────────────────────────────────────────────
+
+def _parse_viewer_count(text):
+    """Parse Douyin viewer count: '1.2万' -> 12000, '9999' -> 9999."""
+    if not text:
+        return None
+    text = text.strip()
+    # Check for Chinese '万' (wan, 10k)
+    WAN = '万'
+    if WAN in text:
+        num_part = text.replace(WAN, '').replace(',', '').strip()
+        try:
+            if '.' in num_part:
+                val = float(num_part)
+                return int(val * 10000)
+            else:
+                return int(num_part) * 10000
+        except (ValueError, TypeError):
+            return None
+    else:
+        c = re.sub(r'\D', '', text)
+        if c and c.isdigit():
+            return int(c)
+    return None
+
 
 def _fmt_ts(s):
     h = int(s // 3600)
