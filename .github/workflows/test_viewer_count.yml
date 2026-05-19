@@ -2,6 +2,10 @@ name: Test Viewer Count (10 browsers)
 
 on:
   workflow_dispatch:
+    inputs:
+      dummy:
+        description: 'Dummy input'
+        default: 'test'
 
 env:
   PYTHON_VERSION: '3.11'
@@ -41,28 +45,22 @@ BROWSER_ID = os.environ.get("BROWSER_ID", "?")
 
 async def main():
     print(f"[Browser {BROWSER_ID}] Starting...")
-    
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         context = await browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         )
         page = await context.new_page()
-        
         import time
         t0 = time.time()
         print(f"[Browser {BROWSER_ID}] Navigating to room...")
-        
         await page.goto(ROOM_URL, wait_until="load", timeout=30000)
         await asyncio.sleep(3)
-        
         print(f"[Browser {BROWSER_ID}] Loaded. Holding 120s...")
-        
         for i in range(12):
             await asyncio.sleep(10)
             elapsed = time.time() - t0
             print(f"[Browser {BROWSER_ID}] Still alive... {elapsed:.0f}s")
-        
         print(f"[Browser {BROWSER_ID}] Done! Closing.")
         await browser.close()
 
