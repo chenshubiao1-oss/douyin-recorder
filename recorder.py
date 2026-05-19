@@ -122,15 +122,20 @@ class DanmakuCollector:
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
                 viewport={"width": 1280, "height": 720}
             )
-            # Fast page load + early exit on stop
-            page.goto(f"https://live.douyin.com/{self.room_id}", wait_until="commit", timeout=10000)
-            # Give page a moment to start rendering, check stop signal
-            for _ in range(5):
+            # Load page and wait for live room DOM to appear
+            page.goto(f"https://live.douyin.com/{self.room_id}", wait_until="domcontentloaded", timeout=15000)
+            found_elem = False
+            for _ in range(20):
                 if self._stop.is_set():
                     browser.close()
                     pw_context.__exit__(None, None, None)
                     return
+                if page.query_selector('[data-e2e="live-room-audience"]'):
+                    found_elem = True
+                    break
                 time.sleep(0.5)
+            if not found_elem:
+                log(f"[PW] {self.anchor_name} no live room elements found after 10s wait")
             _seen_texts = set()
             _last_move = time.time()
             _last_scroll = time.time()
@@ -204,8 +209,11 @@ class DanmakuCollector:
                             })
                             _seen_texts.add(text)
 
-                except Exception:
-                    pass
+                except Exception as e:
+                    try:
+                        log(f"[PW] {self.anchor_name} collect error: {e}")
+                    except:
+                        pass
 
                 time.sleep(random.uniform(0.8, 1.3))
 
