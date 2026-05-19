@@ -21,6 +21,7 @@ OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "/tmp/recordings")
 GH_REPO = os.environ.get("GH_REPO", "")
 GH_TOKEN = os.environ.get("GH_TOKEN", "")
 GH_RUN_ID = os.environ.get("GH_RUN_ID", "0")
+GH_RUN_NUMBER = os.environ.get("GH_RUN_NUMBER", "0")
 _renew_triggered = False
 _upload_queue = []
 _upload_thread = None
@@ -342,10 +343,11 @@ def check_renew(elapsed):
                 f"https://api.github.com/repos/{GH_REPO}/actions/workflows/275535928/runs?per_page=5&status=in_progress",
                 headers={"Authorization": f"Bearer {GH_TOKEN}"})
             existing = json.loads(urllib.request.urlopen(check_req, timeout=15).read())
-            existing_ids = [r["run_number"] for r in existing.get("workflow_runs", [])]
-            existing_ids = [i for i in existing_ids if str(i) != str(GH_RUN_ID)]
-            if len(existing_ids) > 0:
-                log(f"Renew skipped: {len(existing_ids)} in-progress runs: {existing_ids}")
+            # IMPORTANT: compare by run_number against GH_RUN_NUMBER, not GH_RUN_ID (numeric id)
+            existing_numbers = [r["run_number"] for r in existing.get("workflow_runs", [])]
+            other_runs = [n for n in existing_numbers if str(n) != str(GH_RUN_NUMBER)]
+            if len(other_runs) > 0:
+                log(f"Renew skipped: {len(other_runs)} other in-progress run(s): {other_runs}")
             else:
                 trigger = urllib.request.Request(
                     f"https://api.github.com/repos/{GH_REPO}/actions/workflows/275535928/dispatches",
