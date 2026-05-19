@@ -402,16 +402,18 @@ def run():
             update_rooms_nickname(anchor_names)
     log(f'[init] initial check of {len(rooms)} rooms done in {time.time()-t0:.1f}s')
 
-    # Start recordings for any live rooms
+    # Start recordings for any live rooms (reuse init check results)
+    init_live_map = {}
+    for r, live, reason, url, quality, aname in init_results:
+        init_live_map[r['id']] = (live, url, quality, aname)
     for r in rooms:
-        if prev_live.get(r['id']):
-            aname = anchor_names.get(r['id'], r['name'])
-            live, reason, url, quality = http_check_live(r['id'])
-            if live and url:
-                proc, outfile, audio_proc, audiofile = start_recording(url, quality, r['id'], aname)
-                recordings[r['id']] = {"proc": proc, "outfile": outfile, "audio_proc": audio_proc,
-                                        "audiofile": audiofile, "start": time.time()}
-                log(f"Started recording {aname}")
+        rid = r['id']
+        live, url, quality, aname = init_live_map.get(rid, (False, None, None, r['name']))
+        if live and url:
+            proc, outfile, audio_proc, audiofile = start_recording(url, quality, rid, aname)
+            recordings[rid] = {"proc": proc, "outfile": outfile, "audio_proc": audio_proc,
+                               "audiofile": audiofile, "start": time.time()}
+            log(f"Started recording {aname}")
 
     # Main loop - pure HTTP, no Playwright
     log('[init] entering main loop')
