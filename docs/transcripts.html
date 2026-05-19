@@ -140,7 +140,8 @@ const txt=body.querySelector('.txt');
 if(txt&&!txt.dataset.loaded){
 txt.dataset.loaded='1';
 txt.innerHTML='<div class="loading-msg">加载中...</div>';
-fetch(txt.dataset.url).then(r=>r.text()).then(t=>{txt.textContent=t}).catch(()=>{txt.textContent='（加载失败）'});
+var u=txt.dataset.url;
+fetch(u).then(function(r){if(!r.ok)throw new Error(r.status);return r.text()}).then(function(t){txt.textContent=t}).catch(function(){txt.innerHTML='<div class="loading-msg">加载失败，<a href="'+u+'" target="_blank" style="color:#6c5ce7">点击下载原始文件</a></div>'});
 }
 }}
 
