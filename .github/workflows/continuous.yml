@@ -30,10 +30,9 @@ jobs:
             ~/.cache/huggingface
           key: deps-v4-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
           restore-keys: |
-            deps-v3-${{ runner.os }}-
-            deps-v3-
+            deps-v4-${{ runner.os }}-
+            deps-v4-
             deps-
-            dep-
             de
       - name: Install deps
         run: |
