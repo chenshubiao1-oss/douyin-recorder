@@ -91,7 +91,7 @@ class DanmakuCollector:
             return
         self._stop.set()
         if self._thread:
-            self._thread.join(timeout=15)
+            self._thread.join(timeout=30)
 
     def save_data(self):
         """Write collected data to disk, returns (viewer_counts, danmaku)."""
@@ -122,12 +122,15 @@ class DanmakuCollector:
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
                 viewport={"width": 1280, "height": 720}
             )
-            # Shorter timeout + check stop signal during startup
-            page.goto(f"https://live.douyin.com/{self.room_id}", wait_until="domcontentloaded", timeout=15000)
-            for _ in range(10):
+            # Fast page load + early exit on stop
+            page.goto(f"https://live.douyin.com/{self.room_id}", wait_until="commit", timeout=10000)
+            # Give page a moment to start rendering, check stop signal
+            for _ in range(5):
                 if self._stop.is_set():
-                    break
-                time.sleep(0.3)
+                    browser.close()
+                    pw_context.__exit__(None, None, None)
+                    return
+                time.sleep(0.5)
             _seen_texts = set()
             _last_move = time.time()
             _last_scroll = time.time()
