@@ -657,7 +657,7 @@ def check_renew(elapsed):
                 log(f"Renew skipped: {len(other_runs)} other in-progress run(s): {other_runs}")
             else:
                 trigger = urllib.request.Request(
-                    f"https://api.github.com/repos/{GH_REPO}/actions/workflows/275535928/dispatches",
+                    f"https://api.github.com/repos/{GH_REPO}/actions/workflows/continuous.yml/dispatches",
                     data=json.dumps({"ref": "main"}).encode(),
                     headers={"Authorization": f"Bearer {GH_TOKEN}", "Content-Type": "application/json"},
                     method="POST")
