@@ -12,14 +12,17 @@ print(f"Room: {ROOM_SHORT}, Duration: {DURATION_MIN}min")
 
 from playwright.async_api import async_playwright
 
-ZH_BYTES = b"\xe5\x9c\xa8\xe7\xba\xbf\xe8\xa7\x82\xe4\xbc\x97"
-VIEWER_RE = re.compile(rb"(\d+)" + ZH_BYTES)
-
 QUALITY = {"FULL_HD1": 4, "HD1": 3, "SD1": 2, "SD2": 1}
+
+# Shared data store
+class DataStore:
+    def __init__(self):
+        self.viewer_counts = []
+        self.danmaku = []
+        self.seen_danmaku = set()
 
 
 def extract_stream_url(html):
-    """Extract flv_pull_url from SSR HTML (same as main recorder.py)."""
     found = []
     for m in re.finditer(
         r'["\\]+(FULL_HD1|HD1|SD1|SD2)["\\]+\s*[:=]\s*["\\]+(https?://[^"]+)',
@@ -34,122 +37,244 @@ def extract_stream_url(html):
     return None
 
 
-async def get_tokens_and_stream():
-    async with async_playwright() as pw:
-        browser = await pw.chromium.launch(headless=True)
-        context = await browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-        )
-        page = await context.new_page()
+async def capture_viewer_and_danmaku(page, store):
+    """Periodically capture viewer count and danmaku from DOM."""
+    while True:
+        try:
+            now = time.time()
 
-        fetch_url = None
+            # Viewer count
+            viewer_el = await page.query_selector('[data-e2e="live-room-audience"]')
+            if viewer_el:
+                txt = await viewer_el.text_content()
+                if txt and txt.strip().isdigit():
+                    store.viewer_counts.append({
+                        "ts": now,
+                        "count": int(txt.strip()),
+                    })
 
-        async def on_resp(response):
-            nonlocal fetch_url
-            if "/im/fetch/" in response.url:
-                fetch_url = response.url
+            # Danmaku - JavaScript to extract chat messages efficiently
+            new_msgs = await page.evaluate("""() => {
+                const list = document.querySelector('[class*="webcast-chatroom___list"]');
+                if (!list) return [];
+                const results = [];
+                for (const child of list.children) {
+                    for (const msgDiv of child.children) {
+                        const text = (msgDiv.textContent || '').trim();
+                        if (text && text.length < 200) {
+                            results.push(text);
+                        }
+                    }
+                }
+                return results;
+            }""")
 
-        page.on("response", on_resp)
+            for msg in new_msgs:
+                if msg not in store.seen_danmaku:
+                    store.seen_danmaku.add(msg)
+                    store.danmaku.append({
+                        "ts": now,
+                        "text": msg,
+                    })
 
-        await page.goto(ROOM_URL, wait_until="domcontentloaded", timeout=30000)
-        await asyncio.sleep(4)
+            if len(store.viewer_counts) % 5 == 1:
+                recent = store.danmaku[-3:] if store.danmaku else []
+                print(f"  viewer={store.viewer_counts[-1]['count'] if store.viewer_counts else '?'}, "
+                      f"danmaku_total={len(store.danmaku)}, danmaku_last={[d['text'][:20] for d in recent]}")
 
-        # Get stream URL from SSR page HTML
-        html = await page.content()
-        stream_url = extract_stream_url(html)
-        print(f"Stream URL: {'YES' if stream_url else 'NO'}")
+        except Exception as e:
+            print(f"  Fetch err: {e}")
 
-        # Get cookies for im/fetch
-        cookies = await context.cookies()
-        cookie_str = "; ".join([f"{c['name']}={c['value']}" for c in cookies])
+        await asyncio.sleep(2)
 
-        await browser.close()
-        return fetch_url, cookie_str, stream_url
+
+async def keep_alive(page):
+    """Simulate human activity."""
+    while True:
+        try:
+            await page.mouse.move(300 + (asyncio.get_event_loop().time() % 500), 
+                                  200 + (asyncio.get_event_loop().time() % 300))
+            await asyncio.sleep(0.3)
+            await page.mouse.move(400 + (asyncio.get_event_loop().time() % 400), 
+                                  300 + (asyncio.get_event_loop().time() % 200))
+        except:
+            pass
+        await asyncio.sleep(8)
+
+
+def generate_ass(data, output_path, duration):
+    """Generate ASS subtitle file from collected data."""
+    lines = [
+        "[Script Info]",
+        "ScriptType: v4.00+",
+        "PlayResX: 1920",
+        "PlayResY: 1080",
+        "",
+        "[V4+ Styles]",
+        "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, "
+        "Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, "
+        "BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
+        # Top-center for viewer count (Alignment=8)
+        "Style: ViewerCount,Microsoft YaHei,32,&H00FFFFFF,&H000000FF,&H80000000,&H00000000,"
+        "1,0,0,0,100,100,0,0,1,2,0,8,50,50,50,1",
+        # Bottom-left for danmaku scrolling (Alignment=2)
+        "Style: Danmaku,Microsoft YaHei,26,&H00FFFFFF,&H000000FF,&H80000000,&H80000000,"
+        "0,0,0,0,100,100,0,0,1,0,1,2,20,20,150,1",
+        "",
+        "[Events]",
+        "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
+    ]
+
+    def fmt_ts(s):
+        h = int(s // 3600)
+        m = int((s % 3600) // 60)
+        sec = s % 60
+        return f"{h}:{m:02d}:{sec:05.2f}"
+
+    # Viewer count subtitles - hold each value for ~2 seconds
+    if data["viewer_counts"]:
+        for i, vp in enumerate(data["viewer_counts"]):
+            start = max(0, vp["offset"] - 0.5)
+            if i + 1 < len(data["viewer_counts"]):
+                end = data["viewer_counts"][i + 1]["offset"] - 0.3
+            else:
+                end = duration
+            if end > start:
+                lines.append(
+                    f'Dialogue: 0,{fmt_ts(start)},{fmt_ts(end)},ViewerCount,,0,0,0,,'
+                    f'{{\\an8}}在线人数 {vp["count"]}'
+                )
+
+    # Danmaku subtitles - show each message as karaoke-style scrolling
+    # Actually, for simpler rendering: batch danmaku by 2-second intervals
+    if data["danmaku"]:
+        # Group by 3-second windows
+        window = 3.0
+        current_window = 0
+        batch_msgs = []
+
+        def flush_batch(start, end, msgs):
+            if not msgs:
+                return
+            # Show up to 4 messages per batch
+            display = msgs[-4:]
+            text = "\\N".join([m[:50] for m in display])
+            lines.append(
+                f'Dialogue: 0,{fmt_ts(start)},{fmt_ts(end)},Danmaku,,0,0,0,,'
+                f'{{\\an2}}{text}'
+            )
+
+        for dp in data["danmaku"]:
+            w = int(dp["offset"] / window)
+            if w != current_window and batch_msgs:
+                flush_batch(current_window * window, (current_window + 1) * window, batch_msgs)
+                batch_msgs = []
+                current_window = w
+            batch_msgs.append(dp["text"])
+
+        if batch_msgs:
+            flush_batch(current_window * window, duration, batch_msgs)
+
+    ass_content = "\n".join(lines)
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(ass_content)
+    print(f"ASS: {len(ass_content)} bytes, {len(data['viewer_counts'])} viewer points, {len(data['danmaku'])} danmaku")
 
 
 async def main():
-    print("[1/3] Getting tokens and stream URL...")
-    try:
-        fetch_url, cookie_str, stream_url = await get_tokens_and_stream()
-    except Exception as e:
-        print(f"Failed: {e}")
+    print("[1/3] Opening Playwright browser...")
+    pw = await async_playwright().__aenter__()
+    browser = await pw.chromium.launch(headless=True)
+    context = await browser.new_context(
+        viewport={"width": 1280, "height": 720},
+        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                   "(KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+    )
+    page = await context.new_page()
+
+    await page.goto(ROOM_URL, wait_until="domcontentloaded", timeout=30000)
+    print("  Page loaded, waiting for stream data...")
+    await asyncio.sleep(5)
+
+    html = await page.content()
+    stream_url = extract_stream_url(html)
+    print(f"  Stream URL: {'YES' if stream_url else 'NO'}")
+
+    if not stream_url:
+        print("  ERROR: Could not find stream URL")
+        await browser.close()
         return
 
-    if not fetch_url:
-        print("ERROR: No im/fetch URL")
-        return
-    print(f"Fetch URL OK ({len(fetch_url)} chars)")
-
-    # Start recording
+    # Start ffmpeg recording
+    print(f"\n[2/3] Recording {DURATION_MIN}min...")
     out = f"{ROOM_SHORT}_test.flv"
-    ffmpeg = None
-    if stream_url:
-        print(f"\n[2/3] Recording {DURATION_MIN}min...")
-        ffmpeg = subprocess.Popen(
-            [
-                "ffmpeg",
-                "-y",
-                "-hide_banner",
-                "-headers",
-                f"Referer: {ROOM_URL}\r\nUser-Agent: Mozilla/5.0",
-                "-i",
-                stream_url,
-                "-t",
-                str(DURATION_MIN * 60),
-                "-c",
-                "copy",
-                out,
-            ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-    else:
-        print("NO STREAM URL - skipping recording, viewer count only")
+    ffmpeg = subprocess.Popen(
+        ["ffmpeg", "-y", "-hide_banner",
+         "-headers", f"Referer: {ROOM_URL}\r\nUser-Agent: Mozilla/5.0",
+         "-i", stream_url, "-t", str(DURATION_MIN * 60), "-c", "copy", out],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+    )
+    print(f"  ffmpeg PID: {ffmpeg.pid}")
 
-    # Poll viewer count
-    print(f"\n[3/3] Polling every 5s...")
-    points = []
+    # Start data capture
+    print(f"\n[3/3] Capturing viewer count + danmaku for {DURATION_MIN}min...")
+    store = DataStore()
     t0 = time.time()
-    end = t0 + DURATION_MIN * 60
-    n = 0
 
-    while time.time() < end:
-        try:
-            req = urllib.request.Request(fetch_url)
-            req.add_header("Cookie", cookie_str)
-            req.add_header("User-Agent", "Mozilla/5.0")
-            req.add_header("Referer", ROOM_URL)
-            r = urllib.request.urlopen(req, timeout=10)
-            body = r.read()
+    data_task = asyncio.create_task(capture_viewer_and_danmaku(page, store))
+    alive_task = asyncio.create_task(keep_alive(page))
 
-            m = VIEWER_RE.search(body)
-            if m:
-                c = int(m.group(1))
-                now = time.time()
-                points.append({"ts": now, "count": c, "offset": round(now - t0, 1)})
-                n += 1
-                if n % 6 == 0:
-                    print(f"  [{n}] Count: {c} @ {now-t0:.0f}s")
-        except Exception:
-            if n % 12 == 0:
-                print(f"  Poll error")
+    await asyncio.sleep(DURATION_MIN * 60)
 
-        await asyncio.sleep(5)
+    # Stop everything
+    data_task.cancel()
+    alive_task.cancel()
+    try: await data_task
+    except: pass
+    try: await alive_task
+    except: pass
+
+    ffmpeg.terminate()
+    ffmpeg.wait()
+    await browser.close()
 
     elapsed = time.time() - t0
-    print(f"\nDone! {elapsed:.0f}s, {n} polls")
+    sz = os.path.getsize(out) if os.path.exists(out) else 0
+    print(f"\nDone! {elapsed:.0f}s, {out} ({sz} bytes)")
+    print(f"  Viewer points: {len(store.viewer_counts)}")
+    print(f"  Danmaku items: {len(store.danmaku)}")
 
-    if ffmpeg:
-        ffmpeg.terminate()
-        ffmpeg.wait()
-        sz = os.path.getsize(out) if os.path.exists(out) else 0
-        print(f"File: {out} ({sz} bytes)")
+    if store.danmaku:
+        print(f"  Sample messages:")
+        for d in store.danmaku[-5:]:
+            print(f"    [{d['offset']:.0f}s] {d['text'][:60]}")
 
-    with open("viewer_count.json", "w") as f:
-        json.dump(
-            {"room": ROOM_URL, "duration": elapsed, "points": points}, f, indent=2
-        )
-    print(f"Data: {len(points)} points")
+    # Save raw data
+    data = {
+        "room": ROOM_URL,
+        "duration": elapsed,
+        "viewer_counts": [{"offset": round(v["ts"] - t0, 1), "count": v["count"]}
+                          for v in store.viewer_counts],
+        "danmaku": [{"offset": round(d["ts"] - t0, 1), "text": d["text"]}
+                    for d in store.danmaku],
+    }
+
+    with open("page_data.json", "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    print(f"  Raw data saved: page_data.json")
+
+    # Generate ASS
+    # Recompute offsets relative to start
+    for v in data["viewer_counts"]:
+        if "offset" not in v:
+            v["offset"] = 0
+    for d in data["danmaku"]:
+        if "offset" not in d:
+            d["offset"] = 0
+
+    ass_path = f"{ROOM_SHORT}_overlay.ass"
+    generate_ass(data, ass_path, elapsed)
+    print(f"  ASS: {ass_path}")
 
 
 asyncio.run(main())
