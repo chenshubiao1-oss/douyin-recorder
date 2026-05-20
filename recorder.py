@@ -75,9 +75,11 @@ class DanmakuCollector:
         self.room_id = room_id
         self.anchor_name = anchor_name
         self.output_dir = output_dir
-        self.data = {"viewer_counts": [], "danmaku": [], "pw_start": 0}
+        self.data = {"viewer_counts": [], "http_viewer_counts": [], "danmaku": [], "pw_start": 0}
         self._stop = threading.Event()
         self._thread = None
+        self._api_cookies = None
+        self._api_url = None
 
     def start(self):
         if not _pw_check():
@@ -94,15 +96,18 @@ class DanmakuCollector:
             self._thread.join(timeout=30)
 
     def save_data(self):
-        """Write collected data to disk, returns (viewer_counts, danmaku, peak_vc)."""
+        """Write collected data to disk, returns (pwc_viewer_counts, danmaku, peak_vc)."""
         pw_start = self.data.get("pw_start", 0)
         vc_list = self.data.get("viewer_counts", [])
-        peak_vc = max((v["count"] for v in vc_list), default=0)
+        hvc_list = self.data.get("http_viewer_counts", [])
+        peak_vc = max((v["count"] for v in hvc_list), default=0)
+        if not peak_vc:
+            peak_vc = max((v["count"] for v in vc_list), default=0)
         path = os.path.join(self.output_dir, f"page_data_{self.room_id}.json")
         with open(path, "w", encoding="utf-8") as f:
             json.dump(self.data, f, ensure_ascii=False, indent=1)
         log(f"[PW] {self.anchor_name} saved: {len(self.data['danmaku'])} danmaku, "
-            f"{len(vc_list)} viewer points, peak={peak_vc}")
+            f"{len(vc_list)} pw_vc + {len(hvc_list)} http_vc, peak={peak_vc}")
         return self.data["viewer_counts"], self.data["danmaku"], peak_vc
 
     def _run(self):
@@ -151,6 +156,30 @@ class DanmakuCollector:
                 log(f"[PW] {self.anchor_name} SSR not found (page may be blocked)")
             # Brief wait for hydration
             time.sleep(3.0)
+
+            # Extract cookies + build HTTP API URL for accurate viewer count polling
+            try:
+                _cookies = browser.contexts[0].cookies() if browser.contexts else ctx.cookies()
+                _cs = '; '.join([c['name'] + '=' + c['value'] for c in _cookies])
+                _html = page.content()
+                _rid_m = list(re.finditer(r'"room_id_str"\s*:\s*"(\d+)"', _html))
+                _internal_rid = _rid_m[0].group(1) if _rid_m else self.room_id
+                from urllib.parse import urlencode
+                self._api_cookies = _cs
+                self._api_url = 'https://live.douyin.com/webcast/room/web/enter/?' + urlencode({
+                    'aid': '6383', 'app_name': 'douyin_web', 'live_id': '1',
+                    'device_platform': 'web', 'language': 'zh-CN', 'enter_from': 'link_share',
+                    'cookie_enabled': 'true', 'screen_width': '1280', 'screen_height': '720',
+                    'browser_language': 'zh-CN', 'browser_platform': 'Win32',
+                    'browser_name': 'Chrome', 'browser_version': '120.0.0.0',
+                    'os_name': 'Windows', 'os_version': '10',
+                    'web_rid': self.room_id, 'room_id_str': _internal_rid,
+                    'is_need_double_stream': 'false',
+                })
+                log(f"[PW] {self.anchor_name} API URL ready, {len(_cookies)} cookies")
+            except Exception as _e:
+                log(f"[PW] {self.anchor_name} API setup failed: {_e}")
+
             _seen_texts = set()
             _last_move = time.time()
             _last_scroll = time.time()
@@ -166,7 +195,7 @@ class DanmakuCollector:
 
                 # Periodic progress log every 30 iterations
                 if _collect_iter % 30 == 0:
-                    log(f"[PW] {self.anchor_name} it{_collect_iter}: {len(self.data['viewer_counts'])} vc, {len(self.data['danmaku'])} dm")
+                    log(f"[PW] {self.anchor_name} it{_collect_iter}: {len(self.data['viewer_counts'])} pw_vc, {len(self.data['http_viewer_counts'])} http_vc, {len(self.data['danmaku'])} dm")
 
                 try:
                     # Human-like mouse movement every 15-40s
@@ -229,6 +258,38 @@ class DanmakuCollector:
                                 "count": vc, "offset": offset, "wall_ts": wall_ts
                             })
                             _seen_texts.clear()
+
+                    # 1b. HTTP viewer count (accurate, PW-independent)
+                    # Uses cookies extracted from Playwright session
+                    _http_vc = None
+                    if self._api_url and self._api_cookies:
+                        try:
+                            _req = urllib.request.Request(self._api_url, headers={
+                                'Accept': 'application/json, text/plain, */*',
+                                'Referer': f'https://live.douyin.com/{self.room_id}',
+                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
+                                'Cookie': self._api_cookies,
+                            })
+                            _resp = urllib.request.urlopen(_req, timeout=8)
+                            _d = json.loads(_resp.read().decode())
+                            _dd = _d.get('data', {}).get('data', [{}])[0]
+                            _raw = _dd.get('stats', {}).get('user_count_str')
+                            if _raw is not None:
+                                _http_vc = int(_raw)
+                            elif _dd.get('user_count_str'):
+                                try:
+                                    _http_vc = int(str(_dd['user_count_str']).replace(',','').replace('+',''))
+                                except:
+                                    pass
+                        except:
+                            pass
+
+                    if _http_vc is not None:
+                        if not self.data["http_viewer_counts"] or \
+                           self.data["http_viewer_counts"][-1]["count"] != _http_vc:
+                            self.data["http_viewer_counts"].append({
+                                "count": _http_vc, "offset": offset, "wall_ts": wall_ts
+                            })
 
                     # 2. Danmaku - use evaluate to robustly find chat messages
                     dm_before = len(self.data["danmaku"])
@@ -390,7 +451,7 @@ def _process_segments(output_dir, room_id, anchor_name, seg_files, rec_start, se
     with open(data_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    vc = data.get("viewer_counts", [])
+    vc = data.get("http_viewer_counts", []) or data.get("viewer_counts", [])
     dm = data.get("danmaku", [])
 
     if not vc and not dm:
