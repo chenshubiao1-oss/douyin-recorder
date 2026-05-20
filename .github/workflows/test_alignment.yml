@@ -26,14 +26,15 @@ jobs:
         run: |
           pip install --timeout 120 playwright
           python -m playwright install chromium
-      - name: Run alignment test
+          ffmpeg -version
+      - name: Run full test
         env:
-          TEST_ROOM: '344763580'
+          TEST_ROOM: '168465302284'
           TEST_DURATION: '120'
         run: python test_alignment.py
-      - name: Upload results
+      - name: Upload recordings
         uses: actions/upload-artifact@v4
         with:
-          name: alignment-test
-          path: /tmp/recordings/test_alignment_*.json
+          name: full-test-recordings
+          path: /tmp/recordings/
           retention-days: 3
