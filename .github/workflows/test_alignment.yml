@@ -1,0 +1,39 @@
+name: Test alignment
+on:
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.cache/ms-playwright
+          key: deps-playwright-${{ runner.os }}
+          restore-keys: deps-playwright-
+      - name: Install deps
+        run: |
+          pip install --timeout 120 playwright
+          python -m playwright install chromium
+      - name: Run alignment test
+        env:
+          TEST_ROOM: '344763580'
+          TEST_DURATION: '120'
+        run: python test_alignment.py
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: alignment-test
+          path: /tmp/recordings/test_alignment_*.json
+          retention-days: 3
