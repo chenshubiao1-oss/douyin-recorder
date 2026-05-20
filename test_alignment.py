@@ -1,10 +1,14 @@
-"""Find exact viewer count in response - dump full structure"""
+"""Switch to room 168465302284 (was live earlier)"""
 import sys, json, os, time, urllib.request, re
 sys.stdout = open(sys.stdout.fileno(), 'w', encoding='utf-8', buffering=1)
 
-room_id = os.environ.get('TEST_ROOM', '344763580')
+room_id = '168465302284'
+duration = int(os.environ.get('TEST_DURATION', '120'))
 
 from playwright.sync_api import sync_playwright
+
+print(f'Room: {room_id}')
+print()
 
 with sync_playwright() as pw:
     browser = pw.chromium.launch(headless=True, args=['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage'])
@@ -18,17 +22,14 @@ with sync_playwright() as pw:
 
     cookies = ctx.cookies()
     cookie_str = '; '.join([c['name'] + '=' + c['value'] for c in cookies])
+    print(f'Cookies: {len(cookies)}')
 
-    # Get SSR HTML and extract internal room_id
     html = page.content()
     browser.close()
 
+# Get internal room_id
 rid_matches = list(re.finditer(r'"room_id_str"\s*:\s*"(\d+)"', html))
-if rid_matches:
-    internal_rid = rid_matches[0].group(1)
-else:
-    internal_rid = room_id
-
+internal_rid = rid_matches[0].group(1) if rid_matches else room_id
 print(f'Internal room_id: {internal_rid}')
 
 # Build API URL
@@ -45,54 +46,48 @@ params = {
 }
 api_url = 'https://live.douyin.com/webcast/room/web/enter/?' + urlencode(params)
 
-# Call API and dump EVERYTHING
+# First call: dump all data
 headers = {
     'Accept': 'application/json, text/plain, */*',
     'Referer': f'https://live.douyin.com/{room_id}',
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
     'Cookie': cookie_str,
 }
+
+print('First API call:')
 req = urllib.request.Request(api_url, headers=headers)
 resp = urllib.request.urlopen(req, timeout=8)
 data = json.loads(resp.read())
 
 d0 = data.get('data', {}).get('data', [{}])[0]
+print(f'  status: {data.get("status_code")}')
+print(f'  room status: {d0.get("status")}')
+print(f'  user_count_str: {d0.get("user_count_str")}')
+print(f'  stats exists: {"stats" in d0}')
+if 'stats' in d0:
+    print(f'  stats.user_count_str: {d0["stats"].get("user_count_str")}')
+print(f'  room_view_stats exists: {"room_view_stats" in d0}')
+if 'room_view_stats' in d0:
+    print(f'  room_view_stats: {d0["room_view_stats"]}')
 
-# Print ALL keys of d0
-print(f'\nd0 has {len(d0)} keys:')
-for k in sorted(d0.keys()):
-    v = d0[k]
-    vtype = type(v).__name__
-    if isinstance(v, (str, int, float, bool, type(None))):
-        print(f'  {k}: {v}  [{vtype}]')
-    elif isinstance(v, dict):
-        print(f'  {k}: dict[{len(v)} keys]')
-        for sk in sorted(v.keys())[:5]:
-            sv = v[sk]
-            print(f'    {sk}: {sv}')
-    elif isinstance(v, list):
-        print(f'  {k}: list[{len(v)} items]')
-    else:
-        print(f'  {k}: ({vtype})')
-
-# Also print full data top-level keys
-top = data.get('data', {})
-print(f'\nTop-level data keys:')
-for k in sorted(top.keys()):
-    v = top[k]
-    print(f'  {k}: ({type(v).__name__})')
-
-# Deep scan for any integer or 'user_count' related field
-print(f'\nDeep scan for viewer/user count:')
-def deep_scan(d, path='', depth=0):
-    if depth > 5: return
-    if isinstance(d, dict):
-        for k, v in d.items():
-            np = f'{path}.{k}'
-            if any(x in k.lower() for x in ['count', 'viewer', 'user', 'audience', 'online']):
-                print(f'  {np}: {v}')
-            deep_scan(v, np, depth+1)
-    elif isinstance(d, list) and d and isinstance(d[0], dict):
-        deep_scan(d[0], f'{path}[0]', depth+1)
-
-deep_scan(data)
+# If API works, poll
+if data.get('status_code') == 0 and d0.get('status') == 2:
+    print(f'\nRoom is LIVE! Polling for {duration}s...')
+    http_data = []
+    start = time.time()
+    while time.time() - start < duration:
+        try:
+            req = urllib.request.Request(api_url, headers=headers)
+            resp = urllib.request.urlopen(req, timeout=8)
+            d = json.loads(resp.read())
+            dd = d.get('data', {}).get('data', [{}])[0]
+            vc = dd.get('stats', {}).get('user_count_str') or dd.get('user_count_str')
+            http_data.append({'vc': vc, 't': time.time()})
+            print(f'  vc={vc}')
+        except Exception as e:
+            print(f'  err={str(e)[:40]}')
+        time.sleep(3)
+    
+    print(f'\nPolled {len(http_data)} times')
+else:
+    print(f'\nRoom not live (status={d0.get("status")}) or API failed')
